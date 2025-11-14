@@ -1,0 +1,18 @@
+__pycache__/
+results/
+mimo_pack.egg-info/
+.DS_Store
+.ipynb_checkpoints/
+build/
+dist/
+dist/mimo_pack-0.0.0-py3.10.egg
+
+# 大文件 - 不应该提交到 Git
+# 数据文件
+*.npy
+*.mp4
+*.tsv
+
+# MNIST 原始数据文件
+**/mnist_data_pytorch/MNIST/raw/*
+!**/mnist_data_pytorch/MNIST/raw/.gitkeep
