@@ -633,7 +633,7 @@ def find_optimal_batch_size(model, train_data, device='cuda', start_batch_size=3
 
 
 # ==================== Training Function ====================
-def network_train(mdl, train_data, val_data, num_epochs=50, loss_weights=[1, 1], lr=0.0001, 
+def network_train(mdl, train_data, val_data, num_epochs=50, loss_weights=[1, 1], lr=0.001, 
                          batch_size=None, use_amp=True, num_workers=None, pin_memory=True,
                          use_modification=False):
     """
@@ -673,9 +673,7 @@ def network_train(mdl, train_data, val_data, num_epochs=50, loss_weights=[1, 1],
     else:
         batch_size = 256
         print(f"Detected GaWFRNNConv model, skipping batch_size search, using default batch_size = {batch_size}")
-    
-    # Use reduced learning rate to prevent overfitting/memorization on training set
-    # Lower LR helps model learn more generalizable patterns rather than memorizing training data
+            
     optim = torch.optim.Adam(mdl.parameters(), lr=lr)
     criterion_char = nn.CrossEntropyLoss()
     criterion_pos = nn.CrossEntropyLoss()  # sector classification
@@ -683,14 +681,12 @@ def network_train(mdl, train_data, val_data, num_epochs=50, loss_weights=[1, 1],
     # Modification settings: gradient clipping and learning rate decay
     if use_modification:
         # Learning rate decay settings: decay LR at 25%, 50%, 75% epochs (decay factor 0.5)
-        # Using gentler decay to prevent overfitting while maintaining learning capability
         lr_decay_epochs = [int(num_epochs * 0.25), int(num_epochs * 0.5), int(num_epochs * 0.75)]
         lr_decay_factor = 0.5  # Decay to 0.5x each time
         initial_lr = lr  # Save initial learning rate
         print(f"Modification settings enabled:")
         print(f"  - Gradient clipping: max_norm=2.0")
         print(f"  - Learning rate decay: decay to {lr_decay_factor}x at epochs {lr_decay_epochs}")
-        print(f"  - Initial learning rate: {initial_lr:.6f} (reduced to prevent overfitting)")
     else:
         lr_decay_epochs = []
         lr_decay_factor = 1.0
@@ -1005,7 +1001,6 @@ if __name__ == "__main__":
                 val_ds_sector, 
                 num_epochs=200, 
                 loss_weights=[1.0, 1.0],
-                lr=0.0001,        # Reduced learning rate to prevent overfitting/memorization
                 batch_size=None,  # Automatically find optimal value
                 use_amp=True,     # Use mixed precision training
                 num_workers=None, # Automatically set
