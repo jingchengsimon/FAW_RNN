@@ -44,6 +44,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import Rectangle
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -163,12 +164,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--trial_batch_size", type=int, default=32)
     parser.add_argument("--memory_budget_gib", type=float, default=2.0)
     parser.add_argument(
+        "--skip_published_regression",
+        action="store_true",
+        help=(
+            "Do not fail when recomputed values drift from the hardcoded published single-model "
+            "numbers. Intended for per-seed runs of a multi-seed campaign, where each seed "
+            "legitimately differs from the original published analysis; the consistency report "
+            "is still written."
+        ),
+    )
+    parser.add_argument(
         "--publication_fig_dir",
         type=Path,
         default=None,
         help=(
-            "Official PDF destination. Defaults to AIM3_PUBLICATION_FIGURES_DIR or the local "
-            "6-Writing/Aim3/Figures sibling tree when available."
+            "Opt-in extra PDF destination. When omitted, PDFs are written only next to their "
+            "PNGs in the local results tree (no automatic 6-Writing sync)."
         ),
     )
     return parser.parse_args()
@@ -257,6 +268,26 @@ def _mean_ci(values: np.ndarray) -> tuple[float, float, float]:
     values = np.asarray(values, dtype=np.float64)
     low, high = np.quantile(values, [0.025, 0.975])
     return float(values.mean()), float(low), float(high)
+
+
+def _mean_sd_band(values: np.ndarray) -> tuple[float, float, float]:
+    """Return ``(mean, mean-sd, mean+sd)`` using the sample sd (0 spread for a singleton).
+
+    This is the cross-seed error mode: ``values`` is one point estimate per training seed, so the
+    band reflects training randomness, matching the best-model-accuracy figure's mean +/- sd. The
+    single-model default (``_mean_ci``) instead reports the 2.5/97.5 quantiles of the within-model
+    balanced-subsample draws, a different and much smaller kind of spread.
+    """
+
+    values = np.asarray(values, dtype=np.float64)
+    mean = float(values.mean())
+    sd = float(np.std(values, ddof=1)) if values.size > 1 else 0.0
+    return mean, mean - sd, mean + sd
+
+
+# Error-band selector shared by the two compact-aggregate plotters. "ci" keeps the historical
+# single-model within-subsample quantile band; "sd" is the cross-seed mean +/- sd.
+_ERROR_BANDS = {"ci": _mean_ci, "sd": _mean_sd_band}
 
 
 def _per_unit_draw_mean(values: np.ndarray) -> np.ndarray:
@@ -492,9 +523,16 @@ def _plot_compact_aggregate(
     figure_dir: Path,
     results: dict[str, RepeatedDecomposition],
     publication_fig_dir: Path | None = None,
+    error_mode: str = "ci",
 ) -> Path:
-    """Plot the poster-style condition-mean aggregate summary for four core objects."""
+    """Plot the poster-style condition-mean aggregate summary for four core objects.
 
+    ``error_mode`` selects the error band: ``"ci"`` (default) keeps the single-model
+    within-subsample quantile band; ``"sd"`` treats ``aggregate_cm[factor]`` as one point estimate
+    per training seed and draws the cross-seed mean +/- sd.
+    """
+
+    band = _ERROR_BANDS[error_mode]
     object_rows = (
         (("input_gate", "Input gate"), ("recurrent_gate", "Recurrent gate")),
         (
@@ -524,7 +562,7 @@ def _plot_compact_aggregate(
         for axis, objects in zip(axes, object_rows):
             for factor_index, factor in enumerate(factors):
                 statistics = [
-                    _mean_ci(results[object_name].aggregate_cm[factor])
+                    band(results[object_name].aggregate_cm[factor])
                     for object_name, _ in objects
                 ]
                 means = 100.0 * np.asarray([item[0] for item in statistics])
@@ -579,9 +617,167 @@ def _plot_compact_aggregate(
         )
         destination = figure_dir / "core_objects_aggregate_2x2.png"
         fig.savefig(destination, dpi=180, bbox_inches="tight", pad_inches=0.04)
+        # Workflow policy: the PDF sits next to the PNG in the local results tree. The
+        # ``publication_fig_dir`` copy is an opt-in extra only (no automatic 6-Writing sync).
+        fig.savefig(destination.with_suffix(".pdf"), bbox_inches="tight", pad_inches=0.04)
         if publication_fig_dir is not None:
             fig.savefig(
                 publication_fig_dir / "core_objects_aggregate_2x2.pdf",
+                bbox_inches="tight",
+                pad_inches=0.04,
+            )
+        plt.close(fig)
+    return destination
+
+
+def _plot_compact_aggregate_1x4(
+    figure_dir: Path,
+    results: dict[str, RepeatedDecomposition],
+    publication_fig_dir: Path | None = None,
+    error_mode: str = "ci",
+) -> Path:
+    """Plot ``_plot_compact_aggregate``'s two stacked rows side-by-side as a horizontal figure.
+
+    ``error_mode`` matches ``_plot_compact_aggregate``: ``"ci"`` (default) single-model subsample
+    quantiles; ``"sd"`` cross-seed mean +/- sd.
+
+    This is the 2x2 figure flattened to a 1x2 layout: exactly TWO axes. The left axis holds the
+    two gates (Input gate, Recurrent gate) as two x-categories; the right axis holds the two
+    activations (Encoder, Hidden activation). Each x-category still carries the three factor bars
+    (Sector, Digit, Interaction). Both axes use the same 0-105 y-scale and share it -- only the
+    left axis draws y-tick numbers and the single "Explained variance (%)" label; the right axis
+    reuses them (``sharey``, ``labelleft=False``). Per-axis geometry (physical width, height, xlim,
+    bar width) is copied verbatim from ``_plot_compact_aggregate`` (measured once from its rendered
+    output: axis 3.15625in wide x 3.02883in tall, bars ``bar_width=0.095``), so the bars here are
+    pixel-identical in width-to-height proportion to the 2x2 figure's. The three legend squares are
+    aligned to specific category x-positions: Sector over Recurrent gate, Digit over Encoder
+    activation, Interaction over Hidden activation.
+    """
+
+    band = _ERROR_BANDS[error_mode]
+    factors = CM_FACTORS
+    colors = {"sector": "#264653", "digit": "#E76F51", "interaction": "#E9C46A"}
+    # (object_key, x-tick label) per category, split into the two axes.
+    axis_objects = (
+        (("input_gate", "Input gate"), ("recurrent_gate", "Recurrent gate")),
+        (("encoder_activation", "Encoder\nactivation"), ("hidden_state", "Hidden\nactivation")),
+    )
+
+    # Per-axis geometry copied verbatim from _plot_compact_aggregate (see docstring), so bars are
+    # pixel-identical to the 2x2 figure's.
+    bar_width = 0.095
+    category_centers = np.arange(2, dtype=np.float64) * (3.0 + 1.5) * bar_width
+    xlim = (-0.178125, 0.605625)  # the auto-limits the 2x2 axis resolved to for these bars.
+    axis_width_in = 3.15625
+    axis_height_in = 3.0288288288288285
+
+    left_margin_in = 0.66  # left axis y-tick numbers + the shared y label
+    gap_in = 0.55  # between the gate axis and the activation axis (right axis draws no y numbers)
+    right_margin_in = 0.12
+    bottom_in = 0.74  # two-line activation x labels
+    top_in = 0.66  # legend row
+    figure_width_in = left_margin_in + 2 * axis_width_in + gap_in + right_margin_in
+    figure_height_in = axis_height_in + bottom_in + top_in
+
+    bottom_frac = bottom_in / figure_height_in
+    height_frac = axis_height_in / figure_height_in
+    left_edges_in = (left_margin_in, left_margin_in + axis_width_in + gap_in)
+
+    with plt.rc_context(
+        {
+            "font.size": 13,
+            "axes.labelsize": 16,
+            "xtick.labelsize": 13,
+            "ytick.labelsize": 13,
+            "legend.fontsize": 13,
+        }
+    ):
+        fig = plt.figure(figsize=(figure_width_in, figure_height_in))
+        axes: list[plt.Axes] = []
+        for index, left_in in enumerate(left_edges_in):
+            rect = (left_in / figure_width_in, bottom_frac, axis_width_in / figure_width_in, height_frac)
+            axes.append(fig.add_axes(rect, sharey=axes[0] if index == 1 else None))
+
+        for axis, objects in zip(axes, axis_objects):
+            for factor_index, factor in enumerate(factors):
+                statistics = [band(results[name].aggregate_cm[factor]) for name, _ in objects]
+                means = 100.0 * np.asarray([item[0] for item in statistics])
+                lows = 100.0 * np.asarray([item[1] for item in statistics])
+                highs = 100.0 * np.asarray([item[2] for item in statistics])
+                axis.bar(
+                    category_centers + (factor_index - 1) * bar_width,
+                    means,
+                    width=bar_width,
+                    color=colors[factor],
+                    yerr=np.asarray([means - lows, highs - means]),
+                    capsize=2.5,
+                    error_kw={"elinewidth": 1.0, "capthick": 1.0, "ecolor": "#333333"},
+                )
+            axis.set_xlim(*xlim)
+            axis.set_xticks(category_centers, [label for _, label in objects])
+            axis.set_ylim(0.0, 105.0)
+            axis.set_yticks(np.arange(0.0, 100.1, 20.0))
+            axis.set_axisbelow(True)
+            axis.grid(axis="y", linewidth=0.7, alpha=0.25)
+            axis.spines["top"].set_visible(False)
+            axis.spines["right"].set_visible(False)
+
+        # The two axes share one y-axis: only the left one shows numbers and the single label.
+        axes[1].tick_params(axis="y", labelleft=False)
+        axes[0].set_ylabel("Explained variance (%)")
+
+        # Legend layout: keep the three squares' relative spacing but slide the whole group left
+        # so the Sector square sits directly over the Input-gate group's Interaction bar -- the
+        # rightmost bar of the first gate category, at data-x = +bar_width on the gate axis. The
+        # baseline spacing derives from each category's y-axis x-position (the vertical spine it
+        # would own in the pre-merge 4-axis layout): Sector<->Recurrent-gate left boundary (the
+        # midline between the two category centers), Digit<->Encoder (the activation axis left
+        # spine, xlim[0]), Interaction<->Hidden left boundary (that midline). A single constant
+        # ``legend_shift`` moves all three; both axes share width and xlim, so one data-space shift
+        # is one figure-space shift for every square.
+        fig.canvas.draw()
+        category_midline = float(np.mean(category_centers))
+        legend_shift = category_midline - bar_width  # lands Sector on the Input-gate Interaction bar
+        legend_targets = (
+            ("sector", "Sector", axes[0], category_midline - legend_shift),
+            ("digit", "Digit", axes[1], xlim[0] - legend_shift),
+            ("interaction", "Interaction", axes[1], category_midline - legend_shift),
+        )
+        axis_top_frac = bottom_frac + height_frac
+        legend_y = axis_top_frac + 0.06
+        square_h = 0.14 / figure_height_in
+        square_w = 0.14 / figure_width_in
+        inv = fig.transFigure.inverted()
+        for factor, label, axis, x_data in legend_targets:
+            x_frac = inv.transform(axis.transData.transform((x_data, 0.0)))[0]
+            fig.add_artist(
+                Rectangle(
+                    (x_frac - square_w / 2.0, legend_y - square_h / 2.0),
+                    square_w,
+                    square_h,
+                    transform=fig.transFigure,
+                    facecolor=colors[factor],
+                    edgecolor="none",
+                )
+            )
+            fig.text(
+                x_frac + square_w / 2.0 + 0.008,
+                legend_y,
+                label,
+                transform=fig.transFigure,
+                ha="left",
+                va="center",
+                fontsize=13,
+            )
+
+        destination = figure_dir / "core_objects_aggregate_1x4.png"
+        fig.savefig(destination, dpi=180, bbox_inches="tight", pad_inches=0.04)
+        # Workflow policy: the PDF sits next to the PNG in the local results tree. The
+        # ``publication_fig_dir`` copy is an opt-in extra only (no automatic 6-Writing sync).
+        fig.savefig(destination.with_suffix(".pdf"), bbox_inches="tight", pad_inches=0.04)
+        if publication_fig_dir is not None:
+            fig.savefig(
+                publication_fig_dir / "core_objects_aggregate_1x4.pdf",
                 bbox_inches="tight",
                 pad_inches=0.04,
             )
@@ -769,7 +965,13 @@ def main() -> None:
     if not math.isfinite(args.memory_budget_gib) or args.memory_budget_gib <= 0:
         raise ValueError("memory_budget_gib must be a finite positive value")
     memory_budget_bytes = int(args.memory_budget_gib * 1024**3)
-    publication_dir = publication_figures_dir(args.publication_fig_dir, create=True)
+    # Workflow policy: PDFs sit next to their PNGs in the local results tree; a publication copy
+    # is written only when ``--publication_fig_dir`` is given (no automatic 6-Writing sync).
+    publication_dir = (
+        publication_figures_dir(args.publication_fig_dir, create=True)
+        if args.publication_fig_dir is not None
+        else None
+    )
     labels, sources, input_payload = _load_inputs(args.input_manifest.resolve())
     draws, balance = balanced_subsample_indices(
         labels,
@@ -873,7 +1075,7 @@ def main() -> None:
     )
     _write_index(PROJECT_ROOT / "results" / "anal_index")
     print(f"Saved unified data to {data_dir}; figures to {figure_dir}")
-    if unexplained:
+    if unexplained and not args.skip_published_regression:
         raise RuntimeError(
             f"{unexplained} published regression values fall outside their repeated-draw "
             "intervals and remain unexplained; see consistency_checks.txt"

@@ -1,9 +1,9 @@
 """Render compact GaWF gate-distribution summaries from saved histogram statistics.
 
 Inputs are the pooled/sign/context/digit histogram ``.npz`` files and their pooled metadata.
-Outputs are a poster-style 2-by-4 PNG/PDF summary (input and recurrent gates by four views) and
+Outputs are a poster-style 2-by-4 PNG summary (input and recurrent gates by four views) and
 an additional all-gate pooled distribution that combines input and recurrent gate entries. Both
-figures are stored in the ``A_raw_gate`` figure category.
+are PNG-only and stored in the ``A_raw_gate`` figure category.
 """
 
 from __future__ import annotations
@@ -20,14 +20,12 @@ import numpy as np  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 from matplotlib.ticker import MaxNLocator  # noqa: E402
 
-from utils.publication_paths import publication_figures_dir
 from utils_anal.anal_paths import PROJECT_ROOT, output_dir
 
 
 RAW_DATA_DIR = PROJECT_ROOT / "results" / "anal_data" / "gawf_gate_audit"
 SUMMARY_FIG_DIR = output_dir("A_raw_gate", "gawf_gate_histogram_summary", "figs")
 ALL_GATE_FIG_DIR = output_dir("A_raw_gate", "gawf_gate_histogram_summary", "figs")
-ZOOM_XLIM = (0.48, 0.52)
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,7 +40,6 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--summary_fig_dir", type=Path, default=SUMMARY_FIG_DIR)
     parser.add_argument("--all_gate_fig_dir", type=Path, default=ALL_GATE_FIG_DIR)
-    parser.add_argument("--publication_fig_dir", type=Path, default=None)
     return parser.parse_args()
 
 
@@ -112,46 +109,6 @@ def _reference_legend_handles() -> list[Line2D]:
     ]
 
 
-def _add_central_zoom_inset(
-    axis: plt.Axes,
-    centers: np.ndarray,
-    probability: np.ndarray,
-    *,
-    color: str,
-    bounds: tuple[float, float, float, float],
-    label: str | None = None,
-    reference_lines: tuple[tuple[float, str, str], ...] = (),
-) -> plt.Axes:
-    """Add a compact 0.48--0.52 gate-value zoom for a single probability curve."""
-
-    inset = axis.inset_axes(bounds)
-    inset.plot(centers, probability, color=color, linewidth=1.0)
-    for value, line_color, line_style in reference_lines:
-        inset.axvline(value, color=line_color, linestyle=line_style, linewidth=0.7)
-    central = probability[(centers >= ZOOM_XLIM[0]) & (centers <= ZOOM_XLIM[1])]
-    central_maximum = float(central.max()) if central.size else 0.0
-    inset.set_xlim(*ZOOM_XLIM)
-    inset.set_ylim(0.0, max(central_maximum * 1.1, 0.1))
-    inset.set_xticks(np.asarray([0.48, 0.50, 0.52]))
-    inset.set_xticklabels([".48", ".50", ".52"])
-    inset.set_yticks([])
-    inset.tick_params(axis="x", labelsize=6, length=2, pad=1)
-    inset.grid(axis="y", alpha=0.2, linewidth=0.4)
-    inset.spines["top"].set_visible(False)
-    inset.spines["right"].set_visible(False)
-    if label is not None:
-        inset.text(
-            0.04,
-            0.92,
-            label,
-            transform=inset.transAxes,
-            ha="left",
-            va="top",
-            fontsize=6.5,
-        )
-    return inset
-
-
 def _load_npz(path: Path) -> dict[str, np.ndarray]:
     """Load all arrays from one compact histogram archive."""
 
@@ -205,18 +162,6 @@ def _add_pooled_panel(
     axis.axvline(
         float(stats["median"]), color="#38a169", linestyle=":", linewidth=1.5, label="Median"
     )
-    _add_central_zoom_inset(
-        axis,
-        centers,
-        probability,
-        color="#2b6cb0",
-        bounds=(0.44, 0.10, 0.50, 0.32),
-        reference_lines=(
-            (0.5, "black", "--"),
-            (float(stats["mean"]), "#d53f8c", "-"),
-            (float(stats["median"]), "#38a169", ":"),
-        ),
-    )
     return float(probability.max())
 
 
@@ -240,32 +185,6 @@ def _add_weight_sign_panel(
         means,
         medians,
         np.asarray(["#c53030", "#2b6cb0"], dtype=object),
-    )
-    _add_central_zoom_inset(
-        axis,
-        centers,
-        probabilities[0],
-        color="#c53030",
-        bounds=(0.08, 0.10, 0.38, 0.32),
-        label="W > 0",
-        reference_lines=(
-            (0.5, "black", "--"),
-            (float(means[0]), "#c53030", "-"),
-            (float(medians[0]), "#c53030", ":"),
-        ),
-    )
-    _add_central_zoom_inset(
-        axis,
-        centers,
-        probabilities[1],
-        color="#2b6cb0",
-        bounds=(0.54, 0.10, 0.38, 0.32),
-        label="W < 0",
-        reference_lines=(
-            (0.5, "black", "--"),
-            (float(means[1]), "#2b6cb0", "-"),
-            (float(medians[1]), "#2b6cb0", ":"),
-        ),
     )
     return float(probabilities.max())
 
@@ -315,7 +234,7 @@ def plot_histogram_summary(
     output_png: Path,
     output_pdf: Path | None = None,
 ) -> Path:
-    """Render the four-by-two histogram summary with larger inset-capable panels."""
+    """Render the four-by-two histogram summary."""
 
     kinds = ("input", "recurrent")
     row_titles = (
@@ -484,13 +403,6 @@ def plot_all_gate_distribution(
         axis.set_axisbelow(True)
         axis.spines["top"].set_visible(False)
         axis.spines["right"].set_visible(False)
-        _add_central_zoom_inset(
-            axis,
-            centers,
-            probability,
-            color="#2b6cb0",
-            bounds=(0.46, 0.48, 0.43, 0.35),
-        )
         axis.set_title(
             "GaWF gate distribution",
             fontsize=15,
@@ -516,26 +428,13 @@ def main() -> None:
     if not np.array_equal(raw_arrays["gate_edges"], digit_arrays["gate_edges"]):
         raise RuntimeError("Pooled, sector, and digit histograms must use identical gate bins")
 
-    publication_dir = (
-        publication_figures_dir(args.publication_fig_dir, create=True)
-        if args.publication_fig_dir is not None
-        else None
-    )
+    # Both figures below are PNG-only; neither needs a PDF copy.
     summary_png = args.summary_fig_dir / "gawf_gate_histogram_summary_2x4.png"
     all_gate_png = args.all_gate_fig_dir / "01_pooled_all_gate_histogram.png"
-    # The 2-by-4 summary is PNG-only. The all-gate panel keeps its local PDF; a publication
-    # copy is written only when an explicit ``--publication_fig_dir`` is supplied.
-    all_gate_pdf = args.all_gate_fig_dir / "01_pooled_all_gate_histogram.pdf"
     plot_histogram_summary(raw_arrays, raw_metadata, digit_arrays, summary_png)
-    plot_all_gate_distribution(raw_arrays, all_gate_png, all_gate_pdf)
-    if publication_dir is not None:
-        publication_all_gate_pdf = publication_dir / "01_pooled_all_gate_histogram.pdf"
-        plot_all_gate_distribution(raw_arrays, all_gate_png, publication_all_gate_pdf)
+    plot_all_gate_distribution(raw_arrays, all_gate_png)
     print(f"Saved {summary_png}")
     print(f"Saved {all_gate_png}")
-    print(f"Saved {all_gate_pdf}")
-    if publication_dir is not None:
-        print(f"Saved {publication_all_gate_pdf}")
 
 
 if __name__ == "__main__":

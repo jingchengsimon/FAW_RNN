@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import glob
+import shutil
 from collections import defaultdict
 from pathlib import Path
 
@@ -84,8 +85,8 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help=(
-            "Official PDF destination. Defaults to AIM3_PUBLICATION_FIGURES_DIR or the local "
-            "6-Writing/Aim3/Figures sibling tree when available."
+            "Opt-in extra PDF destination. When omitted, the PDF is written only next to its "
+            "PNG in the local results tree (no automatic 6-Writing sync)."
         ),
     )
     return parser.parse_args()
@@ -375,7 +376,7 @@ def plot_summary(
         fig.text(
             0.042,
             row_centers[0],
-            "Character",
+            "Digit",
             rotation=90,
             ha="center",
             va="center",
@@ -416,10 +417,16 @@ def main() -> None:
     """Load the selected best-6 results and save their combined visual summary."""
 
     args = parse_args()
-    publication_dir = publication_figures_dir(args.publication_fig_dir, create=True)
-    output_pdf = args.output_pdf
-    if output_pdf is None and publication_dir is not None:
-        output_pdf = publication_dir / "best6_multiseed_summary_2x3.pdf"
+    # Workflow policy: the PDF sits next to the PNG in the local results tree by default.
+    # ``--publication_fig_dir`` is an opt-in extra copy only (no automatic 6-Writing sync).
+    publication_dir = (
+        publication_figures_dir(args.publication_fig_dir, create=True)
+        if args.publication_fig_dir is not None
+        else None
+    )
+    output_pdf = (
+        args.output_pdf if args.output_pdf is not None else args.output_png.with_suffix(".pdf")
+    )
     test_metrics = load_test_metrics(args.test_csv)
     recovery_offsets, recovery_curves = load_recovery_curves(args.recovery_dir)
     plot_summary(
@@ -431,10 +438,11 @@ def main() -> None:
         output_pdf,
     )
     print(f"Saved {args.output_png}")
-    if output_pdf is not None:
-        print(f"Saved {output_pdf}")
-    else:
-        print("Skipped publication PDF: no publication figure directory is configured")
+    print(f"Saved {output_pdf}")
+    if publication_dir is not None:
+        publication_pdf = publication_dir / "best6_multiseed_summary_2x3.pdf"
+        shutil.copyfile(output_pdf, publication_pdf)
+        print(f"Saved {publication_pdf}")
 
 
 if __name__ == "__main__":

@@ -176,18 +176,6 @@
       "updated_at": "2026-07-17T01:23:16+00:00"
     },
     {
-      "id": "sjc-clutter-best6-chan1-seed42-ep150-aim3-clutter-c1-s42-ep150",
-      "description": "Clutter six frozen chan=2 best hyperparameters reused with chan=1, seed=42 only, 150 full epochs, no early stopping; checkpoints reserved for later fg-switch analysis; training/checkpoints only",
-      "host": "sjc-remote",
-      "status": "running",
-      "job_ids": [],
-      "run_ids": [
-        "aim3-clutter-c1-s42-ep150"
-      ],
-      "remote_root": "/G/MIMOlab/Codes/FAW_RNN-clutter-best6-chan1",
-      "updated_at": "2026-07-15T15:57:25+00:00"
-    },
-    {
       "id": "amarel-clutter-best6-10seed-ep150-58172415",
       "description": "Clutter six frozen best models, seeds 1-10, 150 full epochs, no early stopping",
       "host": "amarel",

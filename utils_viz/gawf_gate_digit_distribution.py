@@ -12,7 +12,6 @@ if _ANAL_PROJECT_ROOT not in _anal_sys.path:
 from utils_anal.anal_paths import output_dir
 
 import argparse
-import json
 import os
 
 import matplotlib
@@ -54,15 +53,12 @@ def _finish(fig: plt.Figure, path: str) -> None:
 
 
 def main() -> None:
-    """Save the digit versions of the original sector Figures 4 and 6."""
+    """Save the digit version of the original sector Figure 4."""
 
     args = parse_args()
     stats_path = os.path.join(args.data_dir, "gawf_gate_digit_stats.npz")
-    metadata_path = os.path.join(args.data_dir, "gawf_gate_digit_meta.json")
     with np.load(stats_path) as loaded:
         arrays = {key: loaded[key] for key in loaded.files}
-    with open(metadata_path, encoding="utf-8") as file_obj:
-        metadata = json.load(file_obj)
     os.makedirs(args.save_dir, exist_ok=True)
     os.makedirs(args.centered_save_dir, exist_ok=True)
 
@@ -104,42 +100,6 @@ def main() -> None:
     fig.suptitle("Gate distributions by foreground digit identity")
     figure4_path = os.path.join(args.save_dir, f"04_per_digit_histogram.{args.format}")
     _finish(fig, figure4_path)
-
-    fig, axes = plt.subplots(2, 2, figsize=(10, 7), sharex=True)
-    digits = np.arange(10)
-    for column, kind in enumerate(kinds):
-        records = metadata["sparsity"][kind]
-        axes[0, column].plot(
-            digits,
-            [row["top_5pct_mass_fraction"] for row in records],
-            marker="o",
-            label="top 5%",
-        )
-        axes[0, column].plot(
-            digits,
-            [row["top_10pct_mass_fraction"] for row in records],
-            marker="s",
-            label="top 10%",
-        )
-        axes[0, column].set(title=f"{kind.capitalize()} gate mass", ylabel="Mass fraction")
-        axes[0, column].legend()
-        axes[1, column].plot(
-            digits,
-            [row["gini"] for row in records],
-            marker="o",
-            label="Gini",
-        )
-        axes[1, column].plot(
-            digits,
-            [row["normalized_participation_ratio"] for row in records],
-            marker="s",
-            label="Normalized PR",
-        )
-        axes[1, column].set(xlabel="Foreground digit", ylabel="Index", xticks=digits)
-        axes[1, column].legend()
-    fig.suptitle("Gate sparsity and concentration by foreground digit identity")
-    figure6_path = os.path.join(args.save_dir, f"06_sparsity_by_digit.{args.format}")
-    _finish(fig, figure6_path)
 
 
 if __name__ == "__main__":

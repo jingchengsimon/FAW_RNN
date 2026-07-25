@@ -225,11 +225,12 @@ when the physical figure size changes, and never shrink one crowded panel indepe
   through any newly exposed axis range; and verify that all panel widths remain aligned. Document
   the fallback in code so that it can be replaced when the numeric source becomes available.
 - Save poster and publication candidates as both a high-resolution PNG and a vector PDF with the
-  same basename. Keep development PNGs in their canonical result directory; designated official
-  PDFs go to the publication figure directory documented in `docs/CONVENTIONS.md`. Visually
-  inspect both outputs for typography, row/column alignment, legend placement, axis ranges and
-  ticks, spine/grid continuity, complete curves, and consistent rendering before accepting the
-  figure.
+  same basename, written side by side in the same canonical result directory. Do not sync PDFs to
+  the external `6-Writing/Aim3/Figures` publication tree automatically: `--publication_fig_dir`
+  (and `AIM3_PUBLICATION_FIGURES_DIR`) are opt-in extra-copy destinations only, off by default.
+  Visually inspect both outputs for typography, row/column alignment, legend placement, axis
+  ranges and ticks, spine/grid continuity, complete curves, and consistent rendering before
+  accepting the figure.
 
 ## Shell launchers
 

@@ -3,9 +3,9 @@
   "id": "sjc-clutter-best6-chan1-seed42-ep150-aim3-clutter-c1-s42-ep150",
   "description": "Clutter six frozen chan=2 best hyperparameters reused with chan=1, seed=42 only, 150 full epochs, no early stopping; checkpoints reserved for later fg-switch analysis; training/checkpoints only",
   "host": "sjc-remote",
-  "status": "running",
+  "status": "completed",
   "created_at": "2026-07-15T15:57:25+00:00",
-  "updated_at": "2026-07-15T15:57:25+00:00",
+  "updated_at": "2026-07-25T21:00:48+00:00",
   "remote_root": "/G/MIMOlab/Codes/FAW_RNN-clutter-best6-chan1",
   "environment": {
     "name": "aim3_rnn",
@@ -166,5 +166,6 @@
     "Two persistent workers split the six units across sjc-remote GPUs 0 and 1.",
     "A unit done marker is written immediately after its training output validates.",
     "No balanced test or fg-switch analysis is run by this launcher."
-  ]
+  ],
+  "completed_at": "2026-07-25T21:00:48+00:00"
 }

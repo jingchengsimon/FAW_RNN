@@ -568,8 +568,16 @@ def analyze_model(
         raise RuntimeError(
             f"Processed {frame_offset} frames, expected {reference_labels.shape[0]}."
         )
-    if parity_max > 1e-4:
-        raise RuntimeError(f"{model_type} recurrence parity failed: max_abs={parity_max:.3e}")
+    # The manual recurrence matches the native kernel to float32 roundoff on CPU (~1e-5), but
+    # cuDNN's fused GPU kernels reorder reductions and drift to ~1e-4..1e-3 even in full float32
+    # (TF32 disabled). Use a device-appropriate tolerance: tight on CPU, loose enough on CUDA to
+    # absorb cuDNN reduction noise while still failing on any real implementation mismatch (~1e-1).
+    parity_threshold = 1e-4 if device.type == "cpu" else 1e-2
+    if parity_max > parity_threshold:
+        raise RuntimeError(
+            f"{model_type} recurrence parity failed: max_abs={parity_max:.3e} "
+            f"(threshold={parity_threshold:.0e}, device={device.type})"
+        )
 
     equal_n = int(np.count_nonzero(equal_joint_mask)) // 90
     report: dict[str, Any] = {

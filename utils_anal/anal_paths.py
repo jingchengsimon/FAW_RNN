@@ -57,13 +57,19 @@ def _caller_script() -> str:
 
 
 def _git_commit() -> str:
-    completed = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=PROJECT_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=PROJECT_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, PermissionError):
+        # Amarel compute nodes (gpu011/033/039 observed) launch Slurm jobs with a
+        # minimal PATH that omits git entirely. Manifest commit tracking is best
+        # effort; falling back to "unknown" keeps the atexit hook silent.
+        return "unknown"
     return completed.stdout.strip() if completed.returncode == 0 else "unknown"
 
 

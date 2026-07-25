@@ -64,7 +64,7 @@ def plot_sector_grid(maps: np.ndarray, point_key: str, fig_dir: str, dpi: int) -
             norm=norm,
             interpolation="none",
         )
-        axis.set_title(f"Sector {sector}", fontsize=10)
+        axis.set_title(f"Sector {sector}", fontsize=16)
         axis.set_xticks([])
         axis.set_yticks([])
     assert image is not None

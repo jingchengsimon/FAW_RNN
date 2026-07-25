@@ -5,6 +5,32 @@ different feedback lesions. At each time step, it computes char/sector logits, b
 next feedback vector, then applies the requested lesion to the digit slice ``[0:10]`` and/or
 sector slice ``[10:19]`` before the next gate computation.
 
+Two lesion families, both applied only to the recurrent feedback vector (never to the frame
+input) at inference time on a frozen model:
+
+Zero (clear) lesions -- set the target slice(s) of the next feedback vector to 0 at every
+step. ``clear_digit`` zeros ``[0:10]``, ``clear_sector`` zeros ``[10:19]``, ``clear_all``
+zeros the whole vector (GaWF gates then become sigmoid(0)=0.5; this is not an RNN baseline).
+Zeroing removes information but also changes the injected signal's magnitude, so on its own it
+conflates "this component carries task information" with "this component's values are large".
+
+Shuffle lesions -- a magnitude-controlled information-removal control. First a full unablated
+pass records the natural next-feedback schedule ``fb[b, t, :]`` for every sequence b and frame
+t (``_run_baseline_feedback_schedule``). Then, per sequence independently, one random time
+permutation ``perm`` (seeded by --seed) reorders the target slice along the time axis
+(``_shuffled_schedule_slice``): ``shuffle_digit`` permutes ``[0:10]``, ``shuffle_sector``
+permutes ``[10:19]``, ``shuffle_all`` permutes the whole vector with a single ``perm`` so digit
+and sector stay jointly aligned but detached from the correct time step. During the rollout the
+permuted slice overwrites the live next feedback (``fb_next[:, slc] = shuffled_schedule[:, t,
+slc]``). Because the shuffled values are real feedback vectors merely placed at the wrong frame,
+each channel's marginal distribution (its magnitude) is preserved while the temporal alignment
+to the current stimulus is destroyed -- and since foreground identity switches within a
+sequence, a feedback from a random frame is usually the wrong identity for the current frame.
+Note that for a single-component shuffle the non-shuffled slice uses the live rollout feedback
+(which itself drifts under the lesion), whereas ``shuffle_all`` overrides the whole vector, so
+``shuffle_all`` is the cleanest "real-but-mistimed feedback" control and the magnitude-matched
+analog of ``clear_all``.
+
 Outputs (in --save_dir):
 - ablation_metrics.json  — per-condition char/sector accuracy and switch recovery curves
 - ablation_metrics.csv   — flat table with one row per condition
@@ -48,14 +74,14 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_CONDITIONS,
         help=(
             "Ablation conditions. Supported: baseline clear_digit clear_sector clear_all "
-            "shuffle_digit shuffle_sector. With --shuffle, shuffle_digit/shuffle_sector "
-            "are appended if not already present."
+            "shuffle_digit shuffle_sector shuffle_all. With --shuffle, the three shuffle "
+            "controls are appended if not already present."
         ),
     )
     parser.add_argument(
         "--shuffle",
         action="store_true",
-        help="Append shuffle_digit and shuffle_sector controls.",
+        help="Append shuffle_digit, shuffle_sector, and shuffle_all controls.",
     )
     parser.add_argument(
         "--K",
@@ -106,6 +132,7 @@ def _validate_conditions(conditions: Sequence[str]) -> List[str]:
         "clear_all",
         "shuffle_digit",
         "shuffle_sector",
+        "shuffle_all",
     }
     out = []
     for condition in conditions:
@@ -123,7 +150,7 @@ def _condition_slices(condition: str, num_pos: int) -> Tuple[bool, bool]:
         return False, True
     if condition == "clear_all":
         return True, True
-    if condition in ("baseline", "shuffle_digit", "shuffle_sector"):
+    if condition in ("baseline", "shuffle_digit", "shuffle_sector", "shuffle_all"):
         return False, False
     raise ValueError(condition)
 
@@ -176,14 +203,18 @@ def _shuffled_schedule_slice(
     rng: np.random.Generator,
     num_pos: int,
 ) -> Optional[torch.Tensor]:
-    if condition not in ("shuffle_digit", "shuffle_sector"):
+    if condition not in ("shuffle_digit", "shuffle_sector", "shuffle_all"):
         return None
     batch_size, frame_num, _ = schedule.shape
     shuffled = schedule.clone()
     if condition == "shuffle_digit":
         slc = DIGIT_SLICE
-    else:
+    elif condition == "shuffle_sector":
         slc = slice(10, 10 + num_pos)
+    else:
+        # shuffle_all: permute the whole feedback vector's time order with one permutation,
+        # so digit and sector stay jointly aligned but detached from the correct time step.
+        slc = slice(0, 10 + num_pos)
     for b in range(batch_size):
         perm = torch.as_tensor(rng.permutation(frame_num), device=schedule.device)
         shuffled[b, :, slc] = schedule[b, perm, slc]
@@ -207,7 +238,7 @@ def _rollout_condition(
     seq = enc.reshape(batch_size, frame_num, -1)
 
     shuffled_schedule = None
-    if condition in ("shuffle_digit", "shuffle_sector"):
+    if condition in ("shuffle_digit", "shuffle_sector", "shuffle_all"):
         base_schedule = _run_baseline_feedback_schedule(
             model, seq, num_pos=num_pos, device=device
         )
@@ -233,13 +264,16 @@ def _rollout_condition(
             fb_next = model._compute_feedback(char_t, pos_t)
             fb_next = _apply_clear_feedback(fb_next, condition, num_pos)
             if shuffled_schedule is not None:
+                fb_next = fb_next.clone()
                 if condition == "shuffle_digit":
-                    fb_next = fb_next.clone()
                     fb_next[:, DIGIT_SLICE] = shuffled_schedule[:, t, DIGIT_SLICE]
-                else:
-                    fb_next = fb_next.clone()
+                elif condition == "shuffle_sector":
                     fb_next[:, 10 : 10 + num_pos] = shuffled_schedule[
                         :, t, 10 : 10 + num_pos
+                    ]
+                else:  # shuffle_all
+                    fb_next[:, 0 : 10 + num_pos] = shuffled_schedule[
+                        :, t, 0 : 10 + num_pos
                     ]
             fb = fb_next
             h = gated
@@ -443,7 +477,7 @@ def main() -> None:
 
     conditions = list(args.conditions)
     if args.shuffle:
-        conditions.extend(["shuffle_digit", "shuffle_sector"])
+        conditions.extend(["shuffle_digit", "shuffle_sector", "shuffle_all"])
     conditions = _validate_conditions(conditions)
     if "baseline" not in conditions:
         conditions.insert(0, "baseline")

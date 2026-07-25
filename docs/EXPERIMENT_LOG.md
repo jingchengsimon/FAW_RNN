@@ -296,3 +296,30 @@
   continuation 而非逐位重放；每次中断记入 metrics 的 `resume_count` 与 `resumed_at_steps`。
   仅新实验启用；已完成的 Pong 70+50+35 个 run 不受影响也不重跑。mmap replay 受
   `/scratch` 1 TiB soft quota 约束，fs4/stack4 数组并发上限为 12，并在启动前做配额守卫。
+
+## 2026-07-22 — GaWF feedback-component 消融（zero + shuffle）
+
+- **改动（Change）：** 对冻结的 GaWF（h=256）在 40h test set 上做 inference-time feedback
+  消融，只作用于 recurrent feedback vector（不动 frame input）。两个 lesion family 各 4
+  条件：zero 系（`clear_digit` 置零 `[0:10]`、`clear_sector` 置零 `[10:19]`、`clear_all`
+  置零整向量→gate=sigmoid(0)=0.5）；shuffle 系（先录无消融 baseline 的 next-feedback
+  日程 `fb[b,t,:]`，再对每个序列独立抽一个 time permutation 沿时间重排目标切片，
+  `shuffle_digit`/`shuffle_sector` 各打乱一个切片、`shuffle_all` 用同一 perm 打乱整向量，
+  rollout 时覆盖 live feedback）。跨 **10 个 GaWF seeds**（best6_multiseed_40h_ep150）汇报
+  mean ± SD。
+- **原因（Reason）：** 单模型 + 纯 zero 消融把"该分量携带 task 信息"与"该分量数值幅度大"
+  混为一谈；shuffle 保留每个 channel 的边际分布（幅度）、只破坏与当前帧刺激的时间对齐
+  （且序列内 foreground identity 会 switch，随机帧的反馈通常是错误身份），因此是
+  magnitude-controlled 的信息移除 control，`shuffle_all` 为 `clear_all` 的幅度受控对照。
+- **证据（Evidence）：** digit-readout 掉落（相对 baseline 85.9，Δ pp，10 seeds 均值）：
+  `clear_digit` −7.1、`clear_sector` −13.2、`clear_all` −20.9；`shuffle_digit` −0.5、
+  `shuffle_sector` −10.7、`shuffle_all` −7.1。sector-readout 同向。核心不对称在 zero 与
+  shuffle 下都稳定（SD ≤ 1.3，散点几乎重叠）：**打乱/移除 sector 反馈伤害大，digit 反馈几乎
+  无害**（`shuffle_digit` ≈ 0）。`shuffle_all`（−7.1）落在两个单分量 shuffle 之间且比
+  `shuffle_sector` 单独更轻，因为它保留了每时刻自洽的 (digit,sector) 联合向量，而单独打乱
+  sector 会制造 digit/sector 互相矛盾的反馈，对 digit readout 反而更伤。
+- **现状（Current）：** 论点"consume sector 反馈重要、digit 反馈不重要"在 10 seeds 上、
+  且在 magnitude-controlled shuffle 对照下均成立。实现见
+  `utils_anal/feedback_ablation.py`（`--shuffle` 追加三个 shuffle 条件），汇总图
+  `utils_viz/viz_feedback_ablation_multiseed.py`（上 zero / 下 shuffle 两行、按 readout 分组、
+  跨 seed error bar + 散点，PNG-only）。

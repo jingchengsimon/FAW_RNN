@@ -1,9 +1,11 @@
 """Plot GaWF, LSTM, and GRU unit-level gate context variance decompositions.
 
-Input: ``unit_gate_context_variance.json`` from the matching analysis module.
-Output: one Figure-03-style PNG for every available GaWF/LSTM/GRU report, plus a compact
-poster-oriented PNG containing their condition-mean marginalization panels.  Its official PDF is
-written to the configured publication-figure directory.
+Input: ``unit_gate_context_variance.json`` from the matching analysis module, or the cross-seed
+``unit_gate_context_variance_multiseed.json`` from the multi-seed driver.  Output: one
+Figure-03-style PNG for every available GaWF/LSTM/GRU report, plus a compact poster-oriented PNG
+containing their condition-mean marginalization panels.  When the report stores per-seed fraction
+arrays, the 1-by-3 panel draws cross-seed mean +/- sample sd instead of single-seed point
+estimates.  Its official PDF is written to the configured publication-figure directory.
 """
 
 from __future__ import annotations
@@ -91,8 +93,8 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help=(
-            "Official PDF destination. Defaults to AIM3_PUBLICATION_FIGURES_DIR or the local "
-            "6-Writing/Aim3/Figures sibling tree when available."
+            "Opt-in extra PDF destination. When omitted, the PDF is written only next to its "
+            "PNG in the local results tree (no automatic 6-Writing sync)."
         ),
     )
     return parser.parse_args()
@@ -107,6 +109,32 @@ def _annotate_bars(ax: plt.Axes) -> None:
             for bar in container
         ]
         ax.bar_label(container, labels=labels, padding=2, fontsize=9, rotation=0)
+
+
+def _fraction_mean_sd(value: object) -> tuple[float, float | None]:
+    """Reduce one fraction entry to ``(mean, sample sd)``.
+
+    A scalar (single-seed report) yields no spread; an array (cross-seed report) yields the mean
+    and the sample sd (ddof=1), the same convention as the best-model-accuracy figure.
+    """
+
+    array = np.asarray(value, dtype=np.float64)
+    if array.ndim == 0:
+        return float(array), None
+    if array.size <= 1:
+        return float(array.mean()), None
+    return float(array.mean()), float(np.std(array, ddof=1))
+
+
+def _is_multiseed_report(report: dict) -> bool:
+    """Return True when any gate fraction is stored as a per-seed array."""
+
+    for model_block in report.get("models", {}).values():
+        for gate_block in model_block.get("gates", {}).values():
+            fractions = gate_block["equal_cell_condition_mean"]["fractions"]
+            if any(isinstance(value, (list, tuple)) for value in fractions.values()):
+                return True
+    return False
 
 
 def plot_model(report: dict, model_type: str, fig_dir: str, dpi: int) -> str:
@@ -206,13 +234,25 @@ def plot_marginalization_summary(
                     "equal_cell_condition_mean"
                 ]["fractions"]
                 offset = (gate_index - (len(gate_names) - 1) / 2) * width
+                stats = [_fraction_mean_sd(fractions[factor]) for factor in factors]
+                heights = [100.0 * mean for mean, _sd in stats]
+                sds = [sd for _mean, sd in stats]
+                bar_kwargs: dict = {}
+                if any(sd is not None for sd in sds):
+                    bar_kwargs.update(
+                        yerr=[100.0 * (sd if sd is not None else 0.0) for sd in sds],
+                        capsize=2.6,
+                        ecolor="#252525",
+                        error_kw={"linewidth": 1.0, "capthick": 1.0},
+                    )
                 axis.bar(
                     x + offset,
-                    [100.0 * fractions[factor] for factor in factors],
+                    heights,
                     width,
                     color=GATE_COLORS[(model_type, gate_name)],
                     edgecolor="none",
                     label=GATE_LABELS[model_type][gate_name],
+                    **bar_kwargs,
                 )
 
             axis.set_xticks(x, [factor.title() for factor in factors])
@@ -256,21 +296,42 @@ def plot_marginalization_summary(
             va="center",
             fontsize=16,
         )
+        if _is_multiseed_report(report):
+            seed_counts = {
+                model: len(block.get("seeds", []))
+                for model, block in report["models"].items()
+            }
+            counts = sorted(set(seed_counts.values()))
+            seed_note = (
+                f"{counts[0]} seeds" if len(counts) == 1 else f"{counts[0]}-{counts[-1]} seeds"
+            )
+            fig.text(
+                0.54,
+                0.012,
+                f"Bars: cross-seed mean; error bars: \u00b1 sample SD ({seed_note} per model)",
+                ha="center",
+                va="bottom",
+                fontsize=11.5,
+                color="#404040",
+            )
 
         os.makedirs(fig_dir, exist_ok=True)
         base_path = os.path.join(fig_dir, "03_unit_gate_marginalization_1x3")
         png_path = f"{base_path}.png"
         fig.savefig(png_path, dpi=max(dpi, 180), bbox_inches="tight", pad_inches=0.04)
-        pdf_path = None
+        # Workflow policy: the PDF always sits next to the PNG in the local results tree.
+        pdf_path = f"{base_path}.pdf"
+        fig.savefig(pdf_path, bbox_inches="tight", pad_inches=0.04)
+        # ``publication_fig_dir`` is an opt-in extra copy only (no automatic 6-Writing sync).
+        publication_pdf = None
         if publication_fig_dir is not None:
-            pdf_path = str(publication_fig_dir / "03_unit_gate_marginalization_1x3.pdf")
-            fig.savefig(pdf_path, bbox_inches="tight", pad_inches=0.04)
+            publication_pdf = str(publication_fig_dir / "03_unit_gate_marginalization_1x3.pdf")
+            fig.savefig(publication_pdf, bbox_inches="tight", pad_inches=0.04)
         plt.close(fig)
     print(f"Saved {png_path}")
-    if pdf_path is not None:
-        print(f"Saved {pdf_path}")
-    else:
-        print("Skipped publication PDF: no publication figure directory is configured")
+    print(f"Saved {pdf_path}")
+    if publication_pdf is not None:
+        print(f"Saved {publication_pdf}")
     return png_path, pdf_path
 
 
@@ -279,12 +340,19 @@ def main() -> None:
 
     args = parse_args()
     os.makedirs(args.fig_dir, exist_ok=True)
-    publication_dir = publication_figures_dir(args.publication_fig_dir, create=True)
+    publication_dir = (
+        publication_figures_dir(args.publication_fig_dir, create=True)
+        if args.publication_fig_dir is not None
+        else None
+    )
     with open(args.report, "r", encoding="utf-8") as file_obj:
         report = json.load(file_obj)
-    for model_type in MODEL_ORDER:
-        if model_type in report["models"]:
-            plot_model(report, model_type, args.fig_dir, args.dpi)
+    # A cross-seed report stores per-seed fraction arrays and carries no trial-total ANOVA, so
+    # only the 1-by-3 marginalization summary (drawn as mean +/- sd) is produced from it.
+    if not _is_multiseed_report(report):
+        for model_type in MODEL_ORDER:
+            if model_type in report["models"]:
+                plot_model(report, model_type, args.fig_dir, args.dpi)
     plot_marginalization_summary(report, args.fig_dir, args.dpi, publication_dir)
 
 

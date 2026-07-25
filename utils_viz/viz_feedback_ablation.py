@@ -101,8 +101,9 @@ def _plot_bar(metrics: Dict[str, Any], out_path: str) -> None:
     width = 0.36
 
     fig, ax = plt.subplots(figsize=(8.4, 4.7))
-    bars0 = ax.bar(x - width / 2, char, width=width, color="#4C78A8", label="char")
-    bars1 = ax.bar(x + width / 2, sector, width=width, color="#F58518", label="sector")
+    # Digit/sector colours aligned with core_objects_aggregate_2x2 (digit #E76F51, sector #264653).
+    bars0 = ax.bar(x - width / 2, char, width=width, color="#E76F51", label="char")
+    bars1 = ax.bar(x + width / 2, sector, width=width, color="#264653", label="sector")
     ax.set_ylabel("Accuracy (%)")
     ax.set_xticks(x)
     ax.set_xticklabels([_pretty_condition(c) for c in conds])

@@ -65,15 +65,8 @@ def test_histogram_summary_has_four_rows_and_two_columns(tmp_path: Path, monkeyp
     assert len(figure.axes[5].lines) == 27
     assert len(figure.axes[6].lines) == 30
     assert len(figure.axes[7].lines) == 30
-    assert len(figure.axes[0].child_axes) == 1
-    assert len(figure.axes[1].child_axes) == 1
-    assert len(figure.axes[2].child_axes) == 2
-    assert len(figure.axes[3].child_axes) == 2
-    assert all(
-        child.get_xlim() == summary.ZOOM_XLIM
-        for axis in figure.axes[:4]
-        for child in axis.child_axes
-    )
+    # The central-zoom insets were removed; no panel should carry a child (inset) axis.
+    assert all(len(axis.child_axes) == 0 for axis in figure.axes)
     assert all(axis.spines["top"].get_visible() is False for axis in figure.axes)
     assert all(axis.spines["right"].get_visible() is False for axis in figure.axes)
     plt.close(figure)
@@ -97,8 +90,8 @@ def test_all_gate_distribution_combines_input_and_recurrent(tmp_path: Path, monk
     assert figure.axes[0].get_xlim() == (-0.05, 1.05)
     assert np.array_equal(figure.axes[0].get_xticks(), np.linspace(0.0, 1.0, 6))
     assert figure.axes[0].get_legend() is None
-    assert len(figure.axes[0].child_axes) == 1
-    assert figure.axes[0].child_axes[0].get_xlim() == summary.ZOOM_XLIM
+    # The central-zoom inset was removed; the panel carries no child (inset) axis.
+    assert len(figure.axes[0].child_axes) == 0
     plt.close(figure)
 
 

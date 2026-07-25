@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "id": "gawf-align-dist-59048043",
+  "description": "GaWF efferent+afferent 2/4-group gate distributions (single seed, task_1007 h256 lr0.005 wd0.001 rdo0.5)",
+  "host": "amarel",
+  "status": "completed",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "59048043"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/amarel/artifacts/gawf_relevance_alignment_distributions/slurm-59048043.*"
+    ],
+    "status_dir": null,
+    "result_paths": [
+      "results/anal_data/E_relevance_alignment/gawf_afferent_top10_gate_distributions/*",
+      "results/anal_data/E_relevance_alignment/gawf_recurrent_group_gate_distributions/*",
+      "results/anal_data/E_relevance_alignment/gawf_recurrent_afferent_group_gate_distributions/*",
+      "results/anal_figs/E_relevance_alignment/efferent/*",
+      "results/anal_figs/E_relevance_alignment/afferent/*"
+    ]
+  },
+  "tracking": {
+    "expected_units": 1,
+    "auto_complete": false,
+    "result_globs": [
+      "results/anal_data/E_relevance_alignment/gawf_afferent_top10_gate_distributions/*",
+      "results/anal_data/E_relevance_alignment/gawf_recurrent_group_gate_distributions/*",
+      "results/anal_data/E_relevance_alignment/gawf_recurrent_afferent_group_gate_distributions/*",
+      "results/anal_figs/E_relevance_alignment/efferent/*",
+      "results/anal_figs/E_relevance_alignment/afferent/*"
+    ],
+    "done_glob": null,
+    "fail_glob": null,
+    "defaults": {
+      "expected": {}
+    },
+    "units": []
+  },
+  "notes": [],
+  "created_at": "2026-07-23T23:15:29+00:00",
+  "updated_at": "2026-07-23T23:20:06+00:00",
+  "completed_at": "2026-07-23T23:20:06+00:00"
+}
