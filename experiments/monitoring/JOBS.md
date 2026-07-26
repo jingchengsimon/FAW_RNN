@@ -6,6 +6,7 @@
 
 | Job | Status | Host | Scheduler / run IDs | Units | Remote root | Description |
 |---|---|---|---|---:|---|---|
+| `amarel-atari-breakout-fs4-stack4-l2-59143184` | queued | `amarel` | 59143182, 59143183, 59143184 | 50 | `/cache/home/js3269/projects/aim3_gawf_rnn` | Strict 4-action Breakout fs4/stack4 L2: 5 models x Breakout/Flickering x 5 seeds, 1M, recoverable |
 | `gawf-align-dist-59048043` | completed | `amarel` | 59048043 | 1 | `/cache/home/js3269/projects/aim3_gawf_rnn` | GaWF efferent+afferent 2/4-group gate distributions (single seed, task_1007 h256 lr0.005 wd0.001 rdo0.5) |
 | `amarel-atari-breakout-fs4-stack4-l1-58907590` | queued | `amarel` | 58907590 | 70 | `/cache/home/js3269/projects/aim3_gawf_rnn` | Strict 4-action Breakout fs4/stack4 L1 seed search: 7 models x Breakout/Flickering x 5 seeds, 1M, recoverable |
 | `amarel-atari-recovery-smoke-58890853` | completed | `amarel` | 58890853 | 1 | `/cache/home/js3269/projects/aim3_gawf_rnn` | Atari DQN checkpoint/resume GPU validation: SIGUSR1 preemption then auto-resume to 60k |
