@@ -134,6 +134,7 @@ def _base_suffix(prefix: str, setting: str, model: str) -> str:
 
 
 def _protocol_title(prefix: str, setting: str) -> str:
+    environment = "Breakout" if "_breakout_" in prefix else "Pong"
     match = re.search(r"(?:^|_)fs(\d+)_stack(\d+)(?:_|$)", prefix)
     protocol = (
         f"frame skip {match.group(1)}, stack {match.group(2)}"
@@ -141,8 +142,8 @@ def _protocol_title(prefix: str, setting: str) -> str:
         else "configured frame protocol"
     )
     if setting == "flicker":
-        return f"Flickering Pong ({protocol}, p=0.5)"
-    return f"Pong ({protocol})"
+        return f"Flickering {environment} ({protocol}, p=0.5)"
+    return f"{environment} ({protocol})"
 
 
 def _artifact_prefix(prefix: str) -> str:
