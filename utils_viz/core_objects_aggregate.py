@@ -22,6 +22,13 @@ from utils_anal.variance_decomposition import CM_FACTORS, RepeatedDecomposition
 
 
 OBJECTS = ("input_gate", "recurrent_gate", "encoder_activation", "hidden_state")
+SAVE_DATA_DIR = (
+    Path(__file__).resolve().parents[1]
+    / "results"
+    / "save_data"
+    / "fig4"
+    / "unified_variance_decomposition"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -119,7 +126,7 @@ def main() -> None:
         print(f"Cross-seed mode: {len(args.seed_dirs)} seeds -> mean +/- sd error bars")
     else:
         if args.data_dir is None:
-            args.data_dir = output_dir("D_variance_decomposition", "unified", "data")
+            args.data_dir = SAVE_DATA_DIR
         saved_results = load_saved_results(args.data_dir)
         error_mode = "ci"
     # Workflow policy: the PDF sits next to the PNG in the local results tree. The

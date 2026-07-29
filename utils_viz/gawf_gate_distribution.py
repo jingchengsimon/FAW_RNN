@@ -22,6 +22,9 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
 
+SAVE_DATA_ROOT = os.path.join(_ANAL_PROJECT_ROOT, "results", "save_data", "fig3")
+
+
 def parse_args() -> argparse.Namespace:
     """Parse plotting arguments.
 
@@ -53,11 +56,9 @@ def _resolve_output_dirs(args: argparse.Namespace) -> None:
     if args.save_dir:
         args.raw_dir = args.context_dir = args.delta_dir = args.relevance_dir = args.save_dir
     if args.data_dir is None:
-        args.data_dir = str(output_dir("A_raw_gate", "gawf_gate_distribution", "data"))
+        args.data_dir = os.path.join(SAVE_DATA_ROOT, "raw_statistics")
     if args.digit_data_dir is None:
-        args.digit_data_dir = str(
-            output_dir("B_gate_by_context", "gawf_gate_digit_distribution", "data")
-        )
+        args.digit_data_dir = os.path.join(SAVE_DATA_ROOT, "digit_statistics")
     if args.raw_dir is None:
         args.raw_dir = str(output_dir("A_raw_gate", "gawf_gate_distribution", "figs"))
     if args.context_dir is None:

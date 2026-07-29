@@ -28,19 +28,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+SAVE_DATA_DIR = os.path.join(
+    _ANAL_PROJECT_ROOT, "results", "save_data", "supple2", "gate_context_specificity"
+)
+
+
 def parse_args() -> argparse.Namespace:
     """Parse visualization arguments."""
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--data_dir",
-        default=str(
-            output_dir(
-                "D_variance_decomposition",
-                "gawf_gate_context_specificity",
-                "data",
-            )
-        ),
+        default=SAVE_DATA_DIR,
     )
     parser.add_argument(
         "--decomposition_dir",

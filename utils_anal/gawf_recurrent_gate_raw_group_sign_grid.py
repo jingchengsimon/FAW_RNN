@@ -53,8 +53,8 @@ def cache_path_for_context(index: int, kind: str = "digit") -> Path:
     schema into this shared directory."""
 
     return (
-        PROJECT_ROOT / "results" / "anal_data" / "E_relevance_alignment"
-        / "gawf_recurrent_gate_single_digit_diagnostic_collect" / f"{kind}{index}_gate_act_cache.npz"
+        PROJECT_ROOT / "results" / "save_data" / "fig7" / "recurrent_gate_context_caches"
+        / f"{kind}{index}_gate_act_cache.npz"
     )
 
 

@@ -26,16 +26,22 @@ from matplotlib.colors import TwoSlopeNorm
 import numpy as np
 
 
+SAVE_DATA_FILE = os.path.join(
+    _ANAL_PROJECT_ROOT,
+    "results",
+    "save_data",
+    "fig6",
+    "sector_gate_mean_sequential_equal_n.npz",
+)
+
+
 def parse_args() -> argparse.Namespace:
     """Parse visualization arguments."""
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--data",
-        default=str(
-            output_dir("B_gate_by_context", "sector_sigmoid_gate_sequential", "data")
-            / "sector_gate_mean_sequential_equal_n.npz"
-        ),
+        default=SAVE_DATA_FILE,
     )
     parser.add_argument(
         "--fig_dir",

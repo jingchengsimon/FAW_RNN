@@ -34,6 +34,15 @@ import numpy as np
 from utils.publication_paths import publication_figures_dir
 
 
+SAVE_DATA_REPORT = (
+    Path(_ANAL_PROJECT_ROOT)
+    / "results"
+    / "save_data"
+    / "fig5"
+    / "unit_gate_context_variance_multiseed.json"
+)
+
+
 GATE_LABELS = {
     "gawf": {
         "input_mean": "Input",
@@ -68,14 +77,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--report",
-        default=str(
-            output_dir(
-                "D_variance_decomposition",
-                "rnn_unit_gate_context_specificity",
-                "data",
-            )
-            / "unit_gate_context_variance.json"
-        ),
+        default=str(SAVE_DATA_REPORT),
     )
     parser.add_argument(
         "--fig_dir",

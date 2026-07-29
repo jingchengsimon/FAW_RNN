@@ -15,6 +15,7 @@ import argparse
 import glob
 import json
 import os
+import pickle
 import sys
 from pathlib import Path
 
@@ -34,7 +35,6 @@ from utils_viz.clutter_multiseed_summary import (  # noqa: E402
     MODEL_LABELS,
     MODEL_ORDER,
     _mean_sd,
-    _plot_loss_axis,
     _plot_recovery_axis,
     _plot_test_axis,
     _style_axis,
@@ -45,8 +45,9 @@ from utils_viz.clutter_multiseed_summary import (  # noqa: E402
 # Digit/sector bar colours align with core_objects_aggregate_2x2 (digit #E76F51, sector #264653).
 DIGIT_COLOR = "#E76F51"
 SECTOR_COLOR = "#264653"
-DATA_ROOT = PROJECT_ROOT / "results" / "data" / "anal_data" / "G_behaviour"
+SAVE_DATA_ROOT = PROJECT_ROOT / "results" / "save_data"
 FIG_DIR = PROJECT_ROOT / "results" / "train_figs" / "clutter" / "clutter_best6_multiseed_40h_ep150"
+TRAIN_DATA_DIR = PROJECT_ROOT / "results" / "train_data" / "clutter_best6_multiseed_40h_ep150"
 
 
 def parse_args() -> argparse.Namespace:
@@ -54,22 +55,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--test_csv",
         type=Path,
-        default=DATA_ROOT
-        / "clutter_multiseed_best_acc_bars"
-        / "clutter_best6_multiseed_40h_ep150"
+        default=SAVE_DATA_ROOT / "fig1" / "test_accuracy_summary"
         / "best_acc_test_mean_std.csv",
     )
     parser.add_argument("--loss_png", type=Path, default=FIG_DIR / "loss_mean_std.png")
     parser.add_argument(
-        "--recovery_dir",
+        "--train_data_dir",
         type=Path,
-        default=DATA_ROOT
-        / "export_fg_switch_offset_acc"
-        / "fg_switch_offset_acc_clutter_best_jointswitch_balanced_10digit_unique_sector_covered"
-        / "fg10",
+        default=SAVE_DATA_ROOT / "fig1" / "validation_loss_histories",
+        help="Per-seed training pickle directory used for a fresh validation-loss redraw.",
     )
     parser.add_argument(
-        "--ablation_dir", type=Path, default=DATA_ROOT / "feedback_ablation_multiseed"
+        "--recovery_dir",
+        type=Path,
+        default=SAVE_DATA_ROOT / "fig1" / "target_switch_recovery",
+    )
+    parser.add_argument(
+        "--ablation_dir", type=Path, default=SAVE_DATA_ROOT / "fig2" / "gawf_shuffle_ablation"
+    )
+    parser.add_argument(
+        "--ablation_baseline_source",
+        choices=("canonical_test", "ablation"),
+        default="canonical_test",
+        help="Use the canonical test CSV or ablation metrics for the GaWF ablation baseline.",
     )
     parser.add_argument(
         "--output_png", type=Path, default=FIG_DIR / "best6_multiseed_shuffle_2x4.png"
@@ -78,8 +86,11 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _shuffle_from_ablation(ablation_dir: Path) -> dict[str, dict[str, np.ndarray]]:
-    """Return per-seed shuffle_digit/shuffle_sector arrays for both readouts."""
+def _conditions_from_ablation(
+    ablation_dir: Path,
+    conditions_to_load: tuple[str, ...],
+) -> dict[str, dict[str, np.ndarray]]:
+    """Return selected per-seed condition arrays for both readouts."""
 
     files = sorted(glob.glob(str(ablation_dir / "gawf-seed*" / "ablation_metrics.json")))
     if not files:
@@ -87,7 +98,7 @@ def _shuffle_from_ablation(ablation_dir: Path) -> dict[str, dict[str, np.ndarray
     collected: dict[str, dict[str, list[float]]] = {}
     for path in files:
         conditions = json.load(open(path))["conditions"]
-        for cond in ("shuffle_digit", "shuffle_sector"):
+        for cond in conditions_to_load:
             collected.setdefault(cond, {"char_acc": [], "sector_acc": []})
             for key in ("char_acc", "sector_acc"):
                 collected[cond][key].append(float(conditions[cond][key]))
@@ -144,11 +155,80 @@ def _plot_shuffle_axis(
     _style_axis(axis)
 
 
+def _load_validation_losses(
+    train_data_dir: Path, metric: str
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """Aggregate the saved per-seed validation-loss arrays without raster cropping."""
+
+    key = "val_loss_char" if metric == "char" else "val_loss_pos"
+    result: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    for model in MODEL_ORDER:
+        paths = sorted(train_data_dir.glob(f"{model}-seed*/*.pkl"))
+        arrays = []
+        for path in paths:
+            with path.open("rb") as handle:
+                payload = pickle.load(handle)
+            if key in payload:
+                arrays.append(np.asarray(payload[key], dtype=np.float64))
+        if not arrays:
+            raise FileNotFoundError(f"No {key} arrays found for {model} under {train_data_dir}")
+        lengths = {array.size for array in arrays}
+        if len(lengths) != 1:
+            raise ValueError(f"Inconsistent {key} lengths for {model}: {sorted(lengths)}")
+        stacked = np.stack(arrays, axis=0)
+        result[model] = (np.mean(stacked, axis=0), np.std(stacked, axis=0, ddof=1))
+    return result
+
+
+def _plot_validation_loss_axis(
+    axis: plt.Axes,
+    losses: dict[str, tuple[np.ndarray, np.ndarray]],
+    metric: str,
+    show_xlabel: bool,
+    show_xticks: bool,
+) -> None:
+    """Draw validation loss directly from per-seed arrays, preserving the source semantics."""
+
+    epochs = np.arange(1, 151, dtype=np.float64)
+    for model in MODEL_ORDER:
+        mean, sd = losses[model]
+        axis.plot(epochs, mean, color=MODEL_COLORS[model], linewidth=1.8, zorder=2)
+        axis.fill_between(
+            epochs,
+            mean - sd,
+            mean + sd,
+            color=MODEL_COLORS[model],
+            alpha=0.14,
+            linewidth=0,
+            zorder=1,
+        )
+    axis.set_xlim(0.0, 150.0)
+    if metric == "char":
+        axis.set_ylim(0.3, 1.2)
+        axis.set_yticks((0.3, 0.6, 0.9, 1.2))
+    else:
+        axis.set_ylim(0.15, 0.45)
+        axis.set_yticks((0.15, 0.25, 0.35, 0.45))
+    axis.set_xticks((0, 50, 100, 150))
+    if show_xlabel:
+        axis.set_xlabel("Epoch")
+    if not show_xticks:
+        axis.tick_params(axis="x", which="both", bottom=True, labelbottom=False)
+    _style_axis(axis)
+
+
 def main() -> None:
     args = parse_args()
     test_metrics = load_test_metrics(args.test_csv)
     recovery_offsets, recovery_curves = load_recovery_curves(args.recovery_dir)
-    shuffle = _shuffle_from_ablation(args.ablation_dir)
+    validation_losses = {
+        "char": _load_validation_losses(args.train_data_dir, "char"),
+        "sector": _load_validation_losses(args.train_data_dir, "sector"),
+    }
+    ablation = _conditions_from_ablation(
+        args.ablation_dir,
+        ("baseline", "shuffle_digit", "shuffle_sector"),
+    )
     if "gawf" not in test_metrics:
         raise RuntimeError("Multiseed test metrics must include gawf for the shuffle baseline.")
 
@@ -172,8 +252,12 @@ def main() -> None:
         axes[0, 0].set_yticks((74.0, 78.0, 82.0, 86.0))
         axes[1, 0].set_ylim(87.0, 94.0)
         axes[1, 0].set_yticks((88.0, 90.0, 92.0, 94.0))
-        _plot_loss_axis(axes[0, 1], args.loss_png, "char", show_xlabel=False, show_xticks=False)
-        _plot_loss_axis(axes[1, 1], args.loss_png, "sector", show_xlabel=True, show_xticks=True)
+        _plot_validation_loss_axis(
+            axes[0, 1], validation_losses["char"], "char", show_xlabel=False, show_xticks=False
+        )
+        _plot_validation_loss_axis(
+            axes[1, 1], validation_losses["sector"], "sector", show_xlabel=True, show_xticks=True
+        )
         _plot_recovery_axis(
             axes[0, 2], recovery_offsets, recovery_curves, "char", show_xlabel=False,
             show_xticks=False,
@@ -184,13 +268,22 @@ def main() -> None:
         )
         axes[0, 2].set_yticks((0, 20, 40, 60, 80, 100))
         axes[1, 2].set_yticks((0, 20, 40, 60, 80, 100))
-        # y_min/y_max here just seed the shared helper's internal set_ylim call; both axes get
-        # their final ylim/yticks overridden below to match the tick-range-plus-margin rule.
+        ablation_baseline = (
+            test_metrics["gawf"]
+            if args.ablation_baseline_source == "canonical_test"
+            else ablation["baseline"]
+        )
+        baseline_char_key = (
+            "char" if args.ablation_baseline_source == "canonical_test" else "char_acc"
+        )
+        baseline_sector_key = (
+            "sector" if args.ablation_baseline_source == "canonical_test" else "sector_acc"
+        )
         _plot_shuffle_axis(
             axes[0, 3],
-            test_metrics["gawf"]["char"],
-            shuffle["shuffle_digit"]["char_acc"],
-            shuffle["shuffle_sector"]["char_acc"],
+            ablation_baseline[baseline_char_key],
+            ablation["shuffle_digit"]["char_acc"],
+            ablation["shuffle_sector"]["char_acc"],
             DIGIT_COLOR,
             show_xticks=False,
             y_min=70.0,
@@ -199,24 +292,20 @@ def main() -> None:
         )
         _plot_shuffle_axis(
             axes[1, 3],
-            test_metrics["gawf"]["sector"],
-            shuffle["shuffle_digit"]["sector_acc"],
-            shuffle["shuffle_sector"]["sector_acc"],
+            ablation_baseline[baseline_sector_key],
+            ablation["shuffle_digit"]["sector_acc"],
+            ablation["shuffle_sector"]["sector_acc"],
             SECTOR_COLOR,
             show_xticks=True,
             y_min=75.0,
             y_max=95.0,
             y_step=4.0,
         )
-        # Match the digit ablation's ticks to the digit test-accuracy panel, and the sector
-        # ablation's ticks to a comparable 4-point span. Bounds get a 1-2 point margin beyond the
-        # tick range where a real condition sits outside it (digit char_acc across
-        # baseline/shuffle_digit/shuffle_sector spans 72.4-86.8; sector sector_acc spans
-        # 79.0-93.2).
-        axes[0, 3].set_ylim(72.0, 87.0)
-        axes[0, 3].set_yticks((74.0, 78.0, 82.0, 86.0))
-        axes[1, 3].set_ylim(78.0, 94.0)
-        axes[1, 3].set_yticks((80.0, 84.0, 88.0, 92.0))
+        # The requested readout-specific ranges: digit on the first row, sector on the second.
+        axes[0, 3].set_ylim(50.0, 92.0)
+        axes[0, 3].set_yticks((55.0, 65.0, 75.0, 85.0))
+        axes[1, 3].set_ylim(60.0, 95.0)
+        axes[1, 3].set_yticks((65.0, 75.0, 85.0, 95.0))
 
         # The 30% narrower columns crowd the recovery tick labels; rotate that column's bottom
         # x labels so pre10/switch/post4/post10 no longer overlap. Only this merged figure is
@@ -225,13 +314,6 @@ def main() -> None:
             tick_label.set_rotation(30)
             tick_label.set_ha("right")
             tick_label.set_rotation_mode("anchor")
-
-        # Validation-loss column: the digit loss keeps its 0.3-1.2 range; the sector loss zooms
-        # to 0.15-0.45 (its raster spans 0.15-0.5, so the tighter ylim simply clips the 0.45-0.5
-        # top).
-        axes[0, 1].set_yticks((0.3, 0.6, 0.9, 1.2))
-        axes[1, 1].set_ylim(0.15, 0.45)
-        axes[1, 1].set_yticks((0.15, 0.25, 0.35, 0.45))
 
         fig.subplots_adjust(
             left=0.075, right=0.995, bottom=0.12, top=0.81, hspace=0.40, wspace=0.24

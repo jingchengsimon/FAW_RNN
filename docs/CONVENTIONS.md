@@ -41,6 +41,7 @@ remain parsable for compatibility but must not appear in new result names.
 | `--device` | `cuda`, `mps`, or `cpu` as supported by the script |
 | `--seed` | random seed |
 | `--batch_size` | DataLoader batch size |
+| `--sequence_length` | analysis rollout and feedback-shuffle window length in frames; default `32` |
 | `--use_mmap` | load large NumPy stimuli with mmap |
 | `--use_sector_mode` | 3x3 sector classification |
 | `--predict_all_chars` | predict foreground and background characters |
@@ -143,6 +144,8 @@ another internal representation.
 | `results/anal_data/<CATEGORY>/<module>/` | analysis arrays, metadata, and run manifest |
 | `results/anal_figs/<CATEGORY>/` | figures (flat within each category) |
 | `results/anal_index/` | human-maintained index and migration notes |
+| `results/save/` | human-curated final figure files (`Fig*` and `Supple*`) |
+| `results/save_data/<figure>/` | minimum numeric inputs for one saved figure; shared inputs have one owner |
 | `../../6-Writing/Aim3/Figures/` | official publication PDFs |
 | `experiments/generalization/artifacts/` | aggregated experiment tables/configs |
 | `experiments/amarel/artifacts/<run>/` | ignored Slurm logs/status artifacts |
@@ -151,6 +154,10 @@ Analysis data remains grouped by producing script basename, while figures are fl
 category. Analysis scripts must obtain these directories from `utils_anal.anal_paths.output_dir`.
 Existing unclassified legacy entries may remain directly below `results/anal_data/` or
 `results/anal_figs/` until they receive an explicit category.
+
+`results/save_data/` is a publication-curation boundary rather than an active analysis-output
+directory. Fig1 consumes the single GaWF ablation copy owned by `save_data/fig2/`; Supple3
+consumes the cache collection owned by `save_data/fig7/`. Do not duplicate either shared input.
 
 Development PNGs remain in their canonical result directories. Official publication PDFs are
 written to `../../6-Writing/Aim3/Figures/`; set `AIM3_PUBLICATION_FIGURES_DIR` to override this

@@ -5,9 +5,11 @@ Shuffle digit, Shuffle sector -- with no shuffle_all. Bars are grouped by readou
 condition bars for each readout sit flush together), each bar carrying the across-seed mean, a
 sample-SD error bar, and one dot per seed.
 
-The baseline bar heights come from ``best_acc_test_mean_std.csv`` (the canonical multiseed test
-accuracy used by the best-model figure) so the baseline matches that panel exactly; the two
-shuffle bars come from the per-seed ``ablation_metrics.json`` files. PNG only.
+By default the baseline bar heights come from ``best_acc_test_mean_std.csv`` (the canonical
+multiseed test accuracy used by the best-model figure), while the two shuffle bars come from the
+per-seed ``ablation_metrics.json`` files. ``--baseline_source ablation`` instead takes all three
+conditions from those metrics, for protocols whose recurrent rollout differs from the canonical
+test evaluation. PNG and PDF are written with the requested basename.
 """
 from __future__ import annotations
 
@@ -52,8 +54,7 @@ def parse_args() -> argparse.Namespace:
         "--ablation_dir",
         type=str,
         default=str(
-            _ANAL_PROJECT_ROOT
-            + "/results/data/anal_data/G_behaviour/feedback_ablation_multiseed"
+            _ANAL_PROJECT_ROOT + "/results/save_data/fig2/gawf_shuffle_ablation"
         ),
         help="Parent dir with per-seed gawf-seed*/ablation_metrics.json.",
     )
@@ -62,18 +63,32 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=str(
             _ANAL_PROJECT_ROOT
-            + "/results/data/anal_data/G_behaviour/clutter_multiseed_best_acc_bars"
-            + "/clutter_best6_multiseed_40h_ep150/best_acc_test_mean_std.csv"
+            + "/results/save_data/fig1/test_accuracy_summary/best_acc_test_mean_std.csv"
         ),
         help="Per-seed canonical test accuracy CSV (source,model,seed,char_acc,sector_acc).",
     )
     parser.add_argument("--model", type=str, default="gawf")
+    parser.add_argument(
+        "--baseline_source",
+        choices=("canonical_csv", "ablation"),
+        default="canonical_csv",
+        help="Use the canonical CSV baseline or the baseline condition in the ablation metrics.",
+    )
     parser.add_argument(
         "--save_dir",
         type=str,
         default=str(output_dir("G_behaviour", "viz_feedback_ablation", "figs")),
     )
     parser.add_argument("--out_name", type=str, default="fig_ablation_shuffle_standalone.png")
+    parser.add_argument("--ymin", type=float, default=70.0)
+    parser.add_argument("--ymax", type=float, default=95.0)
+    parser.add_argument(
+        "--yticks",
+        nargs="+",
+        type=float,
+        default=None,
+        help="Optional explicit y-axis tick positions.",
+    )
     return parser.parse_args()
 
 
@@ -92,8 +107,11 @@ def _baseline_from_csv(path: str, model: str) -> Dict[str, np.ndarray]:
     return {"char_acc": np.asarray(char), "sector_acc": np.asarray(sector)}
 
 
-def _shuffle_from_ablation(ablation_dir: str) -> Dict[str, Dict[str, np.ndarray]]:
-    """Return per-seed shuffle-condition arrays from the ablation metrics."""
+def _conditions_from_ablation(
+    ablation_dir: str,
+    conditions_to_load: tuple[str, ...],
+) -> Dict[str, Dict[str, np.ndarray]]:
+    """Return selected per-seed condition arrays from ablation metrics."""
 
     files = sorted(glob.glob(os.path.join(ablation_dir, "gawf-seed*", "ablation_metrics.json")))
     if not files:
@@ -101,7 +119,7 @@ def _shuffle_from_ablation(ablation_dir: str) -> Dict[str, Dict[str, np.ndarray]
     collected: Dict[str, Dict[str, List[float]]] = {}
     for path in files:
         conditions = json.load(open(path))["conditions"]
-        for cond in ("shuffle_digit", "shuffle_sector"):
+        for cond in conditions_to_load:
             collected.setdefault(cond, {"char_acc": [], "sector_acc": []})
             for key in ("char_acc", "sector_acc"):
                 collected[cond][key].append(float(conditions[cond][key]))
@@ -110,9 +128,25 @@ def _shuffle_from_ablation(ablation_dir: str) -> Dict[str, Dict[str, np.ndarray]
 
 def main() -> None:
     args = parse_args()
-    baseline = _baseline_from_csv(args.baseline_csv, args.model)
-    shuffle = _shuffle_from_ablation(args.ablation_dir)
-    data = {"baseline": baseline, **shuffle}
+    if args.ymin >= args.ymax:
+        raise ValueError(f"ymin must be smaller than ymax, got {args.ymin} >= {args.ymax}.")
+    if args.yticks is not None and any(
+        tick < args.ymin or tick > args.ymax for tick in args.yticks
+    ):
+        raise ValueError("yticks must lie within the requested y-axis range.")
+    condition_data = _conditions_from_ablation(
+        args.ablation_dir,
+        ("baseline", "shuffle_digit", "shuffle_sector"),
+    )
+    if args.baseline_source == "canonical_csv":
+        baseline = _baseline_from_csv(args.baseline_csv, args.model)
+    else:
+        baseline = condition_data["baseline"]
+    data = {
+        "baseline": baseline,
+        "shuffle_digit": condition_data["shuffle_digit"],
+        "shuffle_sector": condition_data["shuffle_sector"],
+    }
     n_seeds = baseline["char_acc"].size
 
     conds = [c for c, _ in CONDITIONS]
@@ -172,8 +206,11 @@ def main() -> None:
         axis.set_xticks(xticks)
         axis.set_xticklabels(xticklabels, fontsize=9)
         axis.set_xlim(-0.7, max(group_base.values()) + (n - 1) * width + 0.7)
-        axis.set_ylim(70.0, 95.0)
-        axis.set_yticks(np.arange(70.0, 95.1, 5.0))
+        axis.set_ylim(args.ymin, args.ymax)
+        y_ticks = args.yticks
+        if y_ticks is None:
+            y_ticks = np.arange(args.ymin, args.ymax + 0.1, 5.0)
+        axis.set_yticks(y_ticks)
         axis.grid(axis="y", alpha=0.25, linewidth=0.7)
         axis.set_axisbelow(True)
         axis.spines["top"].set_visible(False)
