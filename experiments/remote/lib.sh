@@ -4,7 +4,7 @@
 set -euo pipefail
 
 REMOTE_WRAPPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${REMOTE_WRAPPER_DIR}/.." && pwd)"
+PROJECT_ROOT="$(cd "${REMOTE_WRAPPER_DIR}/../.." && pwd)"
 CONFIG_PATH="${REMOTE_WRAPPER_DIR}/config.sh"
 CONFIG_EXAMPLE_PATH="${REMOTE_WRAPPER_DIR}/config.example.sh"
 
