@@ -12,10 +12,10 @@ The result prefix must state both environment advance and observation history,
 for example ``atari_dqn_pong_fs1_stack1`` or ``atari_dqn_pong_fs4_stack1``.
 
 Examples:
-  python -m utils_viz.atari_learning_curves --setting both
-  python -m utils_viz.atari_learning_curves --setting flicker --smooth 20
-  python -m utils_viz.atari_learning_curves --run_dir results/train_data/<suffix>
-  python -m utils_viz.atari_learning_curves --run_dir results/train_data/<suffix> \
+  python -m utils_viz.rl.atari.learning_curves --setting both
+  python -m utils_viz.rl.atari.learning_curves --setting flicker --smooth 20
+  python -m utils_viz.rl.atari.learning_curves --run_dir results/train_data/<suffix>
+  python -m utils_viz.rl.atari.learning_curves --run_dir results/train_data/<suffix> \
       --include_combined
 """
 

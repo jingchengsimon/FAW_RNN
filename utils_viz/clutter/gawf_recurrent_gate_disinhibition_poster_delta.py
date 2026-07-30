@@ -37,7 +37,7 @@ from utils_anal.gawf_recurrent_gate_sign_vs_magnitude_disinhibition import (
     analyze,
     run_ols,
 )
-from utils_viz.gawf_recurrent_gate_disinhibition_poster import (
+from utils_viz.clutter.gawf_recurrent_gate_disinhibition_poster import (
     CONTEXTS_BY_VARIABLE,
     DIM_ALPHA,
     HIGHLIGHT_BG,
