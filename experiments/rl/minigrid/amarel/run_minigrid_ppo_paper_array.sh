@@ -14,9 +14,10 @@
 # paper LSTM is task 0; tasks 1-6 replace only its recurrent core.
 
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 
 ROOT="${AIM3_ROOT:-${SLURM_SUBMIT_DIR:-}}"
-if [[ -z "$ROOT" || ! -f "$ROOT/train_minigrid_ppo_paper.py" ]]; then
+if [[ -z "$ROOT" || ! -f "$ROOT/run_task.py" ]]; then
   ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
 cd "$ROOT"
@@ -38,7 +39,7 @@ ENV_TAG="${ENV_TAG%-v0}"
 SUFFIX="mg_ppo_paper_${ENV_TAG}_fov3_${MODEL}_seed${SEED}_100m"
 ART="$ROOT/experiments/rl/minigrid/amarel/artifacts/minigrid_ppo_paper"
 STATUS_DIR="$ART/status"
-SAVE_DIR="$AIM3_RESULTS_PATH/train_data/$SUFFIX"
+SAVE_DIR="$AIM3_RESULTS_PATH/data/rl/minigrid/runs/$SUFFIX"
 mkdir -p "$ART" "$STATUS_DIR"
 
 case "$MODEL" in
@@ -65,7 +66,7 @@ elif [[ -e "$SAVE_DIR/metrics_history.jsonl" || -e "$SAVE_DIR/metrics.json" ]]; 
 fi
 echo "status=running model=$MODEL seed=$SEED env=$ENV_ID $(date -Is)" > "$STATUS_FILE"
 set +e
-DISABLE_TQDM=1 python train_minigrid_ppo_paper.py \
+DISABLE_TQDM=1 python run_task.py minigrid-ppo-paper \
   --env_id "$ENV_ID" --model_type "$MODEL" --seed "$SEED" \
   --total_timesteps "$TOTAL_TIMESTEPS" --num_envs 8 --num_steps 128 \
   --num_minibatches 8 --update_epochs 4 --device cuda \

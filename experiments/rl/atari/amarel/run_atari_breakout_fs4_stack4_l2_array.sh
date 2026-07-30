@@ -13,10 +13,11 @@
 # One recoverable unit of the strict 4-action, two-layer Breakout sweep.
 
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${AIM3_ROOT:-${SLURM_SUBMIT_DIR:-}}"
-if [[ -z "$ROOT" || ! -f "$ROOT/train_atari_dqn.py" ]]; then
+if [[ -z "$ROOT" || ! -f "$ROOT/run_task.py" ]]; then
   ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 fi
 cd "$ROOT"
@@ -88,7 +89,7 @@ if [[ "$MODEL" == "ann" || "$MODEL" == "gawf" ]]; then
   COMPILE_EXPECTED=true
 fi
 
-RESULT_DIR="$AIM3_RESULTS_PATH/train_data/$SUFFIX"
+RESULT_DIR="$AIM3_RESULTS_PATH/data/rl/atari/runs/$SUFFIX"
 DONE_FILE="$STATUS_DIR/${SUFFIX}.done"
 FAIL_FILE="$STATUS_DIR/${SUFFIX}.fail"
 CHECKPOINT="$RESULT_DIR/checkpoint.pth"
@@ -114,7 +115,7 @@ fi
 echo "[$(date -Is)] task=$TASK_ID model=$MODEL setting=$SETTING seed=$SEED"
 echo "protocol=4-action-minimal frame_skip=4 frame_stack=4 layers=2 flicker=$FLICKER_PROB"
 set +e
-DISABLE_TQDM=1 python train_atari_dqn.py \
+DISABLE_TQDM=1 python run_task.py atari-dqn \
   --env_id ALE/Breakout-v5 --action_space_mode minimal --model_type "$MODEL" \
   --num_layers 2 --gawf_feedback_lr_scale 1.0 --frame_skip "$FRAME_SKIP" \
   --frame_stack "$FRAME_STACK" --flicker_prob "$FLICKER_PROB" \

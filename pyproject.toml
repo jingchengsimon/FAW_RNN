@@ -65,14 +65,13 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["utils", "utils_anal", "utils_viz"]
+known-first-party = ["experiments", "utils"]
 force-sort-within-sections = true
 # Import order enforced by project convention:
-# stdlib → third-party → project (utils → utils_anal → utils_viz)
+# stdlib → third-party → project (utils.training → utils.analysis)
 
 [tool.ruff.lint.per-file-ignores]
 "source/*" = ["ALL"]   # stimulus generation scripts are standalone
-"utils_viz/paper_figs/*" = ["E402"]  # matplotlib.use() before imports
 
 # ---------------------------------------------------------------------------
 # mypy — static type checker

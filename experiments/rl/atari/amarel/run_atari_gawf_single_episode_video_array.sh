@@ -13,10 +13,11 @@
 # Render one greedy episode for each selected, checkpoint-aligned GaWF run.
 
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${AIM3_ROOT:-${SLURM_SUBMIT_DIR:-}}"
-if [[ -z "$ROOT" || ! -f "$ROOT/train_atari_dqn.py" ]]; then
+if [[ -z "$ROOT" || ! -f "$ROOT/run_task.py" ]]; then
   ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 fi
 cd "$ROOT"
@@ -46,7 +47,7 @@ case "$TASK_ID" in
     ;;
 esac
 
-SOURCE_DIR="${AIM3_RESULTS_PATH}/train_data/${RUN_SUFFIX}"
+SOURCE_DIR="${AIM3_RESULTS_PATH}/data/rl/atari/runs/${RUN_SUFFIX}"
 METRICS_PATH="${SOURCE_DIR}/metrics.json"
 OUTPUT_DIR="${AIM3_RESULTS_PATH}/train_figs/rl/atari/${ENV_SLUG}/videos/"
 OUTPUT_DIR+="fs4_stack4_gawf_l${LAYERS}_seed${TRAINING_SEED}_single_episode_eval${EVAL_SEED:-20260727}"
@@ -67,7 +68,7 @@ source "$CONDA_SH"
 conda activate "${AIM3_CONDA_ENV:-aim3_rnn}"
 set -u
 
-python utils_anal/evaluate_atari_dqn_video.py \
+python -m utils.analysis.rl.atari.evaluate_dqn_video \
   --metrics_path "$METRICS_PATH" \
   --output_path "$OUTPUT_VIDEO" \
   --metadata_path "$OUTPUT_META" \

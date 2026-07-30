@@ -1,0 +1,15 @@
+name: aim3_rnn
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - pip
+  - matplotlib=3.8.*
+  - numpy=1.26.*
+  - pandas=1.5.*
+  - scipy=1.13.*
+  - scikit-learn=1.4.*
+  - pytest=7.4.*
+  - packaging
+  - tqdm

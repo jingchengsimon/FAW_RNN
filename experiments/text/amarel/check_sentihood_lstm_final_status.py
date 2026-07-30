@@ -10,7 +10,7 @@ from typing import Any, Dict
 
 def expected_paths(results_root: str, result_suffix: str) -> Dict[str, str]:
     stem = "lstm_sentihood_h50_emb50_lr0.01_wd0.0_edo0.001_rdo0.001"
-    base = os.path.join(results_root, "train_data", result_suffix)
+    base = os.path.join(results_root, "data", "text", "runs", result_suffix)
     return {
         "metrics": os.path.join(base, f"{stem}_metrics.json"),
         "pkl": os.path.join(base, f"{stem}.pkl"),

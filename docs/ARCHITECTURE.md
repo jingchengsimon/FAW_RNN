@@ -8,15 +8,15 @@ flow. Naming and file formats live in `CONVENTIONS.md`; implementation checklist
 
 | Task | Entry point | Model/data modules |
 |---|---|---|
-| Clutter vision | `train_model.py` | `utils/clutter_*`, `source/clutter/` |
-| IMDB | `train_imdb.py` | `utils/text_task_models.py`, `utils/text_imdb_data.py` |
-| SentiHood | `train_sentihood.py` | `utils/text_task_models.py`, `utils/text_sentihood_*` |
-| Atari A2C | `train_atari.py` | `utils/atari_task_models.py`, `utils/atari_envs.py` |
-| Atari DQN/DRQN | `train_atari_dqn.py` | `utils/atari_dqn_models.py`, `utils/atari_replay.py` |
-| MiniGrid DQN/DRQN | `train_minigrid_dqn.py` | `utils/minigrid_models.py`, `utils/minigrid_envs.py` |
-| MiniGrid PPO | `train_minigrid_ppo.py` | `utils/minigrid_ppo_models.py`, `utils/minigrid_envs.py` |
+| Clutter vision | `run_task.py clutter` | `utils/training/train_scripts/clutter.py`, `utils/training/clutter/`, `source/clutter/` |
+| IMDB | `run_task.py imdb` | `utils/training/train_scripts/imdb.py`, `utils/training/text/` |
+| SentiHood | `run_task.py sentihood` | `utils/training/train_scripts/sentihood.py`, `utils/training/text/` |
+| Atari A2C | `run_task.py atari-a2c` | `utils/training/train_scripts/atari_a2c.py`, `utils/training/atari/` |
+| Atari DQN/DRQN | `run_task.py atari-dqn` | `utils/training/train_scripts/atari_dqn.py`, `utils/training/atari/` |
+| MiniGrid DQN/DRQN | `run_task.py minigrid-dqn` | `utils/training/train_scripts/minigrid_dqn.py`, `utils/training/minigrid/` |
+| MiniGrid PPO | `run_task.py minigrid-ppo` | `utils/training/train_scripts/minigrid_ppo.py`, `utils/training/minigrid/` |
 
-All task families compose the same recurrent implementations from `utils/recurrent_cores/`.
+All task families compose the same recurrent implementations from `utils/training/recurrent_cores/`.
 Task wrappers own encoders, heads, data shapes, and feedback selection; they do not reimplement
 recurrent equations.
 
@@ -30,31 +30,31 @@ Task-specific experiment definitions live under `experiments/clutter/`, `experim
 stdlib / third-party
         |
         v
-utils/recurrent_cores/
+utils/training/recurrent_cores/
         |
         v
-utils/<task>_task_models.py + task data/train helpers
+utils/training/<task>/ + task data/train helpers
         |
         v
-train_<task>.py
+run_task.py <task> -> utils/training/train_scripts/<task>.py
         |
         v
-utils_anal/  ->  results/anal_data/<CATEGORY>/<script>/
+utils/analysis/  ->  results/data/analysis/<CATEGORY>/<script>/
         |
         v
-utils_viz/   ->  results/anal_figs/<CATEGORY>/
+utils/analysis/  ->  results/figs/<CATEGORY>/
 ```
 
 The arrows are one-way:
 
-- `utils/` must not import from `utils_anal/` or `utils_viz/`.
-- `utils_anal/` must not import from `utils_viz/`.
-- `utils_viz/` reads saved results rather than becoming a model dependency.
+- `utils/training/` must not import from `utils/analysis/`.
+- `utils/analysis/` owns numeric analysis and plotting from saved structured results; it is not a
+  model dependency.
 - `source/` contains data/environment preparation and must not become a training core.
 
 ## Shared recurrent cores
 
-`utils/recurrent_cores/` provides:
+`utils/training/recurrent_cores/` provides:
 
 - `RNNCore`, `GRUCore`, and `LSTMCore`, including unified `num_layers` handling.
 - `GaWFCore`, with single- and multi-layer paths behind one public model type.
@@ -185,17 +185,18 @@ source/<task>/ or external datasets/environments
         -> CPU arrays/datasets/replay
         -> DataLoader or replay sampling
         -> task wrapper + recurrent core
-        -> results/train_data/<suffix>/  (job-local staging)
+        -> results/data/<task>/runs/<suffix>/  (job-local staging)
              *_model.pth
              *.pkl
              *_metrics.json
-        -> results/train_data/{rl,clutter}/...  (curated task hierarchy)
-        -> utils_anal/ -> results/anal_data/<CATEGORY>/<module>/
-        -> utils_viz/  -> results/anal_figs/<CATEGORY>/
+        -> results/data/{rl,clutter,text}/...  (curated task hierarchy)
+        -> utils/analysis/ -> results/data/analysis/<CATEGORY>/<module>/
+        -> utils/analysis/ -> results/figs/<CATEGORY>/
 ```
 
 Clutter data resolution order is CLI `--data_dir`, `AIM3_STIMULI_PATH`,
-`FAW_RNN_DATA_PATH`, then `<repo>/stimuli`. Standard 40h arrays stay mmap-backed uint8 on CPU.
+`FAW_RNN_DATA_PATH`, then `<repo>/source/clutter/stimuli`. Standard 40h arrays stay mmap-backed
+uint8 on CPU.
 The Dataset emits a compact `(T+C-1,H,W)` window; the training/evaluation boundary transfers
 the uint8 batch, casts once to float32 on the target device, and expands it to
 `(B,T,C,H,W)`. `BlockShuffleSampler` preserves exact epoch coverage while shuffling contiguous
@@ -207,6 +208,6 @@ blocks; the default block equals the effective batch size and can be disabled wi
 - New clutter model types register through `get_model_classes()`.
 - Clutter label modes implement the existing metrics-mode lifecycle used by the engine.
 - Analysis model/dataset construction uses `build_model_from_ckpt` and `build_test_dataset` from
-  `utils_anal.anal_helpers`.
+  `utils.analysis.anal_helpers`.
 - Model and accelerator changes must preserve public training arguments, metrics fields, and
   checkpoint compatibility unless a documented migration is part of the same change.

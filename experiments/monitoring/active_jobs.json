@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "active_statuses": [
+    "queued",
+    "recovering",
+    "running",
+    "unknown"
+  ],
+  "jobs": [
+    {
+      "id": "amarel-atari-breakout-l3-l4-latest-curves-59704065",
+      "description": "Render current strict Breakout L3/L4 per-seed and mean±SD figures",
+      "host": "amarel",
+      "status": "running",
+      "job_ids": [
+        "59704065"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-07-30T18:17:42+00:00"
+    },
+    {
+      "id": "amarel-atari-breakout-l3-l4-seed-curves-59548643",
+      "description": "Render strict Breakout L3/L4 per-seed learning curves and complete-seed mean±SD figures in separate depth directories",
+      "host": "amarel",
+      "status": "running",
+      "job_ids": [
+        "59548643"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-07-29T21:32:45+00:00"
+    },
+    {
+      "id": "amarel-atari-breakout-fs4-stack4-l4-l5-shared12-59429629",
+      "description": "Plain Breakout fs4/stack4 L4/L5 shared replay budget: L4x8 overlaps L3, L5x4 overlaps L4 after L3 completes; 5 models x 3 seeds x 3M",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "59429627",
+        "59429628",
+        "59429629",
+        "59429630",
+        "59429631",
+        "59429632"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-07-28T22:14:32+00:00"
+    },
+    {
+      "id": "amarel-atari-breakout-fs4-stack4-l3-l5-59316473",
+      "description": "Strict 4-action plain Breakout fs4/stack4 L3->L5: 5 models x 3 seeds x 3M, recoverable and serial after fresh L3 smoke passed",
+      "host": "amarel",
+      "status": "running",
+      "job_ids": [
+        "59315837",
+        "59316472",
+        "59316473",
+        "59316474",
+        "59316475",
+        "59316476",
+        "59316477",
+        "59316478",
+        "59316479"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-07-28T22:14:32+00:00"
+    },
+    {
+      "id": "amarel-breakout-l1-natural-episode-59214669",
+      "description": "Breakout 4-action GaWF L1 seed1 one naturally terminating greedy episode, eval seed 20260728",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "59214669"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-07-27T14:45:39+00:00"
+    },
+    {
+      "id": "amarel-atari-breakout-fs4-stack4-l2-59143184",
+      "description": "Strict 4-action Breakout fs4/stack4 L2: 5 models x Breakout/Flickering x 5 seeds, 1M, recoverable",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "59143182",
+        "59143183",
+        "59143184"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-07-26T04:20:10+00:00"
+    },
+    {
+      "id": "amarel-atari-breakout-fs4-stack4-l1-58907590",
+      "description": "Strict 4-action Breakout fs4/stack4 L1 seed search: 7 models x Breakout/Flickering x 5 seeds, 1M, recoverable",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "58907590"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-07-22T19:27:10+00:00"
+    },
+    {
+      "id": "amarel-minigrid-paper-risk-redblue-ckpt-58301382",
+      "description": "MiniGrid paper-aligned PPO RedBlueDoors checkpoint recovery: paper-LSTM and GaWF",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "58301382"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/FAW_RNN-minigrid-paper-20260715",
+      "updated_at": "2026-07-18T18:35:29+00:00"
+    },
+    {
+      "id": "amarel-minigrid-paper-risk-memory-ckpt-58301383",
+      "description": "MiniGrid paper-aligned PPO MemoryS7 checkpoint recovery: LSTM-core, GRU, and GaWF",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "58301383"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/FAW_RNN-minigrid-paper-20260715",
+      "updated_at": "2026-07-18T18:35:29+00:00"
+    },
+    {
+      "id": "amarel-minigrid-paper-redblue-gru-ckpt-58301216",
+      "description": "MiniGrid paper-aligned PPO RedBlueDoors GRU checkpoint-enabled recovery",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "58301216"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/FAW_RNN-minigrid-paper-20260715",
+      "updated_at": "2026-07-18T17:49:02+00:00"
+    },
+    {
+      "id": "amarel-minigrid-paper-redblue-lstm-core-58285280",
+      "description": "MiniGrid paper-aligned PPO RedBlueDoors LSTM-core fresh recovery",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "58285280"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/FAW_RNN-minigrid-paper-20260715",
+      "updated_at": "2026-07-18T04:45:40+00:00"
+    },
+    {
+      "id": "amarel-minigrid-paper-redblue-s5-ckpt-58237890",
+      "description": "MiniGrid paper-aligned PPO RedBlueDoors S5 checkpoint recovery",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "58237890"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/FAW_RNN-minigrid-paper-20260715",
+      "updated_at": "2026-07-17T01:23:20+00:00"
+    },
+    {
+      "id": "amarel-minigrid-paper-memory-ckpt-58237889",
+      "description": "MiniGrid paper-aligned PPO MemoryS7 checkpoint recovery: paper_lstm/S5/Mamba",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "58237889"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/FAW_RNN-minigrid-paper-20260715",
+      "updated_at": "2026-07-17T01:23:16+00:00"
+    },
+    {
+      "id": "amarel-minigrid-memory-200m-58165755",
+      "description": "MiniGrid MemoryS7 LSTM/GaWF formal 200M accelerated run",
+      "host": "amarel",
+      "status": "recovering",
+      "job_ids": [
+        "58165755",
+        "58177788"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/FAW_RNN-minigrid-accel-200m-20260714",
+      "updated_at": "2026-07-15T15:44:06+00:00"
+    },
+    {
+      "id": "amarel-atari-pong-fs1-stack1-70-58160888",
+      "description": "Strict Pong fs1/stack1 full 6-action 1M: 7 models × 2 settings × 5 seeds",
+      "host": "amarel",
+      "status": "recovering",
+      "job_ids": [
+        "58160888",
+        "58170421",
+        "58170974",
+        "58170978",
+        "58180330",
+        "58285574"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/FAW_RNN-multitask-gru-phase0-20260713",
+      "updated_at": "2026-07-15T17:48:49+00:00"
+    }
+  ]
+}

@@ -418,7 +418,7 @@ def main():
         bg_mean_speeds=[1.0, 2.0, 4.0, 6.0, 8.0], #[1.0, 2.0, 4.0],
         mean_switch_interval_seconds=1.0,
         switch_mode=args.switch_mode,
-        output_dir=os.path.join(PROJECT_ROOT, "stimuli"),
+        output_dir=os.path.join(PROJECT_ROOT, "source", "clutter", "stimuli"),
         mnist_sample_start=0,
         mnist_sample_end=40000,
         suffix="reg-train-" + data_suffix,

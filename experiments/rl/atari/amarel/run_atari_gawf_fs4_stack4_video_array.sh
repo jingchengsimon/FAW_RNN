@@ -13,10 +13,11 @@
 # Render the best completed training seed for L1 and L2 strict fs4/stack4 GaWF Pong.
 
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${AIM3_ROOT:-${SLURM_SUBMIT_DIR:-}}"
-if [[ -z "${ROOT}" || ! -f "${ROOT}/train_atari_dqn.py" ]]; then
+if [[ -z "${ROOT}" || ! -f "${ROOT}/run_task.py" ]]; then
   ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 fi
 cd "${ROOT}"
@@ -36,7 +37,7 @@ else
   exit 2
 fi
 
-SOURCE_DIR="${AIM3_RESULTS_PATH}/train_data/${RUN_SUFFIX}"
+SOURCE_DIR="${AIM3_RESULTS_PATH}/data/rl/atari/runs/${RUN_SUFFIX}"
 METRICS_PATH="${SOURCE_DIR}/metrics.json"
 OUTPUT_DIR="${AIM3_RESULTS_PATH}/train_figs/rl/atari/pong_6action/videos/"
 OUTPUT_DIR+="fs4_stack4_gawf_l${LAYERS}_seed${TRAINING_SEED}"
@@ -52,7 +53,7 @@ source "${CONDA_SH}"
 conda activate "${AIM3_CONDA_ENV:-aim3_rnn}"
 set -u
 
-python utils_anal/evaluate_atari_dqn_video.py \
+python -m utils.analysis.rl.atari.evaluate_dqn_video \
   --metrics_path "${METRICS_PATH}" \
   --output_path "${OUTPUT_VIDEO}" \
   --metadata_path "${OUTPUT_META}" \

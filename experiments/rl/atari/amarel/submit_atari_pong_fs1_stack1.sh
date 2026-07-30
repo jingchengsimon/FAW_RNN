@@ -38,7 +38,7 @@ fi
 }
 mkdir -p "$ART_ROOT" "$MATCH_ART"
 
-MATCH_DIR="$AIM3_RESULTS_PATH/atari_param_match"
+MATCH_DIR="$AIM3_RESULTS_PATH/data/rl/atari/parameter_match"
 MATCH_JSON="$MATCH_DIR/atari_param_match.json"
 DEPENDENCY_ARGS=()
 MATCH_JOB_ID=""

@@ -16,16 +16,17 @@
 # mismatched against the LSTM anchor.
 
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${AIM3_ROOT:-${SLURM_SUBMIT_DIR:-}}"
-if [[ -z "$ROOT" || ! -f "$ROOT/train_atari_dqn.py" ]]; then
+if [[ -z "$ROOT" || ! -f "$ROOT/run_task.py" ]]; then
   ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 fi
 cd "$ROOT"
 
 : "${AIM3_RESULTS_PATH:?AIM3_RESULTS_PATH is required}"
-MATCH_DIR="${MATCH_DIR:-$AIM3_RESULTS_PATH/atari_param_match_breakout_fs4_stack4_l1}"
+MATCH_DIR="${MATCH_DIR:-$AIM3_RESULTS_PATH/data/rl/atari/parameter_match/breakout_fs4_stack4_l1}"
 NUM_ACTIONS="${NUM_ACTIONS:-4}"
 
 CONDA_SH="${AIM3_CONDA_SH:-/home/js3269/enter/etc/profile.d/conda.sh}"

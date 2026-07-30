@@ -11,11 +11,12 @@
 # Render reproducible completed/partial strict Breakout depth learning curves on a compute node.
 
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${AIM3_ROOT:-${SLURM_SUBMIT_DIR:-}}"
-if [[ -z "$ROOT" || ! -f "$ROOT/utils_viz/atari_breakout_depth_curves.py" ]]; then
-  ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+if [[ -z "$ROOT" || ! -f "$ROOT/utils/analysis/rl/atari/atari_breakout_depth_curves.py" ]]; then
+  ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 fi
 cd "$ROOT"
 
@@ -26,13 +27,13 @@ source "$CONDA_SH"
 conda activate "${AIM3_CONDA_ENV:-aim3_rnn}"
 set -u
 
-OUT_DIR="$AIM3_RESULTS_PATH/train_figs/rl/atari/breakout_4action"
+OUT_DIR="$AIM3_RESULTS_PATH/figs/rl/atari/breakout_4action"
 mkdir -p "$OUT_DIR"
 COMMON=(--data-root "$AIM3_RESULTS_PATH/train_data" --smooth 10)
 
-python -m utils_viz.atari_breakout_depth_curves "${COMMON[@]}" \
-  --num-layers 3 --expected-steps 3000000 --seeds 1 2 3 --partial gawf:3 \
+python -m utils.analysis.rl.atari.atari_breakout_depth_curves "${COMMON[@]}" \
+  --num-layers 3 --expected-steps 3000000 --seeds 1 2 3 \
   --output-dir "$OUT_DIR/fs4_stack4_l3_3seed"
-python -m utils_viz.atari_breakout_depth_curves "${COMMON[@]}" \
-  --num-layers 4 --expected-steps 3000000 --seeds 1 2 3 \
+python -m utils.analysis.rl.atari.atari_breakout_depth_curves "${COMMON[@]}" \
+  --num-layers 4 --expected-steps 3000000 --seeds 1 2 3 --partial gawf:1 \
   --output-dir "$OUT_DIR/fs4_stack4_l4_3seed"

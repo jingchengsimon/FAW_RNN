@@ -27,17 +27,18 @@
 #   seed    = SEEDS[rest % 5]
 #
 # All recurrent cores are param-matched to the LSTM anchor (hidden=512) via
-# experiments/atari/atari_ssm_param_match.py -> results/atari_param_match/
+# experiments/rl/atari/atari_ssm_param_match.py -> results/data/rl/atari/parameter_match/
 # atari_param_match.json. RNN/GRU/LSTM/GaWF get --hidden_size; S5/Mamba get
 # --ssm_d_model/--ssm_state_size; CNN is the unmatched feedforward control.
 # FRAME_SKIP/FRAME_STACK overrides are used only by explicit protocol-comparison
 # launchers; their RESULT_TAG must encode the overridden values.
 
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${AIM3_ROOT:-${SLURM_SUBMIT_DIR:-}}"
-if [[ -z "$ROOT" || ! -f "$ROOT/train_atari_dqn.py" ]]; then
+if [[ -z "$ROOT" || ! -f "$ROOT/run_task.py" ]]; then
   ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 fi
 cd "$ROOT"
@@ -105,7 +106,7 @@ TOTAL_TIMESTEPS="${TOTAL_TIMESTEPS:-1000000}"
 SEQ_LEN="${SEQ_LEN:-16}"
 
 # ---- param-matched sizing from JSON ---------------------------------------
-MATCH_JSON="$ROOT/results/atari_param_match/atari_param_match.json"
+MATCH_JSON="$ROOT/results/data/rl/atari/parameter_match/atari_param_match.json"
 SIZE_ARGS=()
 if [[ "$MODEL" != "ann" ]]; then
   if [[ ! -f "$MATCH_JSON" ]]; then
@@ -136,7 +137,7 @@ fi
 
 DONE_FILE="$STATUS_DIR/${SUFFIX}.done"
 FAIL_FILE="$STATUS_DIR/${SUFFIX}.fail"
-RESULT_DIR="$ROOT/results/train_data/$SUFFIX"
+RESULT_DIR="$ROOT/results/data/rl/atari/runs/$SUFFIX"
 
 # A preempted run may leave a partial history. Preserve it under a rerun-specific
 # name so the new 0..TOTAL_TIMESTEPS curve is not appended to stale steps.
@@ -154,7 +155,7 @@ echo "frame_skip=$FRAME_SKIP frame_stack=$FRAME_STACK amp=bfloat16 tf32=1 " \
   "compile=$COMPILE_ACTIVE"
 
 set +e
-DISABLE_TQDM=1 python train_atari_dqn.py \
+DISABLE_TQDM=1 python run_task.py atari-dqn \
   --env_id "ALE/Pong-v5" \
   --model_type "$MODEL" \
   --frame_stack "$FRAME_STACK" \
@@ -179,7 +180,7 @@ if [[ "$train_rc" -ne 0 ]]; then
   exit "$train_rc"
 fi
 
-python - "$ROOT/results/train_data/$SUFFIX" "$MODEL" "$TOTAL_TIMESTEPS" \
+python - "$ROOT/results/data/rl/atari/runs/$SUFFIX" "$MODEL" "$TOTAL_TIMESTEPS" \
   "$FRAME_SKIP" "$FRAME_STACK" <<'PY'
 import glob
 import json
@@ -211,7 +212,7 @@ PY
 {
   echo "status=done task_id=$TASK_ID model=$MODEL setting=$SETTING seed=$SEED"
   echo "frame_skip=$FRAME_SKIP frame_stack=$FRAME_STACK result_suffix=$SUFFIX"
-  echo "metrics_path=results/train_data/$SUFFIX/metrics.json timestamp=$(date -Is)"
+  echo "metrics_path=results/data/rl/atari/runs/$SUFFIX/metrics.json timestamp=$(date -Is)"
 } > "$DONE_FILE"
 rm -f "$FAIL_FILE"
-echo "[$(date -Is)] done model=$MODEL setting=$SETTING seed=$SEED -> results/train_data/$SUFFIX"
+echo "[$(date -Is)] done model=$MODEL setting=$SETTING seed=$SEED -> results/data/rl/atari/runs/$SUFFIX"

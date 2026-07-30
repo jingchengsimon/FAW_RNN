@@ -52,7 +52,7 @@ fi
 
 MATCH_SCRIPT="$SCRIPT_DIR/run_atari_param_match.sh"
 RUN_SCRIPT="$SCRIPT_DIR/run_atari_pong_depth2_array.sh"
-MATCH_DIR="$AIM3_RESULTS_PATH/atari_param_match_depth2"
+MATCH_DIR="$AIM3_RESULTS_PATH/data/rl/atari/parameter_match/depth2"
 MATCH_JSON="$MATCH_DIR/atari_param_match.json"
 MATCH_ART="$ROOT/experiments/rl/atari/amarel/artifacts/atari_param_match_depth2"
 TRAIN_ART="$ROOT/experiments/rl/atari/amarel/artifacts/atari_pong_depth2"

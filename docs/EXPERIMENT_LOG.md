@@ -320,6 +320,6 @@
   sector 会制造 digit/sector 互相矛盾的反馈，对 digit readout 反而更伤。
 - **现状（Current）：** 论点"consume sector 反馈重要、digit 反馈不重要"在 10 seeds 上、
   且在 magnitude-controlled shuffle 对照下均成立。实现见
-  `utils_anal/feedback_ablation.py`（`--shuffle` 追加三个 shuffle 条件），汇总图
-  `utils_viz/viz_feedback_ablation_multiseed.py`（上 zero / 下 shuffle 两行、按 readout 分组、
+  `utils/analysis/feedback_ablation.py`（`--shuffle` 追加三个 shuffle 条件），汇总图
+  `utils/analysis/` 中对应 Figure workflow（上 zero / 下 shuffle 两行、按 readout 分组、
   跨 seed error bar + 散点，PNG-only）。

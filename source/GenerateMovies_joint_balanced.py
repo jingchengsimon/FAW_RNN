@@ -663,7 +663,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate a strict digit×sector-balanced joint-switch test stimulus."
     )
-    parser.add_argument("--output-dir", type=str, default=str(PROJECT_ROOT / "stimuli"))
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=str(PROJECT_ROOT / "source" / "clutter" / "stimuli"),
+    )
     parser.add_argument("--suffix", type=str, default=DEFAULT_SUFFIX)
     parser.add_argument("--duration-seconds", type=int, default=2400)
     parser.add_argument("--fps", type=int, default=24)

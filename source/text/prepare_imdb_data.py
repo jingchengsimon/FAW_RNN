@@ -8,7 +8,8 @@ compute jobs (no internet) can load everything offline. This mirrors the existin
 ``.npy`` stimuli pipeline used by the vision task.
 
 Outputs under ``<data_dir>/imdb/`` (data_dir resolved like the vision pipeline:
-``--data_dir`` CLI -> ``AIM3_STIMULI_PATH`` / ``FAW_RNN_DATA_PATH`` env -> ``<repo>/stimuli``):
+``--data_dir`` CLI -> ``AIM3_STIMULI_PATH`` / ``FAW_RNN_DATA_PATH`` env ->
+``<repo>/source/text/data``):
 
     vocab.json                         # {token: id}, with <pad>=0 and <unk>=1
     imdb_meta.json                     # vocab_size, max_len, split sizes, config echo
@@ -66,7 +67,7 @@ def resolve_data_dir(cli_data_dir: str | None) -> str:
     env_path = os.environ.get("AIM3_STIMULI_PATH") or os.environ.get("FAW_RNN_DATA_PATH")
     if env_path:
         return os.path.abspath(env_path)
-    return os.path.join(repo_root(), "stimuli")
+    return os.path.join(repo_root(), "source", "text", "data")
 
 
 def tokenize(text: str) -> List[str]:
@@ -178,7 +179,11 @@ def save_split(out_dir: Path, split: str, ids: torch.Tensor, lengths: torch.Tens
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--data_dir", default=None, help="Base data dir; defaults to env or <repo>/stimuli.")
+    parser.add_argument(
+        "--data_dir",
+        default=None,
+        help="Base data dir; defaults to env or <repo>/source/text/data.",
+    )
     parser.add_argument("--vocab_size", type=int, default=25000, help="Max vocab incl. <pad>,<unk>.")
     parser.add_argument("--min_freq", type=int, default=1, help="Drop tokens below this train frequency.")
     parser.add_argument("--max_len", type=int, default=400, help="Truncate/pad reviews to this length.")

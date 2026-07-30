@@ -41,7 +41,7 @@ fi
 : "${AIM3_RESULTS_PATH:?Export AIM3_RESULTS_PATH, normally /scratch/js3269/results}"
 [[ "$AIM3_RESULTS_PATH" == /* ]] || { echo "AIM3_RESULTS_PATH must be absolute" >&2; exit 2; }
 
-MATCH_DIR="$AIM3_RESULTS_PATH/atari_param_match_breakout_fs4_stack4_l2"
+MATCH_DIR="$AIM3_RESULTS_PATH/data/rl/atari/parameter_match/breakout_fs4_stack4_l2"
 MATCH_JSON="$MATCH_DIR/atari_param_match.json"
 MATCH_RUNNER="$ROOT/experiments/rl/atari/amarel/prepare_atari_breakout_fs4_stack4_l2_match.sh"
 RUNNER="$ROOT/experiments/rl/atari/amarel/run_atari_breakout_fs4_stack4_l2_array.sh"

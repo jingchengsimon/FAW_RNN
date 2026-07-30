@@ -14,10 +14,11 @@
 # experiments/text/amarel/submit_sentihood_lstm_final.sh.
 
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${AIM3_ROOT:-${SLURM_SUBMIT_DIR:-}}"
-if [[ -z "$ROOT" || ! -f "$ROOT/train_sentihood.py" ]]; then
+if [[ -z "$ROOT" || ! -f "$ROOT/run_task.py" ]]; then
   ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 fi
 cd "$ROOT"
@@ -44,8 +45,8 @@ elif [[ -d "/scratch/${USER}/stimuli/sentihood" ]]; then
   DATA_DIR="/scratch/${USER}/stimuli"
 elif [[ -d "/cache/${USER}/stimuli/sentihood" ]]; then
   DATA_DIR="/cache/${USER}/stimuli"
-elif [[ -d "$ROOT/stimuli/sentihood" ]]; then
-  DATA_DIR="$ROOT/stimuli"
+elif [[ -d "$ROOT/source/text/data/sentihood" ]]; then
+  DATA_DIR="$ROOT/source/text/data"
 else
   echo "SentiHood data not found. Run source/text/prepare_sentihood_data.py first." | tee "$FAIL_FILE"
   exit 2
@@ -70,9 +71,9 @@ BALANCE_TRAIN_LABELS="${BALANCE_TRAIN_LABELS:-1}"
 
 RESULT_STEM="${MODEL_TYPE}_sentihood_h${HIDDEN}_emb${EMBED_DIM}"
 RESULT_STEM+="_lr${LR}_wd${WD}_edo${EMBED_DROPOUT}_rdo${RNN_DROPOUT}"
-METRICS_PATH="$AIM3_RESULTS_PATH/train_data/$RESULT_SUFFIX/${RESULT_STEM}_metrics.json"
-PKL_PATH="$AIM3_RESULTS_PATH/train_data/$RESULT_SUFFIX/${RESULT_STEM}.pkl"
-MODEL_PATH="$AIM3_RESULTS_PATH/train_data/$RESULT_SUFFIX/${RESULT_STEM}_model.pth"
+METRICS_PATH="$AIM3_RESULTS_PATH/data/text/runs/$RESULT_SUFFIX/${RESULT_STEM}_metrics.json"
+PKL_PATH="$AIM3_RESULTS_PATH/data/text/runs/$RESULT_SUFFIX/${RESULT_STEM}.pkl"
+MODEL_PATH="$AIM3_RESULTS_PATH/data/text/runs/$RESULT_SUFFIX/${RESULT_STEM}_model.pth"
 
 echo "[$(date -Is)] SentiHood LSTM-Final"
 echo "root=$ROOT"
@@ -102,7 +103,7 @@ case "$BALANCE_TRAIN_LABELS" in
 esac
 
 set +e
-DISABLE_TQDM=1 python train_sentihood.py \
+DISABLE_TQDM=1 python run_task.py sentihood \
   --model_types "$MODEL_TYPE" \
   --data_dir "$DATA_DIR" \
   --results_dir "$AIM3_RESULTS_PATH" \

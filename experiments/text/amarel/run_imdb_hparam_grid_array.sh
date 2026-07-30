@@ -14,10 +14,11 @@
 # experiments/text/amarel/submit_imdb_hparam_grid_batches.sh.
 
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${AIM3_ROOT:-${SLURM_SUBMIT_DIR:-}}"
-if [[ -z "$ROOT" || ! -f "$ROOT/train_imdb.py" ]]; then
+if [[ -z "$ROOT" || ! -f "$ROOT/run_task.py" ]]; then
   ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 fi
 cd "$ROOT"
@@ -66,8 +67,8 @@ elif [[ -d "/scratch/${USER}/stimuli/imdb" ]]; then
   DATA_DIR="/scratch/${USER}/stimuli"
 elif [[ -d "/cache/${USER}/stimuli/imdb" ]]; then
   DATA_DIR="/cache/${USER}/stimuli"
-elif [[ -d "$ROOT/stimuli/imdb" ]]; then
-  DATA_DIR="$ROOT/stimuli"
+elif [[ -d "$ROOT/source/text/data/imdb" ]]; then
+  DATA_DIR="$ROOT/source/text/data"
 else
   echo "IMDB data not found. Run source/text/prepare_imdb_data.py or set AIM3_DATA_DIR." | tee "$FAIL_FILE"
   exit 2
@@ -93,7 +94,7 @@ if python "$GRID_UTIL" validate --task-id "$TASK_ID" --root "$AIM3_RESULTS_PATH"
 fi
 
 set +e
-DISABLE_TQDM=1 python train_imdb.py \
+DISABLE_TQDM=1 python run_task.py imdb \
   --model_types "$MODEL_TYPE" \
   --data_dir "$DATA_DIR" \
   --results_dir "$AIM3_RESULTS_PATH" \

@@ -1,6 +1,7 @@
 # Text experiments
 
-IMDB 与 SentiHood 共用 `utils/text/task_models.py` 和 `utils/recurrent_cores/`。本目录保存
+IMDB 与 SentiHood 共用 `utils/training/text/text_task_models.py` 和
+`utils/training/recurrent_cores/`。本目录保存
 IMDB grid、parameter matching 与 Atari 之外的 text task definitions；Slurm wrappers 位于
 `amarel/`。
 

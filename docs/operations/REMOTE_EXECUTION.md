@@ -2,7 +2,7 @@
 
 This runbook owns agent-facing remote access and execution rules. Machine-specific aliases,
 project roots, data roots, and Conda initialization paths live in the ignored
-`.agents/local.md`; wrapper-specific values live in the ignored `remote/config.sh`.
+`.agents/local.md`; wrapper-specific values live in the ignored `experiments/remote/config.sh`.
 
 ## Before connecting
 
@@ -17,6 +17,8 @@ project roots, data roots, and Conda initialization paths live in the ignored
 
 - On every configured remote host, activate Conda environment `aim3_rnn` before tests, training,
   visualization, or Python diagnostics.
+- Export `PYTHONDONTWRITEBYTECODE=1` after activation (the tracked wrappers do this by default) so
+  Python does not write `__pycache__/` directories into the repository.
 - Do not use the default shell Python, `module`, or an unrelated virtual environment.
 - Amarel Slurm scripts source the configured Conda initialization script and then run
   `conda activate aim3_rnn`.
@@ -78,7 +80,7 @@ After submission, verify and report:
 - the single command used to inspect status and valid outputs.
 
 In the same turn, register the job in the project-local monitoring registry described in
-`remote/monitoring/README.md`. Record every scheduler/run ID, the exact remote root, log and
+`experiments/monitoring/README.md`. Record every scheduler/run ID, the exact remote root, log and
 result paths, expected units, and validity evidence. This internal registry replaces ad-hoc
 cross-thread searching.
 
@@ -125,7 +127,7 @@ development host. If local execution is impossible, run the test in a Slurm comp
 
 ```bash
 bash -n experiments/<task>/amarel/submit_<run>.sh experiments/<task>/amarel/run_<run>.sh
-python -m pytest -q tests/test_amarel_submit_safety.py
+python -m pytest -q experiments/tests/test_amarel_submit_safety.py
 bash experiments/<task>/amarel/submit_<run>.sh --dry-run  # when supported
 ```
 
@@ -138,7 +140,7 @@ stop that process first, then repair the launcher before resubmitting.
 
 ## Long-running sjc jobs
 
-- Use the wrappers described in `remote/README.md` or the task-specific two-GPU launcher.
+- Use the wrappers described in `experiments/remote/README.md` or the task-specific two-GPU launcher.
 - Prefer a stable tmux session/run ID and keep the result suffix unique.
 - Fetch only results created for the run when possible; avoid copying the entire result history.
 - Report the process/session ID, result root, and status/fetch command after launch.
@@ -150,7 +152,8 @@ stop that process first, then repair the launcher before resubmitting.
 - Reusable launchers may be tracked. One-off rerun scripts must say that they are one-off and be
   removed before synchronizing branches or worktrees.
 - Store Slurm stdout/stderr under the task's `experiments/<task>/amarel/artifacts/` directory.
-- Use `visualize_batch.sh` for training metrics after activating `aim3_rnn`.
+- Use the task-specific figure workflows in `utils/analysis/` for training metrics after activating
+  `aim3_rnn`.
 
 ## Synchronization and deletion safety
 
@@ -158,12 +161,12 @@ On 2026-07-16, a multi-source `rsync --delete` flattened a small source into a r
 and recursively removed unrelated code, stimuli, and results. The following rules are mandatory:
 
 1. Never use `rsync --delete` on a repository root or broad ancestor, including `results/`,
-   `stimuli/`, `experiments/`, shared code roots, or scratch roots.
+   `source/clutter/stimuli/`, `experiments/`, shared code roots, or scratch roots.
 2. Never combine `--delete` with multiple sources. A deletion-enabled sync has exactly one source
    directory and one exact homologous leaf destination.
 3. Never send a trailing-slash source directory to a repository root. The destination must name
    the corresponding leaf explicitly.
-4. Treat `.git/`, code, stimuli, checkpoints, `results/train_data/`, and `results/archive/` as
+4. Treat `.git/`, code, `source/clutter/stimuli/`, checkpoints, and `results/data/` as
    protected unless the human names the exact path and a recovery copy is verified.
 5. Before a deletion-enabled sync, run the exact command with `--dry-run --itemize-changes` and
    inspect every `*deleting` entry. Any parent, sibling, or unexpected file is a stop condition.
@@ -175,11 +178,11 @@ and recursively removed unrelated code, stimuli, and results. The following rule
 Safe:
 
 ```bash
-rsync -az local/results/anal_figs/F_timing/ host:/exact/repo/results/anal_figs/F_timing/
+rsync -az local/results/figs/F_timing/ host:/exact/repo/results/figs/F_timing/
 ```
 
 Forbidden:
 
 ```bash
-rsync -az --delete file1 local/results/anal_figs/F_timing/ file2 host:/exact/repo/results/anal_figs/F_timing/
+rsync -az --delete file1 local/results/figs/F_timing/ file2 host:/exact/repo/results/figs/F_timing/
 ```

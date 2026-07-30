@@ -18,12 +18,12 @@ names and output formats are defined in `CONVENTIONS.md`; architecture boundarie
 
 ### Clutter
 
-- Keep `train_model.py` as orchestration; heavy loop logic belongs in
+- Keep `utils/training/train_scripts/clutter.py` as orchestration; heavy loop logic belongs in
   `utils/clutter_train_engine.py`.
 - Register model types through `utils/clutter_train_helpers.get_model_classes()`.
 - Build losses through the factories in `clutter_train_sector.py` or
   `clutter_train_predict_all_chars.py`.
-- Put recurrent computation in `utils/recurrent_cores/`, not task wrappers.
+- Put recurrent computation in `utils/training/recurrent_cores/`, not task wrappers.
 - Extend `AccelerationConfig` rather than adding acceleration branches to the training loop.
 - Official curves use the train-eval and validation passes, not online batch averages.
 - Standard long jobs pass `--checkpoint_interval_epochs 5 --auto_resume`. Checkpoints are atomic
@@ -69,7 +69,7 @@ print("unexpected_keys:", incompatible.unexpected_keys)
 
 ## Analysis scripts
 
-New analysis belongs in `utils_anal/` and exports one logical result set per invocation.
+New analysis belongs in `utils/analysis/` and exports one logical result set per invocation.
 
 Required structure:
 
@@ -104,15 +104,15 @@ if __name__ == "__main__":
 Reuse the canonical helpers:
 
 ```python
-from utils_anal.anal_helpers import build_model_from_ckpt, build_test_dataset
+from utils.analysis.anal_helpers import build_model_from_ckpt, build_test_dataset
 ```
 
 Analysis requirements:
 
 - Resolve every analysis data/figure destination with
-  `utils_anal.anal_paths.output_dir(category, script_name, kind)`. Figures go directly to
-  `results/anal_figs/<CATEGORY>/`; data and the run manifest go to the parallel
-  `results/anal_data/<CATEGORY>/<script_name>/`. Keep `results/anal_index/` for index and
+  `utils.analysis.anal_paths.output_dir(category, script_name, kind)`. Figures go directly to
+  `results/figs/<CATEGORY>/`; data and the run manifest go to the parallel
+  `results/data/analysis/<CATEGORY>/<script_name>/`.
   migration notes; do not recreate nested `data/` or `figs/` directories there.
 - Each run writes `manifest.json` in its `anal_data` directory containing script path, commit,
   timestamp, category, both parallel roots, files written, and a flat dictionary of key numerical
@@ -123,11 +123,11 @@ Analysis requirements:
   aggregation mode, absolute checkpoint path, and spatial/feature shapes.
 - Print qualifying-sample progress every 200 samples.
 - Raise `RuntimeError` when no frames match; do not silently emit empty outputs.
-- Do not import plotting code from `utils_viz/`.
+- Keep numeric analysis and plotting in the same `utils/analysis/` task module.
 
 ### Unified GaWF variance decomposition
 
-Use `utils_anal.variance_decomposition` for encoder activation, input/recurrent gate synapses,
+Use `utils.analysis.variance_decomposition` for encoder activation, input/recurrent gate synapses,
 effective input/recurrent weights, hidden state, and feedback/readout vectors. Every run balances
 all 90 sector-digit cells to a common `n`, repeats the subsample for 20 fixed-seed draws, and
 reports aggregate plus per-unit condition-mean and trial-level fractions. Gate/effective-weight
@@ -154,21 +154,22 @@ saved float32 gate mmap arrays when available; otherwise reconstruct the same fl
 batches from the compact trajectory's aligned `feedback`, `U`, and `V`, immediately reduce the
 incoming-source axis, and never retain a trial-by-synapse array.
 
-`utils_anal/run_unified_variance_decomposition.py` reads saved mmap `.npy` representations,
+`utils/analysis/run_unified_variance_decomposition.py` reads saved mmap `.npy` representations,
 including the input and recurrent gate tensors. A saved GaWF trajectory may supply labels,
 feedback, and static weights only; the runner never reconstructs gates from `U/V`, reruns the
 model, or regenerates activations. Missing trial-level representations are a hard failure. When
 those saved representations do not yet exist, run
-`utils_anal/export_unified_variance_sources.py` once on a CUDA host with enough disk space. The
+`utils/analysis/export_unified_variance_sources.py` once on a CUDA host with enough disk space. The
 exporter loads the canonical checkpoint/test dataset, writes frame-major float32 mmap sources
 without materializing a complete trial-by-synapse tensor, and emits the runner input manifest.
 Use
-`utils_anal/migrate_analysis_outputs.py` to plan or apply the one-time legacy output move;
+`utils/analysis/migrate_analysis_outputs.py` to plan or apply the one-time legacy output move;
 ambiguous mixed artifacts remain in place and appear in its migration report.
 
 ## Visualisation scripts
 
-New plotting belongs in `utils_viz/` and reads saved result files rather than loading models.
+Plotting belongs in `utils/analysis/` beside its owning analysis and reads saved result files rather
+than loading models independently.
 
 - Call `matplotlib.use("Agg")` before importing pyplot.
 - Default to 150 DPI and save with `bbox_inches="tight", pad_inches=0.06`.
@@ -180,11 +181,12 @@ New plotting belongs in `utils_viz/` and reads saved result files rather than lo
 - Draw boundary/highlight lines in red with linewidth 0.7.
 - For N components plus sum and full panels, use three columns and
   `ceil((N + 2) / 3)` rows; hide unused axes.
-- Use `visualize_batch.sh` for saved training metrics unless a custom figure is explicitly
-  requested. It dispatches clutter `.pkl` histories and Atari `metrics_history.jsonl` to their
-  task-specific plotting modules. For a multi-task Atari run, the default figure contains one
-  `episodic_return_100` curve per environment; use `--include_combined` only for diagnostic plots
-  that intentionally pool episodes with different score scales.
+- Use the task-specific figure workflows in `utils/analysis/` for saved training metrics unless a
+  custom figure is explicitly requested. They dispatch clutter `.pkl` histories and Atari
+  `metrics_history.jsonl` to their task-specific plotting modules. For a multi-task Atari run,
+  the default figure contains one `episodic_return_100` curve per environment; use
+  `--include_combined` only for diagnostic plots that intentionally pool episodes with different
+  score scales.
 
 ### Poster and multi-panel figure style
 

@@ -10,4 +10,4 @@ points and reusable implementations remain at the repository root and in `utils/
 | `rl/atari/` | Atari definitions and `amarel/` launchers. |
 | `rl/minigrid/` | MiniGrid definitions and `amarel/` launchers. |
 
-Cross-host synchronization and run manifests live under `remote/`, not this directory.
+Cross-host synchronization and run manifests live under `experiments/remote/`, not this directory.

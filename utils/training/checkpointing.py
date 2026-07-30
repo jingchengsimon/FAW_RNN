@@ -7,7 +7,7 @@ subtle parts: replacing a checkpoint through a temporary file so preemption
 cannot leave a half-written payload, and trimming log records newer than the
 checkpoint so a resumed run never shows a regressed or duplicated step.
 
-``train_minigrid_ppo_paper.py`` intentionally still carries its own private
+``utils.training.train_scripts.minigrid_ppo_paper`` intentionally still carries its own private
 copies while its recovery jobs are in flight; de-duplicating it is a follow-up.
 """
 

@@ -8,7 +8,7 @@ is by validation accuracy. The best ``hidden`` (``H*``) becomes the anchor that 
 later iteration param-matches the GaWF-family cores to.
 
 Used both to emit per-task shell config for the SLURM array and to validate /
-summarize results. Result paths match ``train_imdb.py``'s layout exactly.
+summarize results. Result paths match ``run_task.py imdb``'s layout exactly.
 """
 from __future__ import annotations
 

@@ -741,7 +741,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate full-reset and/or causal non-joint unique-digit BG switches."
     )
-    parser.add_argument("--output-dir", type=str, default=str(PROJECT_ROOT / "stimuli"))
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=str(PROJECT_ROOT / "source" / "clutter" / "stimuli"),
+    )
     parser.add_argument(
         "--mode",
         choices=("both", "full_reset_spatial", "causal_continuous"),

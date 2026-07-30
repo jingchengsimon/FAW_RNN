@@ -25,6 +25,8 @@ from dataclasses import dataclass, field
 from typing import List, Tuple, Optional
 from tqdm import tqdm
 
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # --- Configuration ---
 
 @dataclass
@@ -416,7 +418,7 @@ def main():
         bg_char_counts=[1, 2, 4, 8, 12], #[1, 2, 4],
         bg_mean_speeds=[1.0, 2.0, 4.0, 6.0, 8.0], #[1.0, 2.0, 4.0],
         mean_switch_interval_seconds=1.0,
-        output_dir=os.path.join('..', 'stimuli'),
+        output_dir=os.path.join(PROJECT_ROOT, 'source', 'clutter', 'stimuli'),
         mnist_sample_start=0,
         mnist_sample_end=40000,
         suffix="reg-train-" + data_suffix

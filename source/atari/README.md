@@ -6,4 +6,5 @@ This folder contains Atari/RL environment setup and data-source scripts.
   observation shape.
 
 Task models live in `utils/atari_task_models.py`; Gymnasium wrappers live in
-`utils/atari_envs.py`; shared recurrent math stays under `utils/recurrent_cores/`.
+`utils/training/atari/atari_envs.py`; shared recurrent math stays under
+`utils/training/recurrent_cores/`.

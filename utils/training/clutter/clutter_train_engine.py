@@ -1,0 +1,1017 @@
+"""
+Training engine utilities for RNN/ANN/GaWF models.
+
+This module encapsulates the detailed implementation of:
+- loss function construction
+- optimizer construction
+- acceleration and DataLoader setup
+- metrics array initialization
+
+The goal is to keep the main training script's `network_train` function
+as a clear skeleton while the heavy logic lives here.
+
+Epoch loop naming (scheme A): `begin_epoch`, `train_batch`, `summarize_online_train`,
+`eval_train_subset`, `eval_valid` (both fair full-dataloader eval via `evaluate_epoch`).
+"""
+
+from typing import Any, Dict, Optional, Tuple
+
+import gc
+import signal
+import numpy as np
+import torch
+import torch.nn as nn
+
+from tqdm import tqdm
+
+from .clutter_train_acceleration import (
+    AccelerationConfig,
+    setup_acceleration,
+    build_loaders,
+    run_forward_with_feedback,
+    TrainStepper,
+    GawfDiagnosticsRecorder,
+)
+from .clutter_train_helpers import LoggingHelper
+from .clutter_data_pipeline import prepare_clutter_inputs, resolve_base_dataset
+from .clutter_train_predict_all_chars import build_loss_fn_all_chars, AllCharsMetricsMode
+from ..recurrent_cores import configure_gawf_feedback_acceleration
+from .clutter_train_sector import (
+    SingleCharMetricsMode,
+    build_loss_fn_single,
+    single_char_global_eval_finalize,
+    single_char_global_eval_init,
+    single_char_global_eval_update,
+)
+
+
+def _raise_unsupported_coord_engine(logger) -> None:
+    """Training engine does not implement single-char coordinate mode yet."""
+    msg = (
+        "Unsupported training configuration (predict_all_chars=False, use_sector=False). "
+        "Coordinate mode is not wired in the training engine."
+    )
+    if logger is not None:
+        logger.error(msg)
+    raise RuntimeError(msg)
+
+
+def get_loss_weights(predict_all_chars, use_sector):
+    """Default loss weights: [char_weight, pos_weight]."""
+    if predict_all_chars:
+        return [1, 0]
+    if use_sector:
+        return [1, 1]
+    return [1, 0.001]
+
+
+def get_criterion_pos(use_sector):
+    """Position criterion: CrossEntropyLoss for sector, MSELoss for coordinate."""
+    if use_sector:
+        return nn.CrossEntropyLoss()
+    return nn.MSELoss()
+
+
+def create_metrics_mode(
+    predict_all_chars: bool,
+    use_sector: bool,
+    max_chars: int | None,
+    device: Any,
+    logger=None,
+):
+    """
+    Factory for metrics mode, shared by training and evaluation.
+    """
+    if predict_all_chars:
+        return AllCharsMetricsMode(max_chars, device)
+    if use_sector:
+        return SingleCharMetricsMode(use_sector)
+    _raise_unsupported_coord_engine(logger)
+
+
+def setup_training_components(
+    mdl: nn.Module,
+    train_data,
+    val_data,
+    num_epochs: int,
+    loss_weights,
+    lr: float,
+    use_acceleration: bool,
+    weight_decay: float | None,
+    rnn_diag_lambda: float,
+    use_mmap: bool,
+    use_tqdm: bool,
+    seed: int,
+    logger,
+    optim_name: str = "adam",
+    run_label: str = "",
+    gawf_feedback_lr_scale: float = 1.0,
+    gawf_diag_enabled: bool = False,
+    gawf_diag_path: str | None = None,
+    gawf_diag_every: int = 1,
+    gawf_diag_gate_eps: float = 0.01,
+    s5_ssm_lr_scale: float = 0.1,
+) -> Dict[str, Any]:
+    """
+    Build all training components:
+    - device and acceleration config
+    - DataLoaders
+    - optimizer and loss function
+    - metrics mode and stepper
+    - metrics storage arrays
+
+    Returns a dict used by the high-level training loop in `network_train`.
+    """
+    use_sector = train_data.use_sector
+    predict_all_chars = train_data.predict_all_chars
+    max_chars = train_data.max_chars if predict_all_chars else None
+
+    if loss_weights is None:
+        loss_weights = get_loss_weights(predict_all_chars, use_sector)
+
+    device = mdl.device
+    mdl.to(device)
+
+    accel_config = AccelerationConfig(use_acceleration=use_acceleration)
+    compiled_gawf_cores = configure_gawf_feedback_acceleration(
+        mdl,
+        enabled=accel_config.enable_gawf_feedback_compile,
+        compile_mode=accel_config.gawf_feedback_compile_mode,
+    )
+    if compiled_gawf_cores and logger is not None:
+        logger.info(
+            "Compiled %s shared GaWF feedback/gate core(s) with mode=%s",
+            compiled_gawf_cores,
+            accel_config.gawf_feedback_compile_mode,
+        )
+
+    metrics_mode = create_metrics_mode(
+        predict_all_chars, use_sector, max_chars, device, logger=logger
+    )
+
+    autocast_fn, scaler, batch_size, num_workers, pin_memory = setup_acceleration(
+        accel_config,
+        device,
+        logger=logger,
+    )
+
+    is_gawf = bool(getattr(mdl, "is_gawf_model", False))
+    is_gawf_multi = bool(getattr(mdl, "is_gawf_multi_model", False))
+    train_dl, train_eval_dl, val_dl = build_loaders(
+        train_data,
+        val_data,
+        batch_size,
+        num_workers,
+        pin_memory,
+        accel_config,
+        seed,
+    )
+    base_batch_size_for_logging = batch_size
+
+    def _build_optimizer():
+        """Optimizer: for GaWF, disable weight decay on U and V; base params use passed wd."""
+        wd = weight_decay if weight_decay is not None else 0.0
+        has_big_hidden = getattr(mdl, "hidden_size", 0) >= 512
+        name_l = (optim_name or "adam").lower()
+        if name_l == "adamw":
+            OptimClass = torch.optim.AdamW
+        elif name_l == "muon":
+            if hasattr(torch.optim, "Muon"):
+                OptimClass = torch.optim.Muon
+            else:
+                raise RuntimeError(
+                    "Selected optimizer 'muon' but torch.optim.Muon is not available in this "
+                    "PyTorch version. Please upgrade PyTorch or choose a different optimizer."
+                )
+        else:
+            OptimClass = torch.optim.Adam
+
+        if OptimClass is getattr(torch.optim, "Muon", None):
+            non_2d = []
+            for pname, p in mdl.named_parameters():
+                if p is None:
+                    continue
+                if p.dim() != 2:
+                    non_2d.append((pname, tuple(p.size())))
+                    if len(non_2d) >= 5:
+                        break
+            if non_2d:
+                if logger is not None:
+                    shown = ", ".join([f"{n}={s}" for n, s in non_2d])
+                    logger.warning(
+                        "Requested optimizer 'muon' but found non-2D parameters "
+                        "(Muon only supports 2D). Falling back to AdamW. Examples: %s",
+                        shown,
+                    )
+                OptimClass = torch.optim.AdamW
+
+        if is_gawf:
+            base_params = []
+            gate_params = []
+            projector_params = []
+            for pname, param in mdl.named_parameters():
+                if (
+                    pname.endswith(".U")
+                    or pname.endswith(".V")
+                    or "U_layers" in pname
+                    or "V_layers" in pname
+                ):
+                    gate_params.append(param)
+                elif "proj_out" in pname or "hidden_projectors" in pname:
+                    projector_params.append(param)
+                else:
+                    base_params.append(param)
+
+            feedback_lr = lr * float(gawf_feedback_lr_scale)
+            param_groups = [
+                {"params": base_params, "lr": lr, "weight_decay": wd},
+                {"params": gate_params, "lr": feedback_lr, "weight_decay": 0.0},
+            ]
+            if projector_params:
+                param_groups.append(
+                    {"params": projector_params, "lr": feedback_lr, "weight_decay": wd}
+                )
+            optim_kwargs = {}
+            if OptimClass in (torch.optim.Adam, torch.optim.AdamW) and has_big_hidden:
+                optim_kwargs["eps"] = 1e-6
+            if logger is not None:
+                logger.info(
+                    "GaWF optimizer: base_lr=%s, feedback_lr=%s " "(feedback_lr_scale=%s)",
+                    lr,
+                    feedback_lr,
+                    gawf_feedback_lr_scale,
+                )
+            return OptimClass(param_groups, **optim_kwargs)
+
+        if bool(getattr(mdl, "uses_mamba_core", False)):
+            decay = []
+            no_decay = []
+            for pname, param in mdl.named_parameters():
+                if not param.requires_grad:
+                    continue
+                if getattr(param, "_no_weight_decay", False) or param.ndim <= 1:
+                    no_decay.append((pname, param))
+                else:
+                    decay.append((pname, param))
+
+            if logger is not None:
+                logger.info(
+                    "Mamba no_decay: %s",
+                    [name for name, _param in no_decay],
+                )
+
+            param_groups = []
+            if decay:
+                param_groups.append(
+                    {"params": [param for _name, param in decay], "weight_decay": wd}
+                )
+            if no_decay:
+                param_groups.append(
+                    {
+                        "params": [param for _name, param in no_decay],
+                        "weight_decay": 0.0,
+                    }
+                )
+            optim_kwargs = {"lr": lr}
+            if OptimClass in (torch.optim.Adam, torch.optim.AdamW) and has_big_hidden:
+                optim_kwargs["eps"] = 1e-6
+            return OptimClass(param_groups, **optim_kwargs)
+
+        if bool(getattr(mdl, "uses_s5_core", False)):
+
+            def _is_s5_core_param(pname: str) -> bool:
+                core_prefixes = ("Lambda", "log_step", "log_dt", "inv_dt", "B")
+                return any(part.startswith(core_prefixes) for part in pname.split("."))
+
+            ssm_core = []
+            no_decay = []
+            decay = []
+            for pname, param in mdl.named_parameters():
+                if not param.requires_grad:
+                    continue
+                if _is_s5_core_param(pname):
+                    ssm_core.append((pname, param))
+                elif param.ndim <= 1:
+                    no_decay.append((pname, param))
+                else:
+                    decay.append((pname, param))
+
+            if logger is not None:
+                logger.info("S5 ssm_core: %s", [name for name, _param in ssm_core])
+                logger.info("S5 decay   : %s", [name for name, _param in decay])
+                if not ssm_core:
+                    logger.warning(
+                        "S5 optimizer did not identify any SSM core parameters. "
+                        "Check S5 parameter names for Lambda/B/log_step variants."
+                    )
+
+            ssm_lr = lr * float(s5_ssm_lr_scale)
+            param_groups = []
+            if ssm_core:
+                param_groups.append(
+                    {
+                        "params": [param for _name, param in ssm_core],
+                        "lr": ssm_lr,
+                        "weight_decay": 0.0,
+                    }
+                )
+            if no_decay:
+                param_groups.append(
+                    {
+                        "params": [param for _name, param in no_decay],
+                        "lr": lr,
+                        "weight_decay": 0.0,
+                    }
+                )
+            if decay:
+                param_groups.append(
+                    {
+                        "params": [param for _name, param in decay],
+                        "lr": lr,
+                        "weight_decay": wd,
+                    }
+                )
+            optim_kwargs = {}
+            if OptimClass in (torch.optim.Adam, torch.optim.AdamW) and has_big_hidden:
+                optim_kwargs["eps"] = 1e-6
+            return OptimClass(param_groups, **optim_kwargs)
+
+        optim_kwargs = {"lr": lr, "weight_decay": wd}
+        if OptimClass in (torch.optim.Adam, torch.optim.AdamW) and has_big_hidden:
+            optim_kwargs["eps"] = 1e-6
+        return OptimClass(mdl.parameters(), **optim_kwargs)
+
+    optim = _build_optimizer()
+    has_complex_params = any(
+        param.requires_grad and torch.is_complex(param) for param in mdl.parameters()
+    )
+    if scaler is not None and has_complex_params:
+        if logger is not None:
+            logger.info(
+                "Disabling GradScaler for complex-parameter model; AMP autocast remains enabled."
+            )
+        scaler = None
+    lr_base = lr
+
+    criterion_char = nn.CrossEntropyLoss()
+    criterion_pos = get_criterion_pos(use_sector) if not predict_all_chars else None
+
+    if predict_all_chars:
+        loss_fn = build_loss_fn_all_chars(
+            mdl,
+            criterion_char,
+            max_chars,
+            device,
+            loss_weights,
+            rnn_diag_lambda,
+        )
+    elif use_sector:
+        loss_fn = build_loss_fn_single(
+            mdl,
+            criterion_char,
+            criterion_pos,
+            loss_weights,
+            rnn_diag_lambda,
+            device,
+        )
+    else:
+        _raise_unsupported_coord_engine(logger)
+
+    if logger is not None:
+        LoggingHelper.log_dataset_and_batch_info(
+            logger,
+            train_data,
+            val_data,
+            base_batch_size_for_logging,
+            accel_config,
+            train_dl,
+            num_workers,
+            pin_memory,
+            use_sector,
+            predict_all_chars,
+        )
+
+    gawf_diagnostics = GawfDiagnosticsRecorder(
+        enabled=gawf_diag_enabled and is_gawf,
+        output_path=gawf_diag_path,
+        every_n_steps=gawf_diag_every,
+        gate_saturation_eps=gawf_diag_gate_eps,
+        logger=logger,
+    )
+
+    stepper = TrainStepper(
+        mdl,
+        optim,
+        loss_fn,
+        accel_config,
+        device,
+        scaler,
+        autocast_fn,
+        pin_memory,
+        train_data,
+        gawf_diagnostics=gawf_diagnostics,
+    )
+
+    # Metrics storage (character acc, position metric, and optional losses).
+    train_acc_char = np.zeros(num_epochs)
+    val_acc_char = np.zeros(num_epochs)
+    train_metric_pos = np.zeros(num_epochs)
+    val_metric_pos = np.zeros(num_epochs)
+    train_loss_char = np.zeros(num_epochs)
+    val_loss_char = np.zeros(num_epochs)
+    train_loss_pos = np.zeros(num_epochs) if use_sector else None
+    val_loss_pos = np.zeros(num_epochs) if use_sector else None
+
+    extend_transition_metrics = use_sector and not predict_all_chars
+    if extend_transition_metrics:
+        glob_train_acc_char = np.zeros(num_epochs)
+        glob_val_acc_char = np.zeros(num_epochs)
+        glob_train_acc_pos = np.zeros(num_epochs)
+        glob_val_acc_pos = np.zeros(num_epochs)
+        fg_switch_pre5_train_acc_char = np.zeros(num_epochs)
+        fg_switch_pre5_val_acc_char = np.zeros(num_epochs)
+        fg_switch_pre5_train_acc_pos = np.zeros(num_epochs)
+        fg_switch_pre5_val_acc_pos = np.zeros(num_epochs)
+        fg_switch_post5_train_acc_char = np.zeros(num_epochs)
+        fg_switch_post5_val_acc_char = np.zeros(num_epochs)
+        fg_switch_post5_train_acc_pos = np.zeros(num_epochs)
+        fg_switch_post5_val_acc_pos = np.zeros(num_epochs)
+    else:
+        glob_train_acc_char = None
+        glob_val_acc_char = None
+        glob_train_acc_pos = None
+        glob_val_acc_pos = None
+        fg_switch_pre5_train_acc_char = None
+        fg_switch_pre5_val_acc_char = None
+        fg_switch_pre5_train_acc_pos = None
+        fg_switch_pre5_val_acc_pos = None
+        fg_switch_post5_train_acc_char = None
+        fg_switch_post5_val_acc_char = None
+        fg_switch_post5_train_acc_pos = None
+        fg_switch_post5_val_acc_pos = None
+
+    # Stop flag & signal handlers for graceful shutdown
+    stop_flag = init_stop_flag()
+    register_stop_handlers(num_workers=num_workers, stop_flag=stop_flag, logger=logger)
+
+    run_label_stripped = (run_label or "").strip()
+
+    return {
+        "device": device,
+        "accel_config": accel_config,
+        "metrics_mode": metrics_mode,
+        "autocast_fn": autocast_fn,
+        "scaler": scaler,
+        "batch_size": batch_size,
+        "num_workers": num_workers,
+        "pin_memory": pin_memory,
+        "is_gawf": is_gawf,
+        "is_gawf_multi": is_gawf_multi,
+        "gawf_feedback_lr_scale": gawf_feedback_lr_scale,
+        "gawf_diag_enabled": bool(gawf_diag_enabled and is_gawf),
+        "gawf_diag_path": gawf_diag_path,
+        "gawf_diagnostics": gawf_diagnostics,
+        "s5_ssm_lr_scale": s5_ssm_lr_scale,
+        "train_dl": train_dl,
+        "train_eval_dl": train_eval_dl,
+        "val_dl": val_dl,
+        "base_batch_size_for_logging": base_batch_size_for_logging,
+        "optim": optim,
+        "lr_base": lr_base,
+        "criterion_char": criterion_char,
+        "criterion_pos": criterion_pos,
+        "loss_fn": loss_fn,
+        "stepper": stepper,
+        "train_acc_char": train_acc_char,
+        "val_acc_char": val_acc_char,
+        "train_metric_pos": train_metric_pos,
+        "val_metric_pos": val_metric_pos,
+        "train_loss_char": train_loss_char,
+        "val_loss_char": val_loss_char,
+        "train_loss_pos": train_loss_pos,
+        "val_loss_pos": val_loss_pos,
+        "use_sector": use_sector,
+        "predict_all_chars": predict_all_chars,
+        "max_chars": max_chars,
+        "logger": logger,
+        "use_tqdm": use_tqdm,
+        "run_label": run_label_stripped,
+        "stop_flag": stop_flag,
+        "glob_train_acc_char": glob_train_acc_char,
+        "glob_val_acc_char": glob_val_acc_char,
+        "glob_train_acc_pos": glob_train_acc_pos,
+        "glob_val_acc_pos": glob_val_acc_pos,
+        "fg_switch_pre5_train_acc_char": fg_switch_pre5_train_acc_char,
+        "fg_switch_pre5_val_acc_char": fg_switch_pre5_val_acc_char,
+        "fg_switch_pre5_train_acc_pos": fg_switch_pre5_train_acc_pos,
+        "fg_switch_pre5_val_acc_pos": fg_switch_pre5_val_acc_pos,
+        "fg_switch_post5_train_acc_char": fg_switch_post5_train_acc_char,
+        "fg_switch_post5_val_acc_char": fg_switch_post5_val_acc_char,
+        "fg_switch_post5_train_acc_pos": fg_switch_post5_train_acc_pos,
+        "fg_switch_post5_val_acc_pos": fg_switch_post5_val_acc_pos,
+    }
+
+
+def evaluate_epoch(
+    mdl: nn.Module,
+    data_loader,
+    device,
+    use_tqdm: bool,
+    logger,
+    use_feedback,
+    desc: str = "Validation",
+    metrics_mode=None,
+    run_label: str = "",
+) -> Tuple:
+    """
+    One full pass in eval mode over ``data_loader`` (no_grad, shared metrics protocol).
+
+    Returns:
+        ``(acc_char, metric_pos, loss_pos, loss_char)`` with loss_* possibly None; or the same
+        tuple plus a fifth element ``extra_stats`` (dict of strict global / fg_switch window
+        accuracies) when sector single-char eval batches include pre5/post5 masks.
+
+    If ``metrics_mode`` is provided (e.g. ``components["metrics_mode"]``), it is reused
+    so train-subset and valid eval share one instance. Otherwise the mode is inferred
+    from the loader's underlying dataset (Subset-safe).
+    """
+    if metrics_mode is not None:
+        eval_mode = metrics_mode
+    else:
+        ds = data_loader.dataset
+        base_ds = getattr(ds, "dataset", ds)
+        predict_all_chars = getattr(base_ds, "predict_all_chars", False)
+        use_sector = getattr(base_ds, "use_sector", False)
+        max_chars = getattr(base_ds, "max_chars", 10)
+        eval_mode = create_metrics_mode(
+            predict_all_chars,
+            use_sector,
+            max_chars if predict_all_chars else None,
+            device,
+            logger=logger,
+        )
+    acc = eval_mode.init_eval()
+    glob_state = None
+    extend_global = isinstance(eval_mode, SingleCharMetricsMode) and eval_mode.use_sector
+
+    lbl = (run_label or "").strip()
+    prefix = f"[{lbl}] " if lbl else ""
+    val_desc = f"{prefix}{desc}"
+    if logger is not None:
+        logger.info(val_desc)
+    valid_pbar = tqdm(
+        enumerate(data_loader),
+        total=len(data_loader),
+        desc=val_desc,
+        ncols=100,
+        leave=False,
+        disable=not use_tqdm,
+    )
+
+    pipeline_ds = resolve_base_dataset(data_loader.dataset)
+    input_cast_mode = getattr(pipeline_ds, "input_cast_mode", "sample")
+    frame_layout = getattr(pipeline_ds, "frame_layout", "stacked")
+    chan_num = int(getattr(pipeline_ds, "chan_num", 2))
+    pin_memory = bool(getattr(data_loader, "pin_memory", False))
+
+    mdl.eval()
+    with torch.no_grad():
+        for _, batch in valid_pbar:
+            if isinstance(batch, (list, tuple)) and len(batch) >= 2:
+                inputs, labels = batch[0], batch[1]
+            else:
+                inputs, labels = batch, None
+
+            inputs = prepare_clutter_inputs(
+                inputs,
+                device=device,
+                cast_mode=input_cast_mode,
+                frame_layout=frame_layout,
+                chan_num=chan_num,
+                non_blocking=pin_memory,
+            )
+            if labels is not None:
+                if labels.dtype == torch.float64:
+                    labels = labels.float()
+                labels = labels.to(device)
+
+            out_char, out_pos = run_forward_with_feedback(
+                mdl,
+                inputs,
+                use_feedback=use_feedback,
+            )
+            # Single-char and all-chars modes have different eval update signatures.
+            if isinstance(eval_mode, AllCharsMetricsMode):
+                acc = eval_mode.update_eval_batch(acc, out_char, labels)
+            else:
+                acc = eval_mode.update_eval_batch(acc, out_char, labels, out_pos)
+
+            if (
+                extend_global
+                and labels is not None
+                and isinstance(batch, (list, tuple))
+                and len(batch) >= 4
+            ):
+                if glob_state is None:
+                    glob_state = single_char_global_eval_init()
+                pre5_m = batch[2].to(device=device, dtype=torch.bool)
+                post5_m = batch[3].to(device=device, dtype=torch.bool)
+                glob_state = single_char_global_eval_update(
+                    glob_state, out_char, out_pos, labels, pre5_m, post5_m
+                )
+
+    result = eval_mode.finalize_eval(acc, len(data_loader))
+    extra_stats = None
+    if glob_state is not None:
+        extra_stats = single_char_global_eval_finalize(glob_state)
+
+    # Normalize to (acc_char, metric_pos, loss_pos, loss_char) where loss_* may be None.
+    if len(result) == 2:
+        acc_char, metric_pos = result
+        loss_pos, loss_char = None, None
+    else:
+        acc_char, metric_pos, loss_pos, loss_char = result
+
+    if extra_stats is not None:
+        return acc_char, metric_pos, loss_pos, loss_char, extra_stats
+    if len(result) == 2:
+        return acc_char, metric_pos, loss_pos, loss_char
+    return (acc_char, metric_pos, loss_pos, loss_char)
+
+
+def _assign_transition_epoch_metrics(
+    components: Dict[str, Any],
+    epoch: int,
+    extra_stats: Optional[Dict[str, float]],
+    split: str,
+) -> None:
+    """Write strict global / fg_switch window accuracies into ``components`` arrays."""
+    if extra_stats is None or components.get("glob_train_acc_char") is None:
+        return
+    if split == "train":
+        components["glob_train_acc_char"][epoch] = extra_stats["glob_acc_char"]
+        components["glob_train_acc_pos"][epoch] = extra_stats["glob_acc_pos"]
+        components["fg_switch_pre5_train_acc_char"][epoch] = extra_stats["fg_switch_pre5_acc_char"]
+        components["fg_switch_pre5_train_acc_pos"][epoch] = extra_stats["fg_switch_pre5_acc_pos"]
+        components["fg_switch_post5_train_acc_char"][epoch] = extra_stats[
+            "fg_switch_post5_acc_char"
+        ]
+        components["fg_switch_post5_train_acc_pos"][epoch] = extra_stats["fg_switch_post5_acc_pos"]
+    else:
+        components["glob_val_acc_char"][epoch] = extra_stats["glob_acc_char"]
+        components["glob_val_acc_pos"][epoch] = extra_stats["glob_acc_pos"]
+        components["fg_switch_pre5_val_acc_char"][epoch] = extra_stats["fg_switch_pre5_acc_char"]
+        components["fg_switch_pre5_val_acc_pos"][epoch] = extra_stats["fg_switch_pre5_acc_pos"]
+        components["fg_switch_post5_val_acc_char"][epoch] = extra_stats["fg_switch_post5_acc_char"]
+        components["fg_switch_post5_val_acc_pos"][epoch] = extra_stats["fg_switch_post5_acc_pos"]
+
+
+def _copy_transition_epoch_metrics(components: Dict[str, Any], epoch: int) -> None:
+    """Copy transition metrics from ``epoch - 1`` (used when ``val_every`` skips validation)."""
+    if components.get("glob_val_acc_char") is None or epoch <= 0:
+        return
+    prev = epoch - 1
+    components["glob_val_acc_char"][epoch] = components["glob_val_acc_char"][prev]
+    components["glob_val_acc_pos"][epoch] = components["glob_val_acc_pos"][prev]
+    components["fg_switch_pre5_val_acc_char"][epoch] = components["fg_switch_pre5_val_acc_char"][
+        prev
+    ]
+    components["fg_switch_pre5_val_acc_pos"][epoch] = components["fg_switch_pre5_val_acc_pos"][prev]
+    components["fg_switch_post5_val_acc_char"][epoch] = components["fg_switch_post5_val_acc_char"][
+        prev
+    ]
+    components["fg_switch_post5_val_acc_pos"][epoch] = components["fg_switch_post5_val_acc_pos"][
+        prev
+    ]
+
+
+def eval_train_subset(
+    mdl: nn.Module,
+    components: Dict[str, Any],
+    epoch_ctx: Dict[str, Any],
+) -> str:
+    """
+    Fair eval on the train-eval subset DataLoader (same protocol as ``eval_valid``).
+    Writes ``train_*`` metric arrays for this epoch. Returns ``format_train_str`` line.
+    """
+    epoch = epoch_ctx["epoch"]
+    num_epochs = epoch_ctx["num_epochs"]
+    use_feedback = epoch_ctx["use_feedback_this_epoch"]
+    metrics_mode = components["metrics_mode"]
+    device = components["device"]
+    use_tqdm = components["use_tqdm"]
+    logger = components["logger"]
+    train_eval_dl = components["train_eval_dl"]
+
+    res = evaluate_epoch(
+        mdl=mdl,
+        data_loader=train_eval_dl,
+        device=device,
+        use_tqdm=use_tqdm,
+        logger=logger,
+        use_feedback=use_feedback,
+        desc="Train(eval-subset)",
+        metrics_mode=metrics_mode,
+        run_label=components.get("run_label") or "",
+    )
+    train_acc_char_arr = components["train_acc_char"]
+    train_metric_pos_arr = components["train_metric_pos"]
+    train_loss_pos_arr = components["train_loss_pos"]
+    train_loss_char_arr = components["train_loss_char"]
+
+    if len(res) == 5:
+        train_acc_char_arr[epoch], train_metric_pos_arr[epoch] = res[0], res[1]
+        if train_loss_pos_arr is not None and res[2] is not None:
+            train_loss_pos_arr[epoch] = res[2]
+        if res[3] is not None:
+            train_loss_char_arr[epoch] = res[3]
+        _assign_transition_epoch_metrics(components, epoch, res[4], "train")
+    else:
+        train_acc_char_arr[epoch], train_metric_pos_arr[epoch] = res[0], res[1]
+        if len(res) >= 3 and res[2] is not None and train_loss_pos_arr is not None:
+            train_loss_pos_arr[epoch] = res[2]
+        if len(res) >= 4 and res[3] is not None:
+            train_loss_char_arr[epoch] = res[3]
+
+    return metrics_mode.format_train_str(
+        epoch,
+        num_epochs,
+        train_acc_char_arr[epoch],
+        train_metric_pos_arr[epoch],
+    )
+
+
+def eval_valid(
+    mdl: nn.Module,
+    components: Dict[str, Any],
+    epoch_ctx: Dict[str, Any],
+    val_every: int = 1,
+) -> str:
+    """
+    Fair eval on the validation DataLoader (same protocol as ``eval_train_subset``).
+    Writes ``val_*`` metric arrays for this epoch (or copies previous when ``val_every`` skips).
+    Returns ``format_val_str`` line.
+    """
+    epoch = epoch_ctx["epoch"]
+    use_feedback = epoch_ctx["use_feedback_this_epoch"]
+    metrics_mode = components["metrics_mode"]
+    val_acc_char = components["val_acc_char"]
+    val_metric_pos = components["val_metric_pos"]
+    val_loss_pos = components["val_loss_pos"]
+    val_loss_char = components["val_loss_char"]
+    val_dl = components["val_dl"]
+    device = components["device"]
+    use_tqdm = components["use_tqdm"]
+    logger = components["logger"]
+
+    if epoch % val_every == 0:
+        val_res = evaluate_epoch(
+            mdl=mdl,
+            data_loader=val_dl,
+            device=device,
+            use_tqdm=use_tqdm,
+            logger=logger,
+            use_feedback=use_feedback,
+            desc="Validation",
+            metrics_mode=metrics_mode,
+            run_label=components.get("run_label") or "",
+        )
+        if len(val_res) == 5:
+            val_acc_char[epoch], val_metric_pos[epoch] = val_res[0], val_res[1]
+            if val_loss_pos is not None and val_res[2] is not None:
+                val_loss_pos[epoch] = val_res[2]
+            if val_res[3] is not None:
+                val_loss_char[epoch] = val_res[3]
+            _assign_transition_epoch_metrics(components, epoch, val_res[4], "val")
+        else:
+            val_acc_char[epoch], val_metric_pos[epoch] = val_res[0], val_res[1]
+            if len(val_res) >= 3 and val_res[2] is not None and val_loss_pos is not None:
+                val_loss_pos[epoch] = val_res[2]
+            if len(val_res) >= 4 and val_res[3] is not None:
+                val_loss_char[epoch] = val_res[3]
+    else:
+        if epoch > 0:
+            val_acc_char[epoch] = val_acc_char[epoch - 1]
+            val_metric_pos[epoch] = val_metric_pos[epoch - 1]
+            if val_loss_pos is not None:
+                val_loss_pos[epoch] = val_loss_pos[epoch - 1]
+            if val_loss_char is not None:
+                val_loss_char[epoch] = val_loss_char[epoch - 1]
+            _copy_transition_epoch_metrics(components, epoch)
+
+    return metrics_mode.format_val_str(
+        val_acc_char[epoch],
+        val_metric_pos[epoch],
+    )
+
+
+def cleanup_dataloaders(state: Dict[str, Any]) -> None:
+    """
+    Explicit resource cleanup for DataLoader so worker processes exit.
+    Designed to be called from the main training script's `finally` block.
+    """
+    num_workers = state.get("num_workers", 0)
+    if num_workers <= 0:
+        return
+
+    try:
+        logger = state.get("logger", None)
+        train_dl = state.get("train_dl")
+        train_eval_dl = state.get("train_eval_dl")
+        val_dl = state.get("val_dl")
+
+        if train_dl is not None:
+            train_dl._iterator = None
+            del train_dl
+        if train_eval_dl is not None:
+            train_eval_dl._iterator = None
+            del train_eval_dl
+        if val_dl is not None:
+            val_dl._iterator = None
+            del val_dl
+
+        gc.collect()
+        if logger is not None:
+            logger.info("DataLoader workers cleaned up successfully")
+    except Exception as e:
+        logger = state.get("logger", None)
+        if logger is not None:
+            logger.warning("Error during DataLoader cleanup: %s", e)
+
+
+def init_stop_flag() -> Dict[str, bool]:
+    """Create a mutable stop flag used for graceful shutdown."""
+    return {"requested": False}
+
+
+def register_stop_handlers(num_workers: int, stop_flag: Dict[str, bool], logger=None) -> None:
+    """
+    Register SIGTERM/SIGINT handlers that set a stop flag.
+    DataLoader workers are not touched inside the handler.
+    """
+    def _request_stop(signum, frame):
+        stop_flag["requested"] = True
+        if logger is not None:
+            logger.info("[signal] got %s, will stop after current step...", signum)
+
+    signal.signal(signal.SIGTERM, _request_stop)
+    signal.signal(signal.SIGINT, _request_stop)
+
+
+def stop_requested(stop_flag: Dict[str, bool]) -> bool:
+    """Check whether a stop was requested by signal handlers."""
+    return bool(stop_flag.get("requested", False))
+
+
+def use_feedback_this_epoch(epoch: int, is_gawf: bool, nofb: bool, fb_start_epoch: int):
+    """
+    GaWFRNN: single nofb-based control for feedback.
+    This governs whether the feedback path is used and when U,V are frozen.
+    """
+    if not is_gawf:
+        return None  # not used
+    if not nofb:
+        return True  # default: always feedback
+    return epoch >= fb_start_epoch
+
+
+def begin_epoch(
+    mdl: nn.Module,
+    components: Dict[str, Any],
+    epoch: int,
+    num_epochs: int,
+    nofb: bool,
+    fb_start_epoch: int,
+) -> Dict[str, Any]:
+    """
+    Start one training epoch:
+    - optionally freeze/unfreeze feedback parameters (GaWF nofb)
+    - init epoch online metrics accumulator and tqdm progress bar
+    """
+    is_gawf = components["is_gawf"]
+    train_dl = components["train_dl"]
+    metrics_mode = components["metrics_mode"]
+    use_tqdm = components["use_tqdm"]
+    logger = components["logger"]
+
+    feedback_flag = use_feedback_this_epoch(epoch, is_gawf, nofb, fb_start_epoch)
+
+    if is_gawf and nofb:
+        if hasattr(mdl, "set_feedback_frozen"):
+            mdl.set_feedback_frozen(feedback_flag is False)
+        if use_tqdm and (epoch == 0 or epoch == fb_start_epoch) and logger is not None:
+            logger.info("GaWFRNN (nofb): epoch %d use_feedback=%s", epoch, feedback_flag)
+
+    gawf_diagnostics = components.get("gawf_diagnostics")
+    if gawf_diagnostics is not None:
+        gawf_diagnostics.begin_epoch(epoch)
+
+    epoch_acc = metrics_mode.init_epoch_train()
+    num_batches_total = len(train_dl)
+
+    lbl = (components.get("run_label") or "").strip()
+    prefix = f"[{lbl}] " if lbl else ""
+    train_desc = f"{prefix}Epoch {epoch + 1}/{num_epochs} [Train]"
+    if logger is not None:
+        logger.info(train_desc)
+    train_pbar = tqdm(
+        enumerate(train_dl),
+        total=num_batches_total,
+        desc=train_desc,
+        ncols=100,
+        leave=False,
+        disable=not use_tqdm,
+    )
+
+    return {
+        "epoch": epoch,
+        "num_epochs": num_epochs,
+        "use_feedback_this_epoch": feedback_flag,
+        "metrics_mode": metrics_mode,
+        "epoch_acc": epoch_acc,
+        "num_batches_total": num_batches_total,
+        "train_pbar": train_pbar,
+        "components": components,
+    }
+
+
+def train_batch(epoch_ctx: Dict[str, Any], batch_idx: int, batch):
+    """
+    Run one training batch:
+    - forward, loss, backward + optimizer step (TrainStepper)
+    - update online-train metrics and tqdm postfix (not the fair eval curves)
+    """
+    components = epoch_ctx["components"]
+    stepper = components["stepper"]
+    metrics_mode = epoch_ctx["metrics_mode"]
+    train_dl = components["train_dl"]
+    use_feedback_this_epoch = epoch_ctx["use_feedback_this_epoch"]
+    use_tqdm = components["use_tqdm"]
+    train_pbar = epoch_ctx["train_pbar"]
+
+    current_loss, out_char, out_pos, labels_device = stepper.step(
+        batch,
+        batch_idx,
+        use_feedback_this_epoch,
+    )
+
+    epoch_ctx["epoch_acc"] = metrics_mode.update_train_batch(
+        epoch_ctx["epoch_acc"],
+        out_char,
+        labels_device,
+        batch_idx,
+        len(train_dl),
+        out_pos,
+    )
+
+    if use_tqdm and batch_idx % 10 == 0:
+        train_pbar.set_postfix(
+            metrics_mode.postfix_for_pbar(
+                current_loss,
+                out_char,
+                out_pos,
+                labels_device,
+            )
+        )
+
+    return current_loss, out_char, out_pos, labels_device
+
+
+def summarize_online_train(epoch_ctx: Dict[str, Any]) -> str:
+    """
+    Summarize online (per-batch) train metrics for logging only.
+    Fair train/valid curves come from ``eval_train_subset`` / ``eval_valid``.
+    """
+    components = epoch_ctx["components"]
+    metrics_mode = epoch_ctx["metrics_mode"]
+    epoch_acc = epoch_ctx["epoch_acc"]
+    num_batches_total = epoch_ctx["num_batches_total"]
+    epoch = epoch_ctx["epoch"]
+    num_epochs = epoch_ctx["num_epochs"]
+
+    train_result = metrics_mode.finalize_train_epoch(epoch_acc, num_batches_total)
+
+    acc_char = train_result[0]
+    metric_pos = train_result[1]
+    loss_pos = train_result[2] if len(train_result) >= 3 else None
+    loss_char = train_result[3] if len(train_result) >= 4 else None
+
+    parts = [f"acc_char={acc_char:.2f}", f"metric_pos={metric_pos:.4f}"]
+    if loss_pos is not None:
+        parts.append(f"loss_pos={loss_pos:.4f}")
+    if loss_char is not None:
+        parts.append(f"loss_char={loss_char:.4f}")
+    gawf_diagnostics = components.get("gawf_diagnostics")
+    if gawf_diagnostics is not None:
+        diag_summary = gawf_diagnostics.finish_epoch(epoch)
+        logger = components.get("logger")
+        if diag_summary is not None and logger is not None:
+            logger.info(
+                "GaWF diagnostics epoch %s: recorded_steps=%s, "
+                "grad_norm_preclip_all_mean=%.4f, gate_saturation_frac_mean=%.6f",
+                epoch + 1,
+                diag_summary.get("num_recorded_steps", 0),
+                diag_summary.get("grad_norm_preclip_all_mean", float("nan")),
+                diag_summary.get("gate_saturation_frac_mean", float("nan")),
+            )
+    return ", ".join(parts)

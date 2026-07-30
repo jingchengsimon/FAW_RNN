@@ -12,18 +12,19 @@
 # then merge it with the already-used strict-1-frame L1 matching table.
 
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${AIM3_ROOT:-${SLURM_SUBMIT_DIR:-}}"
-if [[ -z "$ROOT" || ! -f "$ROOT/train_atari_dqn.py" ]]; then
+if [[ -z "$ROOT" || ! -f "$ROOT/run_task.py" ]]; then
   ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 fi
 cd "$ROOT"
 
 : "${AIM3_RESULTS_PATH:?AIM3_RESULTS_PATH is required}"
-BASE_MATCH_JSON="${BASE_MATCH_JSON:-$AIM3_RESULTS_PATH/atari_param_match/atari_param_match.json}"
-MATCH_DIR="${MATCH_DIR:-$AIM3_RESULTS_PATH/atari_param_match_fs4_stack4_l1}"
-L2_MATCH_JSON="${L2_MATCH_JSON:-$AIM3_RESULTS_PATH/atari_param_match_depth2/atari_param_match.json}"
+BASE_MATCH_JSON="${BASE_MATCH_JSON:-$AIM3_RESULTS_PATH/data/rl/atari/parameter_match/atari_param_match.json}"
+MATCH_DIR="${MATCH_DIR:-$AIM3_RESULTS_PATH/data/rl/atari/parameter_match/pong_fs4_stack4_l1}"
+L2_MATCH_JSON="${L2_MATCH_JSON:-$AIM3_RESULTS_PATH/data/rl/atari/parameter_match/depth2/atari_param_match.json}"
 [[ -f "$BASE_MATCH_JSON" ]] || { echo "Missing base match JSON: $BASE_MATCH_JSON" >&2; exit 2; }
 [[ -f "$L2_MATCH_JSON" ]] || { echo "Missing L2 match JSON: $L2_MATCH_JSON" >&2; exit 2; }
 

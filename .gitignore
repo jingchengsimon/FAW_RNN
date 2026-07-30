@@ -11,8 +11,8 @@ __pycache__/
 !/results/anal_data/README.md
 /results/anal_figs/*
 !/results/anal_figs/README.md
-/stimuli
-remote/config.sh
+/source/clutter/stimuli/
+experiments/remote/config.sh
 .agents/local.md
 .claude/settings.local.json
 mimo_pack.egg-info/

@@ -16,12 +16,13 @@
 # 6 recurrent cores (no feedforward baseline, BabyAI-style). Env/seeds/budget from
 # env vars: ENV_ID (default MemoryS7), SEEDS_OVERRIDE, TOTAL_TIMESTEPS,
 # ENV_BACKEND, AMP_DTYPE, COMPILE_MODEL, and RESULT_TAG.
-# Cores param-matched to LSTM@128 via results/minigrid_param_match/atari_param_match.json.
+# Cores param-matched to LSTM@128 via the curated MiniGrid parameter-match table.
 
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${AIM3_ROOT:-${SLURM_SUBMIT_DIR:-}}"
-if [[ -z "$ROOT" || ! -f "$ROOT/train_minigrid_ppo.py" ]]; then
+if [[ -z "$ROOT" || ! -f "$ROOT/run_task.py" ]]; then
   ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 fi
 cd "$ROOT"
@@ -51,7 +52,7 @@ if [[ -n "${AGENT_VIEW_SIZE:-}" ]]; then
 fi
 SUFFIX="mg_ppo_${ENV_TAG}${VIEW_TAG}_${MODEL}_seed${SEED}_${RESULT_TAG}"
 
-MATCH_JSON="$ROOT/results/minigrid_param_match/atari_param_match.json"
+MATCH_JSON="$ROOT/results/data/rl/minigrid/parameter_match/paper_ppo2_core_match.json"
 read -r KIND V1 V2 < <(python - "$MATCH_JSON" "$MODEL" <<'PY'
 import json, sys
 d=json.load(open(sys.argv[1])); m=d["matched"].get(sys.argv[2], {})
@@ -81,7 +82,7 @@ echo "sizing=${SIZE_ARGS[*]} lr=${LEARNING_RATE:-default} env_backend=$ENV_BACKE
 echo "amp=$AMP_DTYPE compile=$COMPILE_MODEL result_tag=$RESULT_TAG"
 
 set +e
-DISABLE_TQDM=1 python train_minigrid_ppo.py --env_id "$ENV_ID" --model_type "$MODEL" \
+DISABLE_TQDM=1 python run_task.py minigrid-ppo --env_id "$ENV_ID" --model_type "$MODEL" \
   --encoder "$ENCODER" --total_timesteps "$TOTAL_TIMESTEPS" --num_envs "$NUM_ENVS" \
   --num_steps "$NUM_STEPS" --update_epochs 4 --seed "$SEED" --device cuda \
   --result_suffix "$SUFFIX" "${SIZE_ARGS[@]}" "${VIEW_ARGS[@]}" "${LR_ARGS[@]}" \
@@ -94,7 +95,7 @@ if [[ "$rc" -ne 0 ]]; then
 fi
 {
   echo "status=done model=$MODEL seed=$SEED"
-  echo "metrics=results/train_data/$SUFFIX/metrics.json $(date -Is)"
+  echo "metrics=results/data/rl/minigrid/runs/$SUFFIX/metrics.json $(date -Is)"
 } > "$DONE_FILE"
 rm -f "$FAIL_FILE"
 echo "[$(date -Is)] done $SUFFIX"

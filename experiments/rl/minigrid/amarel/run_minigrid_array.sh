@@ -22,10 +22,11 @@
 # param-match JSON (LSTM@128 anchor). Encoder defaults to mlp.
 
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${AIM3_ROOT:-${SLURM_SUBMIT_DIR:-}}"
-if [[ -z "$ROOT" || ! -f "$ROOT/train_minigrid_dqn.py" ]]; then
+if [[ -z "$ROOT" || ! -f "$ROOT/run_task.py" ]]; then
   ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 fi
 cd "$ROOT"
@@ -61,11 +62,11 @@ SEQ_LEN="${SEQ_LEN:-32}"
 SUFFIX="mg_${ENV_TAG}_${MODEL}_seed${SEED}"
 
 # ---- param-matched sizing from the MiniGrid JSON ---------------------------
-MATCH_JSON="$ROOT/results/minigrid_param_match/atari_param_match.json"
+MATCH_JSON="$ROOT/results/data/rl/minigrid/parameter_match/paper_ppo2_core_match.json"
 SIZE_ARGS=()
 if [[ "$MODEL" != "ann" ]]; then
   if [[ ! -f "$MATCH_JSON" ]]; then
-    echo "Missing $MATCH_JSON. Run atari_ssm_param_match --out_dir results/minigrid_param_match first." >&2
+    echo "Missing $MATCH_JSON. Restore the curated MiniGrid parameter-match table first." >&2
     exit 2
   fi
   read -r KIND V1 V2 < <(python - "$MATCH_JSON" "$MODEL" <<'PY'
@@ -88,7 +89,7 @@ echo "[$(date -Is)] task=$TASK_ID model=$MODEL seed=$SEED env=$ENV_ID steps=$TOT
 echo "result_suffix=$SUFFIX encoder=$ENCODER sizing=${SIZE_ARGS[*]:-none(ann)}"
 
 set +e
-DISABLE_TQDM=1 python train_minigrid_dqn.py \
+DISABLE_TQDM=1 python run_task.py minigrid-dqn \
   --env_id "$ENV_ID" \
   --model_type "$MODEL" \
   --encoder "$ENCODER" \
@@ -105,6 +106,6 @@ if [[ "$rc" -ne 0 ]]; then
   echo "status=train_failed model=$MODEL seed=$SEED env=$ENV_ID rc=$rc $(date -Is)" > "$FAIL_FILE"
   exit "$rc"
 fi
-echo "status=done model=$MODEL seed=$SEED env=$ENV_ID metrics=results/train_data/$SUFFIX/metrics.json $(date -Is)" > "$DONE_FILE"
+echo "status=done model=$MODEL seed=$SEED env=$ENV_ID metrics=results/data/rl/minigrid/runs/$SUFFIX/metrics.json $(date -Is)" > "$DONE_FILE"
 rm -f "$FAIL_FILE"
 echo "[$(date -Is)] done $SUFFIX"

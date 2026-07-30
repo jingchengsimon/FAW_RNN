@@ -14,6 +14,7 @@
 # Pong defaults to one ALE frame per environment step and one observed frame.
 
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 
 ROOT="${AIM3_ROOT:-${SLURM_SUBMIT_DIR:-$HOME/projects/FAW_RNN}}"
 cd "$ROOT"
@@ -68,7 +69,7 @@ else
   SUFFIX="atari_dqn_pong_fs${FRAME_SKIP}_stack1_flicker_depth2match_${MODEL}_L2_seed${SEED}"
 fi
 
-MATCH_JSON="$ROOT/results/atari_param_match_depth2/atari_param_match.json"
+MATCH_JSON="$ROOT/results/data/rl/atari/parameter_match/depth2/atari_param_match.json"
 [[ -f "$MATCH_JSON" ]] || { echo "Missing $MATCH_JSON" >&2; exit 2; }
 HIDDEN="$(python - "$MATCH_JSON" "$MODEL" <<'PY'
 import json, sys
@@ -83,7 +84,7 @@ echo "[$(date -Is)] task=$TASK_ID model=$MODEL setting=$SETTING seed=$SEED hidde
 echo "frame_skip=$FRAME_SKIP frame_stack=1 amp=$AMP_DTYPE tf32=$ALLOW_TF32 compile=$COMPILE_ACTIVE"
 
 set +e
-DISABLE_TQDM=1 python train_atari_dqn.py \
+DISABLE_TQDM=1 python run_task.py atari-dqn \
   --env_id ALE/Pong-v5 \
   --model_type "$MODEL" \
   --hidden_size "$HIDDEN" \
@@ -104,7 +105,7 @@ if (( rc != 0 )); then
   echo "status=fail task=$TASK_ID model=$MODEL seed=$SEED rc=$rc $(date -Is)" > "$FAIL_FILE"
   exit "$rc"
 fi
-METRICS_FILE="results/train_data/$SUFFIX/metrics.json"
+METRICS_FILE="results/data/rl/atari/runs/$SUFFIX/metrics.json"
 TARGET_STEPS="${TOTAL_TIMESTEPS:-1000000}"
 set +e
 python - "$METRICS_FILE" "$TARGET_STEPS" "$FRAME_SKIP" <<'PY'

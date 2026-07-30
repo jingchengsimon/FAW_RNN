@@ -46,4 +46,4 @@ fi
 job_id="$(sbatch --parsable "${SBATCH_ARGS[@]}")"
 echo "job_id=$job_id"
 echo "tasks=0:Pong-L1-seed1,1:Pong-L2-seed1,2:Breakout-L1-seed1,3:Breakout-L2-seed2"
-echo "results=$RESULTS_ROOT/train_figs/rl/atari/{pong_6action,breakout_4action}/videos"
+echo "results=$RESULTS_ROOT/figs/rl/atari/{pong_6action,breakout_4action}/videos"

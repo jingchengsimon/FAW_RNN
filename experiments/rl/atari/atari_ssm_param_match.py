@@ -18,7 +18,7 @@ match anywhere. Mamba needs ``mamba-ssm`` (GPU box, i.e. Amarel). Run:
         --num_actions 6 --num_layers 1
 
 It writes ``atari_param_match.json`` mapping each model to the sizing args the
-launch scripts feed to ``train_atari_dqn.py``.
+launch scripts feed to ``run_task.py atari-dqn``.
 """
 
 from __future__ import annotations
@@ -33,8 +33,8 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 import torch
 
-from utils.recurrent_cores.gawf import GaWFCore
-from utils.recurrent_cores.rnn import GRUCore, LSTMCore, RNNCore
+from utils.training.recurrent_cores.gawf import GaWFCore
+from utils.training.recurrent_cores.rnn import GRUCore, LSTMCore, RNNCore
 
 
 def count_params(module: torch.nn.Module) -> int:
@@ -94,7 +94,7 @@ def search_hidden(build_fn, conv_out, target, num_actions, num_layers, h_min=8, 
 
 # ---- d_model search for the SSM cores --------------------------------------
 def _build_s5(conv_out, d_model, state_size, num_layers):
-    from utils.recurrent_cores.s5 import S5Core
+    from utils.training.recurrent_cores.s5 import S5Core
 
     return S5Core(
         input_size=conv_out, d_model=d_model, state_size=state_size, num_layers=num_layers
@@ -102,7 +102,7 @@ def _build_s5(conv_out, d_model, state_size, num_layers):
 
 
 def _build_mamba(conv_out, d_model, state_size, num_layers):
-    from utils.recurrent_cores.mamba import MambaCore
+    from utils.training.recurrent_cores.mamba import MambaCore
 
     return MambaCore(
         input_size=conv_out, d_model=d_model, num_layers=num_layers, d_state=state_size
@@ -153,7 +153,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=["rnn", "gru", "lstm", "gawf", "s5", "mamba"],
         choices=["rnn", "gru", "lstm", "gawf", "s5", "mamba"],
     )
-    p.add_argument("--out_dir", type=str, default="results/atari_param_match")
+    p.add_argument(
+        "--out_dir",
+        type=str,
+        default="results/data/rl/atari/parameter_match",
+    )
     return p
 
 

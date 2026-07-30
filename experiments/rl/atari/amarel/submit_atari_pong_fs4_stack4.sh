@@ -53,10 +53,10 @@ if [[ "$AIM3_RESULTS_PATH" != /* ]]; then
   exit 2
 fi
 
-L1_MATCH_DIR="$AIM3_RESULTS_PATH/atari_param_match_fs4_stack4_l1"
+L1_MATCH_DIR="$AIM3_RESULTS_PATH/data/rl/atari/parameter_match/pong_fs4_stack4_l1"
 L1_MATCH_JSON="$L1_MATCH_DIR/atari_param_match.json"
-L2_MATCH_JSON="$AIM3_RESULTS_PATH/atari_param_match_depth2/atari_param_match.json"
-BASE_L1_MATCH_JSON="$AIM3_RESULTS_PATH/atari_param_match/atari_param_match.json"
+L2_MATCH_JSON="$AIM3_RESULTS_PATH/data/rl/atari/parameter_match/depth2/atari_param_match.json"
+BASE_L1_MATCH_JSON="$AIM3_RESULTS_PATH/data/rl/atari/parameter_match/atari_param_match.json"
 [[ -f "$BASE_L1_MATCH_JSON" ]] || { echo "Missing base L1 match JSON: $BASE_L1_MATCH_JSON" >&2; exit 2; }
 [[ -f "$L2_MATCH_JSON" ]] || { echo "Missing L2 match JSON: $L2_MATCH_JSON" >&2; exit 2; }
 

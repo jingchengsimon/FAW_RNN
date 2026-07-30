@@ -1,6 +1,6 @@
 """Render a trained Atari DQN-family agent playing, as an mp4.
 
-Loads a checkpoint saved by ``train_atari_dqn.py`` (``results/train_data/<suffix>/
+Loads a checkpoint saved by ``run_task.py atari-dqn`` (``results/data/rl/atari/runs/<suffix>/
 dqn_<model>_<feedback>_<env>.pth``), runs the greedy policy (epsilon=0) with the
 recurrent state carried across steps, captures the full-resolution RGB frames via
 ``env.render()``, and encodes them to mp4 with imageio.
@@ -28,8 +28,8 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 import numpy as np
 import torch
 
-from utils.atari.dqn_models import AtariQNetwork
-from utils.atari.train_utils import to_channel_first_obs
+from utils.training.atari.atari_dqn_models import AtariQNetwork
+from utils.training.atari.atari_train_utils import to_channel_first_obs
 
 
 def _sizing_kwargs(model_type: str, args, num_actions: int) -> dict:
@@ -109,9 +109,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--result_suffix",
         required=True,
-        help="Run dir under results/train_data holding the checkpoint.",
+        help="Run dir under results/data/rl/atari/runs holding the checkpoint.",
     )
-    p.add_argument("--data_root", default="results/train_data")
+    p.add_argument("--data_root", default="results/data/rl/atari/runs")
     p.add_argument(
         "--model_type", required=True, choices=["ann", "rnn", "gru", "lstm", "gawf", "s5", "mamba"]
     )
@@ -124,7 +124,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--ssm_d_model", type=int, default=None)
     p.add_argument("--ssm_state_size", type=int, default=None)
     p.add_argument("--seq_len", type=int, default=16)
-    p.add_argument("--param_match_json", default="results/atari_param_match/atari_param_match.json")
+    p.add_argument(
+        "--param_match_json",
+        default="results/data/rl/atari/parameter_match/atari_param_match.json",
+    )
     p.add_argument("--num_episodes", type=int, default=1)
     p.add_argument("--max_steps", type=int, default=6000)
     p.add_argument("--fps", type=int, default=30)

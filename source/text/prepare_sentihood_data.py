@@ -24,7 +24,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
-from utils.text.sentihood_data import PAPER_ASPECTS, prepare_sentihood_tensors
+from utils.training.text.text_sentihood_data import PAPER_ASPECTS, prepare_sentihood_tensors
 
 
 def parse_args() -> argparse.Namespace:

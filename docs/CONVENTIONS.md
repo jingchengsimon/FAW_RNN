@@ -134,26 +134,24 @@ another internal representation.
 
 | Directory | Contents |
 |---|---|
-| `results/train_data/rl/atari/pong_6action/` | curated six-action Pong run bundles |
-| `results/train_data/rl/atari/multitask_18action/` | curated full-18-action Atari controls and multi-task runs |
-| `results/train_data/rl/minigrid/` | curated MiniGrid run bundles |
-| `results/train_data/clutter/` | Clutter checkpoints and training metrics |
-| `results/train_figs/rl/{atari,minigrid}/` | curated RL learning curves |
-| `results/train_figs/clutter/` | Clutter training figures |
-| `results/archive/` | historical, superseded, validation-only, or protocol-mismatched results |
-| `results/anal_data/<CATEGORY>/<module>/` | analysis arrays, metadata, and run manifest |
-| `results/anal_figs/<CATEGORY>/` | figures (flat within each category) |
-| `results/anal_index/` | human-maintained index and migration notes |
+| `results/data/rl/atari/{runs,pong_6action,multitask_18action}/` | Atari run bundles; `runs/` is job-local output and the named protocol paths are curated |
+| `results/data/rl/atari/breakout_4action/<protocol>/<model>/seed<N>/` | curated minimal-four-action Breakout bundles; use explicit `fs`, `stack`, layer, and plain/flicker protocol names |
+| `results/data/rl/minigrid/{runs,...}/` | MiniGrid run bundles |
+| `results/data/clutter/runs/` | Clutter checkpoints and training metrics |
+| `results/data/text/runs/` | Text-task checkpoints and metrics |
+| `results/data/rl/{atari,minigrid}/parameter_match/` | task-specific recurrent-core parameter-match tables |
+| `results/figs/rl/{atari,minigrid}/` | curated RL learning curves |
+| `results/figs/<CATEGORY>/` | analysis and development figures |
 | `results/save/` | human-curated final figure files (`Fig*` and `Supple*`) |
 | `results/save_data/<figure>/` | minimum numeric inputs for one saved figure; shared inputs have one owner |
 | `../../6-Writing/Aim3/Figures/` | official publication PDFs |
 | `experiments/clutter/artifacts/` | aggregated experiment tables/configs |
 | `experiments/<task>/amarel/artifacts/<run>/` | ignored Slurm logs/status artifacts |
 
-Analysis data remains grouped by producing script basename, while figures are flat within each
-category. Analysis scripts must obtain these directories from `utils_anal.anal_paths.output_dir`.
-Existing unclassified legacy entries may remain directly below `results/anal_data/` or
-`results/anal_figs/` until they receive an explicit category.
+Analysis data remains grouped by producing script basename below
+`results/data/analysis/<CATEGORY>/<module>/`, while figures are flat within
+`results/figs/<CATEGORY>/`. Analysis scripts must obtain these directories from
+`utils.analysis.anal_paths.output_dir`.
 
 `results/save_data/` is a publication-curation boundary rather than an active analysis-output
 directory. Fig1 consumes the single GaWF ablation copy owned by `save_data/fig2/`; Supple3
@@ -179,8 +177,9 @@ run bundle.
 Active `pong_6action` results must report `action_space_mode=minimal`, `num_actions=6`, and a
 strict matched frame protocol (`fs1_stack1` or `fs4_stack4`). Active
 `multitask_18action` results must report `action_space_mode=full18` and `num_actions=18`.
-Move mismatched or ambiguous historical results to `results/archive/` instead of relabelling
-them.
+Do not relabel mismatched or ambiguous historical results. Retain them only when explicitly
+curated into a task-specific `results/data/` path; otherwise remove them through the confirmed
+cleanup workflow.
 
 ## Checkpoint names
 
@@ -248,9 +247,9 @@ historical `fig2_sector_gate_mean.{png,pdf}` remains the explicitly labelled one
 the obsolete max-gate figure is not regenerated.
 
 The GaWF/LSTM/GRU unit-gate context analysis writes `unit_gate_context_variance.{json,csv,npz}` to
-`results/anal_data/D_variance_decomposition/rnn_unit_gate_context_specificity/` and
+`results/data/analysis/D_variance_decomposition/rnn_unit_gate_context_specificity/` and
 three Figure-03-style per-model PNGs directly to
-`results/anal_figs/D_variance_decomposition/`. The poster summary writes
+`results/figs/D_variance_decomposition/`. The poster summary writes
 `03_unit_gate_marginalization_1x3.png` beside them and writes the official
 `03_unit_gate_marginalization_1x3.pdf` to the publication figure directory. It contains only the
 condition-mean marginalization panels; individual per-model PDFs are not generated. For GaWF,
@@ -266,7 +265,7 @@ individual diagnostic figures. The compact poster summary uses the shorter panel
 unit-projection distinction.
 
 The GaWF gate-distribution summary writes `gawf_gate_histogram_summary_2x4.png` and
-`01_pooled_all_gate_histogram.png` directly below `results/anal_figs/A_raw_gate/`; only the
+`01_pooled_all_gate_histogram.png` directly below `results/figs/A_raw_gate/`; only the
 all-gate panel also has a local PDF by default. The all-gate figure combines input and recurrent
 pooled histograms. The retained `2x4` filename is historical: the rendered layout is four rows
 (pooled, weight-sign, sector, digit) by two columns (input, recurrent) so each panel is large

@@ -12,10 +12,11 @@
 # 5 models x 2 observation settings x 5 seeds = 50 tasks.
 
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${AIM3_ROOT:-${SLURM_SUBMIT_DIR:-}}"
-if [[ -z "$ROOT" || ! -f "$ROOT/train_atari_dqn.py" ]]; then
+if [[ -z "$ROOT" || ! -f "$ROOT/run_task.py" ]]; then
   ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 fi
 cd "$ROOT"
@@ -89,7 +90,7 @@ if [[ "$MODEL" == "ann" ]]; then
   COMPILE_EXPECTED=true
 fi
 
-RESULT_DIR="$AIM3_RESULTS_PATH/train_data/$SUFFIX"
+RESULT_DIR="$AIM3_RESULTS_PATH/data/rl/atari/runs/$SUFFIX"
 DONE_FILE="$STATUS_DIR/${SUFFIX}.done"
 FAIL_FILE="$STATUS_DIR/${SUFFIX}.fail"
 if [[ ! -f "$DONE_FILE" && -f "$RESULT_DIR/metrics_history.jsonl" ]]; then
@@ -103,7 +104,7 @@ echo "protocol=6-action-minimal frame_skip=4 frame_stack=4 layers=2 flicker=$FLI
 echo "result_dir=$RESULT_DIR total_timesteps=$TOTAL_TIMESTEPS"
 
 set +e
-DISABLE_TQDM=1 python train_atari_dqn.py \
+DISABLE_TQDM=1 python run_task.py atari-dqn \
   --env_id ALE/Pong-v5 \
   --action_space_mode minimal \
   --model_type "$MODEL" \
