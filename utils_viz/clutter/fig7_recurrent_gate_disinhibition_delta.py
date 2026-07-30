@@ -30,14 +30,14 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils_anal.anal_paths import output_dir
-from utils_anal.gawf_recurrent_gate_sign_vs_magnitude_disinhibition import (
+from utils_anal.clutter.fig7_recurrent_gate_sign_magnitude import (
     GROUP_NAMES,
     NEG_COLOR,
     POS_COLOR,
     analyze,
     run_ols,
 )
-from utils_viz.clutter.gawf_recurrent_gate_disinhibition_poster import (
+from utils_viz.clutter.fig7_recurrent_gate_disinhibition import (
     CONTEXTS_BY_VARIABLE,
     DIM_ALPHA,
     HIGHLIGHT_BG,

@@ -30,7 +30,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils_anal.anal_paths import output_dir
-from utils_anal.gawf_recurrent_gate_sign_vs_magnitude_disinhibition import (
+from utils_anal.clutter.fig7_recurrent_gate_sign_magnitude import (
     DELTA_TITLE,
     DELTA_Y_LABEL,
     analyze,

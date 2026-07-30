@@ -164,7 +164,7 @@ def main() -> None:
         flush=True,
     )
 
-    from utils_anal.gawf_gate_distribution import iter_gate_chunks
+    from utils_anal.clutter.fig3_gate_distribution import iter_gate_chunks
 
     reconstructed = iter_gate_chunks(
         feedback,

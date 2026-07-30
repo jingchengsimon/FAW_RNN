@@ -33,9 +33,9 @@ if PROJECT_ROOT not in sys.path:
 
 from utils_anal.anal_helpers import build_model_from_ckpt, build_test_dataset
 from utils_anal.anal_paths import output_dir
-from utils_anal.gawf_gate_context_parts123 import _balanced_masks
-from utils_anal.gawf_gate_distribution import collect_trajectory
-from utils_anal.rnn_unit_gate_context_specificity import (
+from utils_anal.clutter.supple2_gate_context import _balanced_masks
+from utils_anal.clutter.fig3_gate_distribution import collect_trajectory
+from utils_anal.clutter.fig5_unit_gate_context import (
     GATE_NAMES,
     analyze_gawf,
     analyze_model,

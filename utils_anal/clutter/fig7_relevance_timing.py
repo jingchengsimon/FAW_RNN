@@ -28,7 +28,7 @@ if PROJECT_ROOT not in sys.path:
 from utils_anal.anal_paths import output_dir
 
 from utils_anal.anal_helpers import build_eval_dataset, build_model_from_ckpt, resolve_device
-from utils_anal.gawf_symmetric_stats import (
+from utils_anal.clutter.fig7_relevance_stats import (
     NUM_DIGITS,
     NUM_SECTORS,
     SelectivityResult,

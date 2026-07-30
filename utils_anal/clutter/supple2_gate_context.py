@@ -31,7 +31,7 @@ if PROJECT_ROOT not in sys.path:
 from utils_anal.anal_paths import output_dir
 
 from utils_anal.anal_helpers import build_model_from_ckpt, build_test_dataset
-from utils_anal.gawf_gate_distribution import _gini, iter_gate_chunks
+from utils_anal.clutter.fig3_gate_distribution import _gini, iter_gate_chunks
 
 
 @dataclass

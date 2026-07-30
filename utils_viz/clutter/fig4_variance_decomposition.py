@@ -14,7 +14,7 @@ import numpy as np
 
 from utils.paths import publication_figures_dir
 from utils_anal.anal_paths import output_dir
-from utils_anal.run_unified_variance_decomposition import (
+from utils_anal.clutter.fig4_variance_decomposition import (
     _plot_compact_aggregate,
     _plot_compact_aggregate_1x4,
 )

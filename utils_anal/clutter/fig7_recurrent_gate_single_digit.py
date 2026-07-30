@@ -58,8 +58,8 @@ def main() -> None:
     from torch.utils.data import DataLoader
 
     from utils_anal.anal_helpers import build_eval_dataset, build_model_from_ckpt, resolve_device
-    from utils_anal.gawf_symmetric_relevance_timing import _gate_tensors
-    from utils_anal.gawf_symmetric_stats import relevance_masks
+    from utils_anal.clutter.fig7_relevance_timing import _gate_tensors
+    from utils_anal.clutter.fig7_relevance_stats import relevance_masks
 
     checksum = hashlib.sha256(CKPT_PATH.read_bytes()).hexdigest()
     if checksum != EXPECTED_SHA256:

@@ -32,7 +32,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
 from utils_anal.anal_helpers import build_model_from_ckpt, build_test_dataset
-from utils_anal.gawf_gate_context_parts123 import _balanced_masks, _marginal_variance
+from utils_anal.clutter.supple2_gate_context import _balanced_masks, _marginal_variance
 from utils_anal.anal_paths import output_dir
 
 

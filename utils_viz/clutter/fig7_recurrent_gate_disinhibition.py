@@ -33,14 +33,14 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils_anal.anal_paths import output_dir
-from utils_anal.gawf_recurrent_gate_sign_vs_magnitude_disinhibition import (
+from utils_anal.clutter.fig7_recurrent_gate_sign_magnitude import (
     DIGITS,
     GROUP_NAMES,
     NEG_COLOR,
     POS_COLOR,
     analyze,
 )
-from utils_anal.gawf_recurrent_gate_sign_vs_magnitude_disinhibition_sector import SECTORS
+from utils_anal.clutter.fig7_recurrent_gate_sector_sign_magnitude import SECTORS
 
 CATEGORY = "E_relevance_alignment"
 SCRIPT_NAME = Path(__file__).stem

@@ -46,7 +46,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils_anal.anal_paths import output_dir
-from utils_anal.gawf_recurrent_gate_raw_group_sign_grid import cache_path_for_context, group_masks
+from utils_anal.clutter.fig7_recurrent_gate_cache import cache_path_for_context, group_masks
 
 CATEGORY = "E_relevance_alignment"
 SCRIPT_NAME = Path(__file__).stem

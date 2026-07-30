@@ -21,7 +21,7 @@ if PROJECT_ROOT not in sys.path:
 
 from utils_anal.anal_paths import output_dir
 
-from utils_anal.gawf_gate_distribution import (
+from utils_anal.clutter.fig3_gate_distribution import (
     _group_mean_delta,
     _hist,
     _sparsity,

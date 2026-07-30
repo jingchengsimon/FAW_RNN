@@ -31,7 +31,7 @@ from utils_anal.anal_paths import output_dir
 
 from utils.train_acceleration import run_forward_with_feedback
 from utils_anal.anal_helpers import build_model_from_ckpt, build_test_dataset, resolve_device
-from utils_anal.export_fg_switch_offset_acc import (
+from utils_anal.clutter.fig1_target_switch_recovery import (
     _build_offset_targets_from_switch,
     _collect_ckpts,
     _parse_model_key,

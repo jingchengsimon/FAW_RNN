@@ -1,17 +1,16 @@
-"""Collect real gate/act data for all 9 recurrent-sector contexts (0-8).
+"""Collect real gate/act data for digits 1-9 in a single pass (digit 0 already cached).
 
-Same single-pass-over-the-test-set strategy as gawf_recurrent_gate_multi_digit_collect.py, but
-buckets frames by SECTOR label (labels[:, time_idx, 1], per MC_RNN_Dataset's
-labels_sector = stack([char_id, sector])) instead of digit, and uses the recurrent-sector
-tuning/eligibility from part1_selectivity.npz (primary_hidden_tuning_sector /
-primary_hidden_passed_sector) rather than the digit ones.
+Companion to gawf_recurrent_gate_single_digit_diagnostic_collect.py, which collects the
+exhaustive digit-0 cache (all 6437 frames, used to verify TT≈0.238) in one full pass over the
+test set. Re-running that script 9 more times would redo the same ~254s forward pass 9 times
+just to keep a different digit's frames -- wasteful, since every frame's gate/hidden is already
+computed regardless of which digit it belongs to. This script instead does ONE pass and buckets
+frames by digit for digits 1-9, capping each digit at MAX_SAMPLES_PER_DIGIT to keep peak memory
+bounded (this machine has 8GB RAM; 9 digits x ~1200 samples x 256x256 float32 stays under 3GB).
 
-Writes sector{s}_gate_act_cache.npz (same W/gate/act/T_new/T_old schema as the digit caches)
-into the same shared cache directory, so gawf_recurrent_gate_raw_group_sign_grid.py's
-load_data(sector, kind="sector") can read them directly. Sectors 1-4 were collected first (to
-keep the initial distribution figures cheap); this pass re-covers 1-4 and adds 0, 5-8 so any
-sector-pooled analysis (e.g. gawf_recurrent_gate_sign_vs_magnitude_disinhibition_sector.py) can
-use the full 9-sector set instead of just 1-4.
+Writes the same digit{d}_gate_act_cache.npz schema (W, gate, act, T_new, T_old) as the digit-0
+collector, into the same output directory, so gawf_recurrent_gate_raw_group_sign_grid.py's
+generalized load_data(digit=d) can read any of them interchangeably.
 """
 
 from __future__ import annotations
@@ -31,10 +30,9 @@ from utils_anal.anal_paths import output_dir
 
 CACHE_CATEGORY = "E_relevance_alignment"
 CACHE_SCRIPT_NAME = "gawf_recurrent_gate_single_digit_diagnostic_collect"  # shared cache dir
-SECTORS = tuple(range(9))
-MAX_SAMPLES_PER_SECTOR = 1200
+DIGITS = tuple(range(1, 10))  # digit 0 already collected separately
+MAX_SAMPLES_PER_DIGIT = 1200
 TOP_FRACTION = 0.10
-SECTOR_LABEL_COL = 1  # labels[:, t, 0]=digit, labels[:, t, 1]=sector
 
 CKPT_PATH = PROJECT_ROOT / (
     "results/data/train_data/clutter/best_6model_param_matched_40h/"
@@ -56,8 +54,8 @@ def main() -> None:
     from torch.utils.data import DataLoader
 
     from utils_anal.anal_helpers import build_eval_dataset, build_model_from_ckpt, resolve_device
-    from utils_anal.gawf_symmetric_relevance_timing import _gate_tensors
-    from utils_anal.gawf_symmetric_stats import relevance_masks
+    from utils_anal.clutter.fig7_relevance_timing import _gate_tensors
+    from utils_anal.clutter.fig7_relevance_stats import relevance_masks
 
     checksum = hashlib.sha256(CKPT_PATH.read_bytes()).hexdigest()
     if checksum != EXPECTED_SHA256:
@@ -73,23 +71,21 @@ def main() -> None:
     hidden_size = int(model.rnn.hidden_size)
     input_size = int(model.rnn.input_size)
     print(f"dataset sequences={len(dataset)}, hidden_size={hidden_size}, "
-          f"sectors={SECTORS}, cap/sector={MAX_SAMPLES_PER_SECTOR}", flush=True)
+          f"digits={DIGITS}, cap/digit={MAX_SAMPLES_PER_DIGIT}", flush=True)
 
     W = model.rnn.weight_hh_l0.detach().cpu().numpy().astype(np.float64)
 
     with np.load(SELECTIVITY_PATH, allow_pickle=False) as sel:
-        tuning_sector = np.asarray(sel["primary_hidden_tuning_sector"], dtype=np.float64)
-        passed_sector = np.asarray(sel["primary_hidden_passed_sector"], dtype=bool)
+        tuning = np.asarray(sel["primary_hidden_tuning_digit"], dtype=np.float64)
+        passed = np.asarray(sel["primary_hidden_passed_digit"], dtype=bool)
         dominant = np.asarray(sel["primary_hidden_interaction_dominant"], dtype=bool)
-    eligible_sector = passed_sector & ~dominant
-    T_old_all = relevance_masks(tuning_sector, eligible_sector, TOP_FRACTION)  # (9, H)
-    print(f"eligible (sector)={int(eligible_sector.sum())}  "
-          f"T_old sizes per sector: {[int(T_old_all[s].sum()) for s in SECTORS]}", flush=True)
+    eligible = passed & ~dominant
+    T_old_all = relevance_masks(tuning, eligible, TOP_FRACTION)  # (10, H)
 
     loader = DataLoader(dataset, batch_size=32, shuffle=False, num_workers=0)
-    gate_chunks: dict[int, list[np.ndarray]] = {s: [] for s in SECTORS}
-    act_chunks: dict[int, list[np.ndarray]] = {s: [] for s in SECTORS}
-    counts: dict[int, int] = {s: 0 for s in SECTORS}
+    gate_chunks: dict[int, list[np.ndarray]] = {d: [] for d in DIGITS}
+    act_chunks: dict[int, list[np.ndarray]] = {d: [] for d in DIGITS}
+    counts: dict[int, int] = {d: 0 for d in DIGITS}
     started = time.perf_counter()
     model.eval()
     with torch.no_grad():
@@ -104,15 +100,15 @@ def main() -> None:
             feedback = torch.zeros(batch_size_actual, model.feedback_dim, dtype=torch.float32)
             for time_idx in range(frame_num):
                 gate_input, gate_recurrent = _gate_tensors(feedback, model, input_size)
-                sector_labels = labels[:, time_idx, SECTOR_LABEL_COL]
-                for s in SECTORS:
-                    if counts[s] >= MAX_SAMPLES_PER_SECTOR:
+                digit_labels = labels[:, time_idx, 0]
+                for d in DIGITS:
+                    if counts[d] >= MAX_SAMPLES_PER_DIGIT:
                         continue
-                    mask = sector_labels == s
+                    mask = digit_labels == d
                     if mask.any():
-                        gate_chunks[s].append(gate_recurrent[mask].detach().cpu().numpy().astype(np.float32))
-                        act_chunks[s].append(hidden[mask].detach().cpu().numpy().astype(np.float32))
-                        counts[s] += int(mask.sum())
+                        gate_chunks[d].append(gate_recurrent[mask].detach().cpu().numpy().astype(np.float32))
+                        act_chunks[d].append(hidden[mask].detach().cpu().numpy().astype(np.float32))
+                        counts[d] += int(mask.sum())
                 input_term = torch.einsum(
                     "bi,bhi,hi->bh", encoded[:, time_idx], gate_input, model.rnn.weight_ih_l0
                 )
@@ -128,21 +124,19 @@ def main() -> None:
                 char_logits, sector_logits = model.classifier(hidden)
                 feedback = torch.cat([char_logits, sector_logits], dim=-1).to(torch.float32)
             if (batch_idx + 1) % 10 == 0 or (batch_idx + 1) == len(loader) or \
-                    all(counts[s] >= MAX_SAMPLES_PER_SECTOR for s in SECTORS):
+                    all(counts[d] >= MAX_SAMPLES_PER_DIGIT for d in DIGITS):
                 print(f"  batch {batch_idx + 1}/{len(loader)}  counts={counts}  "
                       f"elapsed={time.perf_counter() - started:.1f}s", flush=True)
-            if all(counts[s] >= MAX_SAMPLES_PER_SECTOR for s in SECTORS):
-                print("  all sector caps reached, stopping early", flush=True)
+            if all(counts[d] >= MAX_SAMPLES_PER_DIGIT for d in DIGITS):
+                print("  all digit caps reached, stopping early", flush=True)
                 break
 
     data_dir_out = output_dir(CACHE_CATEGORY, CACHE_SCRIPT_NAME, "data")
-    for s in SECTORS:
-        if not gate_chunks[s]:
-            raise RuntimeError(f"sector {s}: no frames collected")
-        G_flat = np.concatenate(gate_chunks[s], axis=0)[:MAX_SAMPLES_PER_SECTOR]
-        act_flat = np.concatenate(act_chunks[s], axis=0)[:MAX_SAMPLES_PER_SECTOR]
+    for d in DIGITS:
+        G_flat = np.concatenate(gate_chunks[d], axis=0)[:MAX_SAMPLES_PER_DIGIT]
+        act_flat = np.concatenate(act_chunks[d], axis=0)[:MAX_SAMPLES_PER_DIGIT]
         n_samples = G_flat.shape[0]
-        print(f"sector {s}: collected {n_samples} samples", flush=True)
+        print(f"digit {d}: collected {n_samples} samples", flush=True)
 
         top_k = max(1, int(round(TOP_FRACTION * hidden_size)))
         T_new = np.zeros(hidden_size, dtype=bool)
@@ -151,9 +145,9 @@ def main() -> None:
         gate = G_flat.reshape(1, n_samples, 1, hidden_size, hidden_size)
         act = act_flat.reshape(1, n_samples, 1, hidden_size)
 
-        cache_path = data_dir_out / f"sector{s}_gate_act_cache.npz"
+        cache_path = data_dir_out / f"digit{d}_gate_act_cache.npz"
         np.savez(cache_path, W=W.astype(np.float32), gate=gate, act=act,
-                 T_new=T_new, T_old=T_old_all[s])
+                 T_new=T_new, T_old=T_old_all[d])
         print(f"Saved {cache_path}", flush=True)
 
 
