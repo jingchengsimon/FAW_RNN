@@ -46,6 +46,8 @@ experiments/local/generated/
 nohup.out
 output.log
 
-# MNIST 原始数据文件
+# Local datasets
+/data/
+# Legacy MNIST location
 **/mnist_data_pytorch/MNIST/raw/*
 !**/mnist_data_pytorch/MNIST/raw/.gitkeep
