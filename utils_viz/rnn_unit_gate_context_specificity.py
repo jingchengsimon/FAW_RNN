@@ -31,7 +31,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 import numpy as np
 
-from utils.publication_paths import publication_figures_dir
+from utils.paths import publication_figures_dir
 
 
 SAVE_DATA_REPORT = (

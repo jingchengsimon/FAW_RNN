@@ -2,8 +2,8 @@
 """Train text sequence-classification models on the IMDB sentiment benchmark.
 
 A self-contained entry point parallel to ``train_model.py`` (vision). It reuses the
-lightweight helpers (``set_seed``) and the text subsystem (``utils.text_imdb_data``,
-``utils.text_task_models``) but keeps its own compact train loop because the vision
+lightweight helpers (``set_seed``) and the text subsystem (``utils.text.imdb_data``,
+``utils.text.task_models``) but keeps its own compact train loop because the vision
 engine is fused to the dual (char, pos) head structure.
 
 Sweeps the cartesian product of ``--model_types x --hidden_sizes x --lrs x --wds``
@@ -31,17 +31,17 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from utils.text_imdb_data import build_imdb_loaders, load_meta
-from utils.text_task_models import get_text_model_classes
+from utils.text.imdb_data import build_imdb_loaders, load_meta
+from utils.text.task_models import get_text_model_classes
 from utils.recurrent_cores import configure_gawf_feedback_acceleration
-from utils.text_train_utils import (
+from utils.text.train_utils import (
     build_optimizer,
     count_core_params,
     maybe_subset,
     resolve_results_root,
     select_device,
 )
-from utils.common_train_helpers import set_seed
+from utils.training.common import set_seed
 
 DISABLE_TQDM = os.environ.get("DISABLE_TQDM", "0").lower() in ("1", "true", "yes")
 

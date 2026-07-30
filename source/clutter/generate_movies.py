@@ -120,7 +120,7 @@ def load_mnist_data(config=None):
 
     print("Loading MNIST dataset using PyTorch/torchvision...")
     mnist_dataset = torchvision.datasets.MNIST(
-        root='./mnist_data_pytorch',
+        root='./data/clutter/mnist',
         train=True,
         download=True
     )

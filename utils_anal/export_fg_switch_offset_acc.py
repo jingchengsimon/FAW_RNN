@@ -38,13 +38,13 @@ if PROJECT_ROOT not in sys.path:
 
 from utils_anal.anal_paths import output_dir
 
-from utils.clutter_train_acceleration import (
+from utils.clutter.train_acceleration import (
     AccelerationConfig,
     run_forward_with_feedback,
     setup_acceleration,
 )
-from utils.clutter_train_predict_all_chars import loss_char_all_chars
-from utils.clutter_train_helpers import pick_cuda_device_index_prefer_no_python
+from utils.clutter.train_predict_all_chars import loss_char_all_chars
+from utils.clutter.train_helpers import pick_cuda_device_index_prefer_no_python
 from utils_anal.anal_helpers import build_model_from_ckpt, build_test_dataset, resolve_device
 
 DEFAULT_WINDOW_RADIUS = 5

@@ -52,8 +52,8 @@ def _run_project_cuda_smoke() -> dict[str, str]:
 
     import torch
 
-    from utils.atari_dqn_models import AtariQNetwork
-    from utils.atari_train_acceleration import AtariAcceleration
+    from utils.atari.dqn_models import AtariQNetwork
+    from utils.atari.train_acceleration import AtariAcceleration
     from utils.recurrent_cores.gawf import (
         GaWFCore,
         configure_gawf_feedback_acceleration,

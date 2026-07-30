@@ -24,7 +24,7 @@ import numpy as np  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 from PIL import Image  # noqa: E402
 
-from utils.publication_paths import publication_figures_dir
+from utils.paths import publication_figures_dir
 from utils_viz.fg_switch_offset_acc import (
     MODEL_COLORS,
     MODEL_LABELS,

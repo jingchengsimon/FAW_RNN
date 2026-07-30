@@ -17,7 +17,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from utils.clutter_train_helpers import (
+from utils.clutter.train_helpers import (
     LoggingHelper,
     PathHelper,
     create_datasets,
@@ -28,9 +28,9 @@ from utils.clutter_train_helpers import (
     summarize_experiment_metrics,
 )
 
-from utils.clutter_train_sector import compute_fg_transition_masks
+from utils.clutter.train_sector import compute_fg_transition_masks
 
-from utils.clutter_train_engine import (
+from utils.clutter.train_engine import (
     setup_training_components,
     cleanup_dataloaders,
     stop_requested,
@@ -41,7 +41,7 @@ from utils.clutter_train_engine import (
     eval_valid,
 )
 
-from utils.clutter_task_models import (
+from utils.clutter.task_models import (
     GaWFRNNConv,
     GRUConv,
     LSTMConv,

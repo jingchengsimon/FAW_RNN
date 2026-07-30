@@ -28,9 +28,9 @@ import numpy as np
 import torch
 import cv2
 
-from utils.atari_dqn_models import AtariQNetwork
-from utils.atari_envs import make_atari_env
-from utils.atari_train_utils import select_device, set_atari_seed, to_channel_first_obs
+from utils.atari.dqn_models import AtariQNetwork
+from utils.atari.envs import make_atari_env
+from utils.atari.train_utils import select_device, set_atari_seed, to_channel_first_obs
 from utils_anal.anal_paths import output_dir
 
 

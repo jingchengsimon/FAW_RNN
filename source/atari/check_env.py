@@ -10,7 +10,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
-from utils.atari_envs import ATARI_PILOT_ENVS, make_vector_atari_env
+from utils.atari.envs import ATARI_PILOT_ENVS, make_vector_atari_env
 
 
 def parse_args() -> argparse.Namespace:

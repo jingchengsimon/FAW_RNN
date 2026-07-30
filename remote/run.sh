@@ -24,8 +24,8 @@ Options:
 
 Examples:
   ./remote/run.sh --push -- python train_model.py --help
-  ./remote/run.sh --detach hparam_4h -- bash experiments/amarel/check_hparam_4h_5epoch_test_status.sh
-  ./remote/run.sh --push -- bash experiments/local/run_hparam_full_grid_2gpu.sh --scale 4
+  ./remote/run.sh --detach hparam_4h -- bash experiments/<task>/amarel/check_hparam_4h_5epoch_test_status.sh
+  ./remote/run.sh --push -- bash experiments/<task>/amarel/run_hparam_full_grid_2gpu.sh --scale 4
 
 This script never runs git add or git commit.
 EOF

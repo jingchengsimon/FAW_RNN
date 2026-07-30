@@ -19,11 +19,11 @@ import numpy as np
 import torch
 from torch import optim
 
-from utils.atari_dqn_models import AtariQNetwork
-from utils.atari_replay import AtariReplayBuffer
-from utils.atari_train_utils import ensure_dir, save_json, select_device, set_atari_seed
-from utils.minigrid_envs import MINIGRID_PILOT_ENVS, make_vector_minigrid_env
-from utils.minigrid_models import MiniGridEncoder
+from utils.atari.dqn_models import AtariQNetwork
+from utils.atari.replay import AtariReplayBuffer
+from utils.atari.train_utils import ensure_dir, save_json, select_device, set_atari_seed
+from utils.minigrid.envs import MINIGRID_PILOT_ENVS, make_vector_minigrid_env
+from utils.minigrid.models import MiniGridEncoder
 
 # Reuse the DRQN core losses + schedules unchanged.
 from train_atari_dqn import (

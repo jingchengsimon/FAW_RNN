@@ -18,9 +18,9 @@ import torch
 import torch.nn.functional as F
 from torch import optim
 
-from utils.atari_envs import ATARI_PILOT_ENVS, make_vector_atari_env
-from utils.atari_task_models import AtariActorCritic
-from utils.atari_train_utils import (
+from utils.atari.envs import ATARI_PILOT_ENVS, make_vector_atari_env
+from utils.atari.task_models import AtariActorCritic
+from utils.atari.train_utils import (
     compute_gae,
     ensure_dir,
     explained_variance,

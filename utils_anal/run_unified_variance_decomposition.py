@@ -60,7 +60,7 @@ from utils_anal.variance_decomposition import (
     decompose_repeated_blocks,
     unbalanced_condition_mean_bridge,
 )
-from utils.publication_paths import publication_figures_dir
+from utils.paths import publication_figures_dir
 
 
 CATEGORY = "D_variance_decomposition"

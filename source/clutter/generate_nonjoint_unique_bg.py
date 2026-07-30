@@ -761,7 +761,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--mnist-raw-dir",
         type=str,
-        default=str(PROJECT_ROOT / "mnist_data_pytorch" / "MNIST" / "raw"),
+        default=str(PROJECT_ROOT / "data" / "clutter" / "mnist" / "raw"),
     )
     return parser.parse_args()
 

@@ -28,8 +28,8 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 import numpy as np
 import torch
 
-from utils.atari_dqn_models import AtariQNetwork
-from utils.atari_train_utils import to_channel_first_obs
+from utils.atari.dqn_models import AtariQNetwork
+from utils.atari.train_utils import to_channel_first_obs
 
 
 def _sizing_kwargs(model_type: str, args, num_actions: int) -> dict:

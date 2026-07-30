@@ -78,7 +78,7 @@ After submission, verify and report:
 - the single command used to inspect status and valid outputs.
 
 In the same turn, register the job in the project-local monitoring registry described in
-`experiments/monitoring/README.md`. Record every scheduler/run ID, the exact remote root, log and
+`remote/monitoring/README.md`. Record every scheduler/run ID, the exact remote root, log and
 result paths, expected units, and validity evidence. This internal registry replaces ad-hoc
 cross-thread searching.
 
@@ -97,7 +97,7 @@ Amarel login nodes are control-plane hosts, not execution hosts. This boundary a
 short smoke test or one-time setup command, and an SSH timeout is not process containment: a child
 process may survive after the SSH client returns.
 
-Allowed in `experiments/amarel/submit_*.sh`:
+Allowed in `experiments/<task>/amarel/submit_*.sh`:
 
 - bounded shell argument, path, and environment validation;
 - `sbatch`, `squeue`, `sacct`, and narrowly scoped job-status queries;
@@ -124,9 +124,9 @@ development host. If local execution is impossible, run the test in a Slurm comp
 `pytest` on an Amarel login node.
 
 ```bash
-bash -n experiments/amarel/submit_<run>.sh experiments/amarel/run_<run>.sh
+bash -n experiments/<task>/amarel/submit_<run>.sh experiments/<task>/amarel/run_<run>.sh
 python -m pytest -q tests/test_amarel_submit_safety.py
-bash experiments/amarel/submit_<run>.sh --dry-run  # when supported
+bash experiments/<task>/amarel/submit_<run>.sh --dry-run  # when supported
 ```
 
 On the Amarel login node, limit verification to `bash -n`, `--dry-run`, and scheduler queries. The
@@ -146,10 +146,10 @@ stop that process first, then repair the launcher before resubmitting.
 ## Result and script safety
 
 - Never delete remote results or artifacts without explicit human confirmation at deletion time.
-- Keep generated Slurm scripts in `experiments/amarel/generated/`; they are ignored by Git.
+- Keep generated Slurm scripts in `experiments/<task>/amarel/generated/`; they are ignored by Git.
 - Reusable launchers may be tracked. One-off rerun scripts must say that they are one-off and be
   removed before synchronizing branches or worktrees.
-- Store Slurm stdout/stderr under the task's `experiments/amarel/artifacts/` directory.
+- Store Slurm stdout/stderr under the task's `experiments/<task>/amarel/artifacts/` directory.
 - Use `visualize_batch.sh` for training metrics after activating `aim3_rnn`.
 
 ## Synchronization and deletion safety

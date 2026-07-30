@@ -14,7 +14,7 @@ from typing import Dict, Tuple
 import torch
 
 from train_model import MC_RNN_Dataset
-from utils.clutter_task_models import (
+from utils.clutter.task_models import (
     GaWFRNNConv,
     GRUConv,
     LSTMConv,
@@ -23,7 +23,7 @@ from utils.clutter_task_models import (
     RNNConv,
     S5Conv,
 )
-from utils.clutter_train_helpers import PathHelper, create_datasets
+from utils.clutter.train_helpers import PathHelper, create_datasets
 from utils_viz.model_train_single_result import parse_hparams_from_filename
 
 

@@ -94,7 +94,7 @@ metrics record `resume_count` and `resumed_at_steps` so interruptions stay visib
 result. A runner must never append to an existing history when no compatible checkpoint is
 present. The mmap backing costs roughly 27 GiB per fs4/stack4 unit against a 1 TiB `/scratch`
 soft quota, so recoverable Atari arrays must cap concurrency (`--array=0-N%8`) and check the
-quota before starting via `experiments/amarel/scratch_quota_guard.py`. Measure headroom on a
+quota before starting via `experiments/<task>/amarel/scratch_quota_guard.py`. Measure headroom on a
 `gpuk###` node, not the login node: Amarel serves one `/scratch` namespace from two GPFS
 clusters whose fileset accounting disagrees for identical data (DSSP reports ~652 GiB free,
 DSSK ~284 GiB), and a task may be enforced by either.
@@ -147,8 +147,8 @@ another internal representation.
 | `results/save/` | human-curated final figure files (`Fig*` and `Supple*`) |
 | `results/save_data/<figure>/` | minimum numeric inputs for one saved figure; shared inputs have one owner |
 | `../../6-Writing/Aim3/Figures/` | official publication PDFs |
-| `experiments/generalization/artifacts/` | aggregated experiment tables/configs |
-| `experiments/amarel/artifacts/<run>/` | ignored Slurm logs/status artifacts |
+| `experiments/clutter/artifacts/` | aggregated experiment tables/configs |
+| `experiments/<task>/amarel/artifacts/<run>/` | ignored Slurm logs/status artifacts |
 
 Analysis data remains grouped by producing script basename, while figures are flat within each
 category. Analysis scripts must obtain these directories from `utils_anal.anal_paths.output_dir`.

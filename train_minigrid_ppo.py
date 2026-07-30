@@ -27,21 +27,21 @@ import torch
 from torch import optim
 import torch.nn.functional as F
 
-from utils.atari_train_utils import (
+from utils.atari.train_utils import (
     compute_gae,
     ensure_dir,
     save_json,
     select_device,
     set_atari_seed,
 )
-from utils.minigrid_envs import (
+from utils.minigrid.envs import (
     MINIGRID_PILOT_ENVS,
     MINIGRID_VECTOR_BACKENDS,
     make_vector_minigrid_env,
 )
-from utils.minigrid_models import MiniGridEncoder
-from utils.minigrid_ppo_models import MiniGridActorCritic
-from utils.minigrid_train_acceleration import (
+from utils.minigrid.models import MiniGridEncoder
+from utils.minigrid.ppo_models import MiniGridActorCritic
+from utils.minigrid.train_acceleration import (
     MiniGridAcceleration,
     configure_minigrid_acceleration,
 )

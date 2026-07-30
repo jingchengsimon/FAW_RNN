@@ -20,9 +20,9 @@ All task families compose the same recurrent implementations from `utils/recurre
 Task wrappers own encoders, heads, data shapes, and feedback selection; they do not reimplement
 recurrent equations.
 
-Task-specific experiment definitions live under `experiments/clutter/`, `experiments/atari/`,
-`experiments/minigrid/`, and `experiments/text/`. Execution wrappers remain grouped by backend in
-`experiments/amarel/` and `experiments/local/`; those directories do not imply separate repos.
+Task-specific experiment definitions live under `experiments/clutter/`, `experiments/rl/atari/`,
+`experiments/rl/minigrid/`, and `experiments/text/`. Execution wrappers remain grouped by backend in
+`experiments/<task>/amarel/` and `experiments/<task>/amarel/`; those directories do not imply separate repos.
 
 ## Dependency direction
 

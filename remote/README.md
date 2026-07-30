@@ -34,12 +34,12 @@ Run a long command in remote tmux:
 
 ```bash
 ./remote/run.sh --push --detach my_session -- \
-  bash experiments/local/run_hparam_full_grid_2gpu.sh --scale 4
+  bash experiments/<task>/amarel/run_hparam_full_grid_2gpu.sh --scale 4
 ```
 
 After a detached launch succeeds, record its run ID, tmux session, remote root, exact logs,
 results, and validity conditions with the project-local registry in
-`experiments/monitoring/README.md`. This makes the same run discoverable from Mac and Mac mini
+`remote/monitoring/README.md`. This makes the same run discoverable from Mac and Mac mini
 without relying on a separate task service.
 
 The wrapper prints a marker for detached runs. Fetch only files newer than that marker:

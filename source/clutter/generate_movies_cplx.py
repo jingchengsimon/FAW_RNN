@@ -141,7 +141,7 @@ def load_mnist_data(config=None):
     """Loads MNIST dataset using PyTorch/torchvision and organizes it by digit. Optionally restricts to a sample index range."""
     print("Loading MNIST dataset using PyTorch/torchvision...")
     mnist_dataset = torchvision.datasets.MNIST(
-        root='./mnist_data_pytorch',
+        root='./data/clutter/mnist',
         train=True,
         download=True
     )

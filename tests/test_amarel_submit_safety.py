@@ -4,8 +4,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SUBMITTERS = (
-    ROOT / "experiments/amarel/submit_atari_pong_fs1_stack1.sh",
-    ROOT / "experiments/amarel/submit_atari_pong_depth2.sh",
+    ROOT / "experiments/rl/atari/amarel/submit_atari_pong_fs1_stack1.sh",
+    ROOT / "experiments/rl/atari/amarel/submit_atari_pong_depth2.sh",
 )
 
 # Reviewed, bounded standard-library metadata commands that predate the global guard. New
@@ -67,7 +67,7 @@ def test_pytorch_parameter_matching_is_not_run_by_login_node_submitters() -> Non
 
 
 def test_parameter_matching_runner_requests_a_compute_node() -> None:
-    path = ROOT / "experiments/amarel/run_atari_param_match.sh"
+    path = ROOT / "experiments/rl/atari/amarel/run_atari_param_match.sh"
     text = path.read_text(encoding="utf-8")
     assert "#SBATCH --partition=gpu-redhat" in text
     assert "#SBATCH --gres=gpu:1" in text
@@ -75,7 +75,7 @@ def test_parameter_matching_runner_requests_a_compute_node() -> None:
 
 
 def test_all_amarel_submitters_keep_compute_off_login_nodes() -> None:
-    submitters = sorted((ROOT / "experiments/amarel").glob("submit_*.sh"))
+    submitters = sorted((ROOT / "experiments").glob("**/amarel/submit_*.sh"))
     assert submitters
 
     for path in submitters:

@@ -28,10 +28,10 @@ import torch
 import torch.nn.functional as F
 from torch import optim
 
-from utils.atari_train_utils import compute_gae, ensure_dir, save_json, select_device
-from utils.atari_train_utils import set_atari_seed
-from utils.minigrid_envs import make_vector_minigrid_env
-from utils.minigrid_ppo_paper_models import (
+from utils.atari.train_utils import compute_gae, ensure_dir, save_json, select_device
+from utils.atari.train_utils import set_atari_seed
+from utils.minigrid.envs import make_vector_minigrid_env
+from utils.minigrid.ppo_paper_models import (
     PAPER_MINIGRID_MODEL_TYPES,
     PaperMiniGridActorCritic,
 )

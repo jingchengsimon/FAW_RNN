@@ -16,9 +16,9 @@ The repository trains and analyses recurrent models, especially GaWF
 | CLI, filenames, saved results | all public scripts | `docs/CONVENTIONS.md` |
 | Analysis or visualisation | `utils_anal/`, `utils_viz/` | `docs/DEVELOPMENT_WORKFLOWS.md` |
 | Task experiment definitions | `experiments/{clutter,atari,minigrid,text}/` | `experiments/README.md` and the task README |
-| Generalization experiments | `experiments/generalization/` | `experiments/generalization/README.md` |
-| Amarel jobs | `experiments/amarel/` | `experiments/amarel/README.md` and `docs/operations/REMOTE_EXECUTION.md` |
-| sjc-remote jobs | `remote/`, `experiments/local/` | `remote/README.md` and `docs/operations/REMOTE_EXECUTION.md` |
+| Generalization experiments | `experiments/clutter/` | `experiments/clutter/README.md` |
+| Amarel jobs | `experiments/<task>/amarel/` | `experiments/<task>/amarel/README.md` and `docs/operations/REMOTE_EXECUTION.md` |
+| sjc-remote jobs | `remote/`, `experiments/<task>/amarel/` | `remote/README.md` and `docs/operations/REMOTE_EXECUTION.md` |
 | Research history | confirmed model/protocol changes | `docs/EXPERIMENT_LOG.md` |
 
 Local host aliases and absolute paths live in `.agents/local.md`, which is ignored by Git. If it
@@ -125,12 +125,12 @@ is missing, copy `.agents/local.example.md` and fill it in. Do not guess remote 
   tasks use `AIM3_NUM_WORKERS=12`, while standard Clutter 40h mmap runs use the benchmarked
   `AIM3_NUM_WORKERS=2`; both use `AIM3_PIN_MEMORY=1` on CUDA compute nodes.
 - After submission, report the job/run ID, remote root, result location, requested resources, and
-  the status/check command, then register it in `experiments/monitoring/`.
+  the status/check command, then register it in `remote/monitoring/`.
 - Before resubmitting an existing experiment unit, query all active scheduler jobs and process
   commands for the exact result suffix across historical job IDs/worktrees. Final-result absence
   alone is not evidence that no older writer is still active.
 - Reusable launchers may be tracked. Generated Slurm scripts stay under
-  `experiments/amarel/generated/`; clearly marked one-off scripts must be removed before branch
+  `experiments/<task>/amarel/generated/`; clearly marked one-off scripts must be removed before branch
   synchronization.
 - Maintain one long-lived repository per endpoint. Task-named worktrees are temporary local
   development aids only; formal runs use an explicit commit or read-only snapshot.

@@ -20,8 +20,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils_anal.anal_helpers import build_model_from_ckpt, build_test_dataset, resolve_device
-from utils.clutter_data_pipeline import prepare_clutter_inputs
-from utils.clutter_train_acceleration import run_forward_with_feedback
+from utils.clutter.data_pipeline import prepare_clutter_inputs
+from utils.clutter.train_acceleration import run_forward_with_feedback
 from utils_viz.generate_clutter_context_demo import _write_video
 
 

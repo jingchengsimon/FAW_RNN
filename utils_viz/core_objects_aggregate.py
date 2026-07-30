@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
-from utils.publication_paths import publication_figures_dir
+from utils.paths import publication_figures_dir
 from utils_anal.anal_paths import output_dir
 from utils_anal.run_unified_variance_decomposition import (
     _plot_compact_aggregate,

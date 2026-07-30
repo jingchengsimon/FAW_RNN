@@ -55,7 +55,7 @@ if PROJECT_ROOT not in sys.path:
 
 from utils_anal.anal_paths import output_dir
 
-from utils.clutter_train_helpers import set_seed
+from utils.clutter.train_helpers import set_seed
 from utils_anal.anal_helpers import build_model_from_ckpt, build_test_dataset
 
 

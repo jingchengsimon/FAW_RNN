@@ -22,19 +22,19 @@ import torch
 import torch.nn.functional as F
 from torch import optim
 
-from utils.atari_dqn_models import AtariQNetwork, AtariQNetworkState
-from utils.atari_envs import (
+from utils.atari.dqn_models import AtariQNetwork, AtariQNetworkState
+from utils.atari.envs import (
     ATARI_PILOT_ENVS,
     ATARI_TASK_SCHEDULES,
     make_multitask_vector_atari_env,
     make_vector_atari_env,
 )
-from utils.atari_replay import REPLAY_SAMPLING_MODES, AtariReplayBuffer
-from utils.atari_train_acceleration import (
+from utils.atari.replay import REPLAY_SAMPLING_MODES, AtariReplayBuffer
+from utils.atari.train_acceleration import (
     AtariAcceleration,
     configure_atari_acceleration,
 )
-from utils.atari_train_utils import (
+from utils.atari.train_utils import (
     ensure_dir,
     obs_to_tensor,
     save_json,
@@ -43,7 +43,7 @@ from utils.atari_train_utils import (
     to_channel_first_obs,
 )
 from utils.recurrent_cores import configure_gawf_feedback_acceleration
-from utils.train_checkpointing import (
+from utils.training.checkpointing import (
     atomic_torch_save,
     load_checkpoint,
     reconcile_history,

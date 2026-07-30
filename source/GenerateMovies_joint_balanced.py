@@ -60,7 +60,7 @@ def load_mnist_idx_data(
     raw_dir: Path | None = None,
 ) -> dict[int, list[np.ndarray]]:
     """Load held-out MNIST samples directly from raw IDX files without torchvision."""
-    source_dir = raw_dir or PROJECT_ROOT / "mnist_data_pytorch" / "MNIST" / "raw"
+    source_dir = raw_dir or PROJECT_ROOT / "data" / "clutter" / "mnist" / "raw"
     images_path = source_dir / "train-images-idx3-ubyte"
     labels_path = source_dir / "train-labels-idx1-ubyte"
     if not images_path.is_file() or not labels_path.is_file():
