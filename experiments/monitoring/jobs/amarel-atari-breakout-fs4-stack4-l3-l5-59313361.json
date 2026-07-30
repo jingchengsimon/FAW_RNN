@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "id": "amarel-atari-breakout-fs4-stack4-l3-l5-59313361",
+  "description": "Strict 4-action plain Breakout fs4/stack4 depths L3->L5: 5 models x 3 seeds x 3M, recoverable and serial by depth; resubmitted after L3 GaWF smoke fix",
+  "host": "amarel",
+  "status": "cancelled",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "59313359",
+      "59313360",
+      "59313361",
+      "59313362",
+      "59313363",
+      "59313364",
+      "59313365",
+      "59313366",
+      "59313367"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/amarel/artifacts/atari_breakout_fs4_stack4_l3/*.out",
+      "experiments/amarel/artifacts/atari_breakout_fs4_stack4_l4/*.out",
+      "experiments/amarel/artifacts/atari_breakout_fs4_stack4_l5/*.out"
+    ],
+    "status_dir": "experiments/amarel/artifacts/atari_breakout_fs4_stack4_l3/status",
+    "result_paths": [
+      "/scratch/js3269/results/train_data/atari_dqn_breakout_fs4_stack4_l3match_*_seed*",
+      "/scratch/js3269/results/train_data/atari_dqn_breakout_fs4_stack4_l4match_*_seed*",
+      "/scratch/js3269/results/train_data/atari_dqn_breakout_fs4_stack4_l5match_*_seed*"
+    ]
+  },
+  "tracking": {
+    "expected_units": 45,
+    "auto_complete": false,
+    "result_globs": [
+      "/scratch/js3269/results/train_data/atari_dqn_breakout_fs4_stack4_l3match_*_seed*",
+      "/scratch/js3269/results/train_data/atari_dqn_breakout_fs4_stack4_l4match_*_seed*",
+      "/scratch/js3269/results/train_data/atari_dqn_breakout_fs4_stack4_l5match_*_seed*"
+    ],
+    "done_glob": null,
+    "fail_glob": null,
+    "defaults": {
+      "expected": {
+        "global_step": 3000000
+      },
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1
+    },
+    "units": []
+  },
+  "notes": [
+    "L3 GaWF smoke 59312407 passed after disabling torch.compile for multi-layer GaWF. Each depth then regenerates its L1-LSTM(512)-anchored parameter match, runs a depth-specific GaWF smoke, and begins its 15-task formal array only after afterok; L4/L5 formal arrays follow the preceding formal layer."
+  ],
+  "created_at": "2026-07-28T03:49:46+00:00",
+  "updated_at": "2026-07-28T04:08:12+00:00"
+}

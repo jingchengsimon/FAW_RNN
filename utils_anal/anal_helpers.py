@@ -84,6 +84,10 @@ def build_eval_dataset(
         dataset_args = (None, None, split_stims, split_labels)
         dataset_kwargs = {}
 
+    sequence_length = int(getattr(args, "sequence_length", 32))
+    if sequence_length <= 0:
+        raise ValueError(f"sequence_length must be positive, got {sequence_length}.")
+
     dataset, num_pos = create_datasets(
         *dataset_args,
         use_sector_mode=use_sector_mode,
@@ -92,6 +96,7 @@ def build_eval_dataset(
         max_chars=15,
         dataset_class=MC_RNN_Dataset,
         splits=(canonical_split,),
+        dataset_kwargs={"frame_num": sequence_length},
         **dataset_kwargs,
     )
     return dataset, num_pos

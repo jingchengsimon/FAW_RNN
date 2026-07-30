@@ -87,6 +87,15 @@ compact windows, batch-sized block shuffle, `AIM3_NUM_WORKERS=2`, and
 Each family must define expected result files and use a status/check script that validates result
 contents rather than relying only on Slurm state.
 
+`submit_atari_breakout_fs4_stack4_l4_l5_shared.sh` overlaps L4 with the tail of an existing L3
+array and then overlaps L5 with L4. Its configured L4/L5 array throttles are a shared formal
+replay budget, not independent per-layer limits; it requires the active L3 formal job ID.
+
+`submit_atari_breakout_depth_curves.sh` renders the current strict Breakout L2/L3/L4 learning
+curves on a compute node. Each depth has a separate `fs4_stack4_l<depth>_<N>seed/` directory
+with `seed<N>.png` figures plus `mean_std.png`; the latter only includes models with every
+declared seed complete. The in-progress L3 GaWF seed3 curve is explicitly labelled in `seed3.png`.
+
 ## Submission handoff
 
 After a successful submission, report in the same conversation:

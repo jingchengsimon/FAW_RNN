@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "id": "amarel-breakout-l1-natural-episode-59214669",
+  "description": "Breakout 4-action GaWF L1 seed1 one naturally terminating greedy episode, eval seed 20260728",
+  "host": "amarel",
+  "status": "queued",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "59214669"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/amarel/artifacts/atari_gawf_single_episode_videos/59214669_*.*"
+    ],
+    "status_dir": "experiments/amarel/artifacts/atari_gawf_single_episode_videos",
+    "result_paths": [
+      "/scratch/js3269/results/train_figs/rl/atari/breakout_4action/videos/fs4_stack4_gawf_l1_seed1_single_episode_eval20260728"
+    ]
+  },
+  "tracking": {
+    "expected_units": 1,
+    "auto_complete": false,
+    "result_globs": [
+      "/scratch/js3269/results/train_figs/rl/atari/breakout_4action/videos/fs4_stack4_gawf_l1_seed1_single_episode_eval20260728"
+    ],
+    "done_glob": null,
+    "fail_glob": null,
+    "defaults": {
+      "expected": {},
+      "checkpoint_glob": "*.mp4",
+      "checkpoint_count": 1
+    },
+    "units": []
+  },
+  "notes": [
+    "Replacement candidate for the 26,995-step video. Natural termination/truncation flags are recorded in metadata; only replace local video after terminated=true validation."
+  ],
+  "created_at": "2026-07-27T14:45:39+00:00",
+  "updated_at": "2026-07-27T14:45:39+00:00"
+}

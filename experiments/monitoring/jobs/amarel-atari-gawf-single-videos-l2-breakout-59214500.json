@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "id": "amarel-atari-gawf-single-videos-l2-breakout-59214500",
+  "description": "Single greedy episodes: Pong 6-action GaWF L2 seed1; Breakout 4-action GaWF L1 seed1 and L2 seed2",
+  "host": "amarel",
+  "status": "completed",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "59214500"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/amarel/artifacts/atari_gawf_single_episode_videos/59214500_*.*"
+    ],
+    "status_dir": "experiments/amarel/artifacts/atari_gawf_single_episode_videos",
+    "result_paths": [
+      "/scratch/js3269/results/train_figs/rl/atari/pong_6action/videos/fs4_stack4_gawf_l2_seed1_single_episode",
+      "/scratch/js3269/results/train_figs/rl/atari/breakout_4action/videos/fs4_stack4_gawf_l1_seed1_single_episode",
+      "/scratch/js3269/results/train_figs/rl/atari/breakout_4action/videos/fs4_stack4_gawf_l2_seed2_single_episode"
+    ]
+  },
+  "tracking": {
+    "expected_units": 3,
+    "auto_complete": false,
+    "result_globs": [
+      "/scratch/js3269/results/train_figs/rl/atari/pong_6action/videos/fs4_stack4_gawf_l2_seed1_single_episode",
+      "/scratch/js3269/results/train_figs/rl/atari/breakout_4action/videos/fs4_stack4_gawf_l1_seed1_single_episode",
+      "/scratch/js3269/results/train_figs/rl/atari/breakout_4action/videos/fs4_stack4_gawf_l2_seed2_single_episode"
+    ],
+    "done_glob": null,
+    "fail_glob": null,
+    "defaults": {
+      "expected": {},
+      "checkpoint_glob": "*.mp4",
+      "checkpoint_count": 1
+    },
+    "units": []
+  },
+  "notes": [
+    "Best final episodic_return_100 seeds: Pong L2 seed1=18.62; Breakout L1 seed1=35.77; Breakout L2 seed2=47.18. One greedy episode each, eval seed 20260727; on-frame titles include layer and training seed."
+  ],
+  "created_at": "2026-07-27T14:06:45+00:00",
+  "updated_at": "2026-07-27T14:36:11+00:00",
+  "completed_at": "2026-07-27T14:36:11+00:00"
+}

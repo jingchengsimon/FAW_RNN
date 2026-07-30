@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "id": "amarel-clutter-gawf-l1-test-videos-59214639",
+  "description": "Four annotated test-dataset videos from formal single-layer Clutter GaWF checkpoint",
+  "host": "amarel",
+  "status": "running",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "59214639"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/amarel/artifacts/clutter_gawf_l1_test_videos/59214639_*.*"
+    ],
+    "status_dir": "experiments/amarel/artifacts/clutter_gawf_l1_test_videos",
+    "result_paths": [
+      "/scratch/js3269/results/videos/clutter_gawf_l1_test"
+    ]
+  },
+  "tracking": {
+    "expected_units": 4,
+    "auto_complete": false,
+    "result_globs": [
+      "/scratch/js3269/results/videos/clutter_gawf_l1_test"
+    ],
+    "done_glob": null,
+    "fail_glob": null,
+    "defaults": {
+      "expected": {},
+      "checkpoint_glob": "*.mp4",
+      "checkpoint_count": 4
+    },
+    "units": []
+  },
+  "notes": [
+    "Formal 40h single-layer GaWF h256 lr0.0005 wd0.0001 checkpoint; test samples 0,1,2,3; fps=2, scale=4; every frame labels predicted sector/digit and circles ground-truth digit."
+  ],
+  "created_at": "2026-07-27T14:38:31+00:00",
+  "updated_at": "2026-07-27T14:38:44+00:00"
+}

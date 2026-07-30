@@ -105,6 +105,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data_suffix", type=str, default="40h-uint8")
     parser.add_argument("--device", type=str, default="cpu", choices=["cpu", "cuda"])
     parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument(
+        "--sequence_length",
+        type=int,
+        default=32,
+        help=(
+            "Frames per independent recurrent rollout and feedback-shuffle window. "
+            "The final incomplete window is omitted."
+        ),
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--use_mmap", action="store_true", default=True)
     parser.add_argument("--use_sector_mode", action="store_true", default=True)
@@ -474,6 +483,8 @@ def main() -> None:
     rng = np.random.default_rng(args.seed)
     os.makedirs(args.save_dir, exist_ok=True)
     device = torch.device(args.device)
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
 
     conditions = list(args.conditions)
     if args.shuffle:
@@ -580,6 +591,9 @@ def main() -> None:
 
     metrics: Dict[str, Any] = {
         "ckpt": os.path.abspath(args.ckpt),
+        "data_suffix": str(args.data_suffix),
+        "sequence_length": int(frame_num),
+        "batch_size": int(args.batch_size),
         "conditions_order": conditions,
         "num_pos": int(num_pos),
         "feedback_dim": int(model.feedback_dim),
@@ -594,6 +608,9 @@ def main() -> None:
         ),
         "conditions": {},
     }
+    if device.type == "cuda":
+        metrics["cuda_max_memory_allocated_bytes"] = int(torch.cuda.max_memory_allocated(device))
+        metrics["cuda_max_memory_reserved_bytes"] = int(torch.cuda.max_memory_reserved(device))
     for condition in conditions:
         metrics["conditions"][condition] = _finalize_condition(states[condition])
 

@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "id": "amarel-atari-breakout-depth-seed-curves-59546109",
+  "description": "Render strict Breakout L2/L3/L4 per-seed learning curves plus complete-seed mean±SD figures in separate depth directories",
+  "host": "amarel",
+  "status": "cancelled",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "59546109"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/amarel/artifacts/atari_breakout_depth_curves/59546109.out"
+    ],
+    "status_dir": null,
+    "result_paths": [
+      "/scratch/js3269/results/train_figs/rl/atari/breakout_4action/fs4_stack4_l3_3seed",
+      "/scratch/js3269/results/train_figs/rl/atari/breakout_4action/fs4_stack4_l4_3seed"
+    ]
+  },
+  "tracking": {
+    "expected_units": 8,
+    "auto_complete": false,
+    "result_globs": [
+      "/scratch/js3269/results/train_figs/rl/atari/breakout_4action/fs4_stack4_l3_3seed",
+      "/scratch/js3269/results/train_figs/rl/atari/breakout_4action/fs4_stack4_l4_3seed"
+    ],
+    "done_glob": null,
+    "fail_glob": null,
+    "defaults": {
+      "expected": {}
+    },
+    "units": []
+  },
+  "notes": [
+    "Uses the established seed<N>.png plus mean_std.png layout. The L3 GaWF seed3 in-progress curve appears only in seed3.png; mean_std requires every declared seed complete."
+  ],
+  "created_at": "2026-07-29T21:26:31+00:00",
+  "updated_at": "2026-07-29T21:32:29+00:00"
+}

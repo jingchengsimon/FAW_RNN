@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "id": "amarel-atari-breakout-fs4-stack4-l4-l5-shared12-59429629",
+  "description": "Plain Breakout fs4/stack4 L4/L5 shared replay budget: L4x8 overlaps L3, L5x4 overlaps L4 after L3 completes; 5 models x 3 seeds x 3M",
+  "host": "amarel",
+  "status": "queued",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "59429627",
+      "59429628",
+      "59429629",
+      "59429630",
+      "59429631",
+      "59429632"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/amarel/artifacts/atari_breakout_fs4_stack4_l4/*.out",
+      "experiments/amarel/artifacts/atari_breakout_fs4_stack4_l5/*.out"
+    ],
+    "status_dir": "experiments/amarel/artifacts/atari_breakout_fs4_stack4_l4/status",
+    "result_paths": [
+      "/scratch/js3269/results/train_data/atari_dqn_breakout_fs4_stack4_l4match_*_seed*",
+      "/scratch/js3269/results/train_data/atari_dqn_breakout_fs4_stack4_l5match_*_seed*"
+    ]
+  },
+  "tracking": {
+    "expected_units": 30,
+    "auto_complete": false,
+    "result_globs": [
+      "/scratch/js3269/results/train_data/atari_dqn_breakout_fs4_stack4_l4match_*_seed*",
+      "/scratch/js3269/results/train_data/atari_dqn_breakout_fs4_stack4_l5match_*_seed*"
+    ],
+    "done_glob": null,
+    "fail_glob": null,
+    "defaults": {
+      "expected": {
+        "global_step": 3000000
+      },
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1
+    },
+    "units": []
+  },
+  "notes": [
+    "Shared formal replay budget=12: L4 formal array throttle=8 may overlap the remaining L3 tasks; L5 match waits for L3 formal 59316473, then L5 formal throttle=4 overlaps L4. Unique smoke suffix run_id=shared12_20260728."
+  ],
+  "created_at": "2026-07-28T22:14:32+00:00",
+  "updated_at": "2026-07-28T22:14:32+00:00"
+}

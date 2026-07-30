@@ -8,6 +8,79 @@
   ],
   "jobs": [
     {
+      "id": "amarel-atari-breakout-l3-l4-seed-curves-59548643",
+      "description": "Render strict Breakout L3/L4 per-seed learning curves and complete-seed mean±SD figures in separate depth directories",
+      "host": "amarel",
+      "status": "running",
+      "job_ids": [
+        "59548643"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-07-29T21:32:45+00:00"
+    },
+    {
+      "id": "amarel-atari-breakout-fs4-stack4-l4-l5-shared12-59429629",
+      "description": "Plain Breakout fs4/stack4 L4/L5 shared replay budget: L4x8 overlaps L3, L5x4 overlaps L4 after L3 completes; 5 models x 3 seeds x 3M",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "59429627",
+        "59429628",
+        "59429629",
+        "59429630",
+        "59429631",
+        "59429632"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-07-28T22:14:32+00:00"
+    },
+    {
+      "id": "amarel-atari-breakout-fs4-stack4-l3-l5-59316473",
+      "description": "Strict 4-action plain Breakout fs4/stack4 L3->L5: 5 models x 3 seeds x 3M, recoverable and serial after fresh L3 smoke passed",
+      "host": "amarel",
+      "status": "running",
+      "job_ids": [
+        "59315837",
+        "59316472",
+        "59316473",
+        "59316474",
+        "59316475",
+        "59316476",
+        "59316477",
+        "59316478",
+        "59316479"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-07-28T22:14:32+00:00"
+    },
+    {
+      "id": "amarel-breakout-l1-natural-episode-59214669",
+      "description": "Breakout 4-action GaWF L1 seed1 one naturally terminating greedy episode, eval seed 20260728",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "59214669"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-07-27T14:45:39+00:00"
+    },
+    {
+      "id": "amarel-clutter-gawf-l1-test-videos-59214639",
+      "description": "Four annotated test-dataset videos from formal single-layer Clutter GaWF checkpoint",
+      "host": "amarel",
+      "status": "running",
+      "job_ids": [
+        "59214639"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-07-27T14:38:44+00:00"
+    },
+    {
       "id": "amarel-atari-breakout-fs4-stack4-l2-59143184",
       "description": "Strict 4-action Breakout fs4/stack4 L2: 5 models x Breakout/Flickering x 5 seeds, 1M, recoverable",
       "host": "amarel",

@@ -202,12 +202,12 @@ def _loss_crop(path: Path, metric: str) -> tuple[np.ndarray, tuple[float, float]
     if image.shape[:2] != (610, 1861):
         raise ValueError(f"Expected the canonical 1861x610 loss source, got {image.shape[1]}x{image.shape[0]}")
     if metric == "char":
-        # Exclude the source figure's bottom spine; the summary axes supply the only frame.
-        return image[312:526, 102:906], (0.3, 1.2)
+        # Use the complete source data rectangle. Cropping only its lower half and remapping it
+        # to the full range introduces a vertical numerical shift in compact summary panels.
+        return image[94:539, 102:906], (0.3, 1.2)
     if metric == "sector":
-        # The sector panel begins farther right in the source image.  Starting at its data
-        # region (rather than its source y-axis spine) prevents an embedded coordinate box.
-        return image[284:537, 1029:1833], (0.1, 0.5)
+        # The sector panel begins farther right; use the same complete data rectangle.
+        return image[94:539, 1029:1833], (0.1, 0.5)
     raise ValueError(f"Unknown loss metric {metric!r}")
 
 

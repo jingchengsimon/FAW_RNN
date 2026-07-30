@@ -44,6 +44,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num_episodes", type=int, default=3)
     parser.add_argument("--eval_seed", type=int, default=20260718)
     parser.add_argument("--fps", type=float, default=15.0)
+    parser.add_argument(
+        "--video_title",
+        default=None,
+        help="Optional label rendered into every output-video frame.",
+    )
     parser.add_argument("--device", choices=["cuda", "mps", "cpu"], default="cuda")
     parser.add_argument("--amp_dtype", choices=["none", "bfloat16", "float16"], default="bfloat16")
     return parser.parse_args()
@@ -53,10 +58,8 @@ def load_metrics(path: Path) -> dict[str, Any]:
     """Load and validate the strict single-task Atari metadata contract."""
     metrics = json.loads(path.read_text(encoding="utf-8"))
     expected = {
-        "env_id": "ALE/Pong-v5",
         "multitask": False,
         "action_space_mode": "minimal",
-        "num_actions": 6,
         "model_type": "gawf",
         "feedback_mode": "qvalues",
         "frame_skip": 4,
@@ -70,6 +73,15 @@ def load_metrics(path: Path) -> dict[str, Any]:
     }
     if mismatches:
         raise ValueError(f"Unsupported or mismatched Atari video protocol: {mismatches}")
+    expected_actions = {"ALE/Pong-v5": 6, "ALE/Breakout-v5": 4}
+    env_id = str(metrics.get("env_id"))
+    if env_id not in expected_actions:
+        raise ValueError(f"Unsupported Atari video environment: {env_id}")
+    if int(metrics.get("num_actions", -1)) != expected_actions[env_id]:
+        raise ValueError(
+            f"Unexpected action count for {env_id}: {metrics.get('num_actions')} "
+            f"(expected {expected_actions[env_id]})"
+        )
     if int(metrics.get("num_layers", 0)) not in {1, 2}:
         raise ValueError(f"Expected one or two GaWF layers, got {metrics.get('num_layers')}")
     if int(metrics.get("global_step", 0)) < 1:
@@ -130,6 +142,27 @@ def open_video_writer(path: Path, frame: np.ndarray, fps: float) -> cv2.VideoWri
     return writer
 
 
+def annotate_frame(frame: np.ndarray, title: str | None) -> np.ndarray:
+    """Render an optional protocol-and-seed title onto a BGR video frame."""
+    if not title:
+        return frame
+    annotated = frame.copy()
+    overlay = annotated.copy()
+    cv2.rectangle(overlay, (8, 8), (min(annotated.shape[1] - 8, 610), 42), (0, 0, 0), -1)
+    cv2.addWeighted(overlay, 0.65, annotated, 0.35, 0, annotated)
+    cv2.putText(
+        annotated,
+        title,
+        (16, 31),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.55,
+        (255, 255, 255),
+        1,
+        cv2.LINE_AA,
+    )
+    return annotated
+
+
 def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     """Record greedy episodes, retain the highest-return MP4, and save metadata."""
     if args.num_episodes < 1:
@@ -183,6 +216,8 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     )()
     returns: list[float] = []
     episode_lengths: list[int] = []
+    episode_terminated: list[bool] = []
+    episode_truncated: list[bool] = []
     videos: list[Path] = []
     try:
         if int(env.action_space.n) != int(metrics["num_actions"]):
@@ -209,7 +244,8 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
                     frame = np.asarray(env.render(), dtype=np.uint8)
                     if writer is None:
                         writer = open_video_writer(episode_video, frame, args.fps)
-                    writer.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+                    bgr_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                    writer.write(annotate_frame(bgr_frame, args.video_title))
                     prev_done = torch.zeros(1, device=device)
                     episode_return += float(reward)
                     episode_length += 1
@@ -221,6 +257,8 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
             videos.append(episode_video)
             returns.append(episode_return)
             episode_lengths.append(episode_length)
+            episode_terminated.append(bool(terminated))
+            episode_truncated.append(bool(truncated))
             print(
                 f"episode={episode} return={episode_return:.1f} "
                 f"environment_steps={episode_length}"
@@ -251,8 +289,11 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         "eval_seed": int(args.eval_seed),
         "num_episodes": int(args.num_episodes),
         "fps": float(args.fps),
+        "video_title": args.video_title,
         "episode_returns": returns,
         "episode_lengths": episode_lengths,
+        "episode_terminated": episode_terminated,
+        "episode_truncated": episode_truncated,
         "best_episode": best_episode,
         "best_return": returns[best_episode],
         "source_metrics": str(metrics_path),

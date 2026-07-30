@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "id": "amarel-atari-gawf-single-video-l1-59214325",
+  "description": "Pong 6-action fs4/stack4 GaWF L1 seed1 single greedy episode with seed title",
+  "host": "amarel",
+  "status": "completed",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "59214325"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/amarel/artifacts/atari_gawf_single_episode_videos/59214325_*.*"
+    ],
+    "status_dir": "experiments/amarel/artifacts/atari_gawf_single_episode_videos",
+    "result_paths": [
+      "/scratch/js3269/results/train_figs/rl/atari/pong_6action/videos/fs4_stack4_gawf_l1_seed1_single_episode"
+    ]
+  },
+  "tracking": {
+    "expected_units": 1,
+    "auto_complete": false,
+    "result_globs": [
+      "/scratch/js3269/results/train_figs/rl/atari/pong_6action/videos/fs4_stack4_gawf_l1_seed1_single_episode"
+    ],
+    "done_glob": null,
+    "fail_glob": null,
+    "defaults": {
+      "expected": {},
+      "checkpoint_glob": "*.mp4",
+      "checkpoint_count": 1
+    },
+    "units": []
+  },
+  "notes": [
+    "Selected by final checkpoint-aligned episodic_return_100=18.36. One greedy episode, eval seed 20260727; on-frame title includes seed 1."
+  ],
+  "created_at": "2026-07-27T13:41:45+00:00",
+  "updated_at": "2026-07-27T14:00:20+00:00",
+  "completed_at": "2026-07-27T14:00:20+00:00"
+}
