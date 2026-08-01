@@ -6,6 +6,8 @@
 
 | Job | Status | Host | Scheduler / run IDs | Units | Remote root | Description |
 |---|---|---|---|---:|---|---|
+| `amarel-atari-breakout-fs4-stack4-l5-repair-59750808` | queued | `amarel` | 59750808, 59750809, 59750810 | 15 | `/cache/home/js3269/projects/aim3_gawf_rnn` | Repaired L5 plain Breakout fs4/stack4 chain: parameter match, smoke, then 15 recoverable 3M tasks |
+| `amarel-atari-breakout-l3-gawf-diagnostics-59741829` | queued | `amarel` | 59741829, 59741830 | 6 | `/cache/home/js3269/projects/aim3_gawf_rnn` | Six 3M L3 GaWF seed2 causal diagnostics with dependent fixed-seed greedy checkpoint evaluation |
 | `amarel-atari-breakout-l3-l4-latest-curves-59704065` | running | `amarel` | 59704065 | 8 | `/cache/home/js3269/projects/aim3_gawf_rnn` | Render current strict Breakout L3/L4 per-seed and mean±SD figures |
 | `amarel-atari-breakout-l3-l4-latest-curves-59703725` | failed | `amarel` | 59703725 | 8 | `/cache/home/js3269/projects/aim3_gawf_rnn` | Render current strict Breakout L3/L4 per-seed and mean±SD figures |
 | `amarel-atari-breakout-l3-l4-seed-curves-59548643` | running | `amarel` | 59548643 | 8 | `/cache/home/js3269/projects/aim3_gawf_rnn` | Render strict Breakout L3/L4 per-seed learning curves and complete-seed mean±SD figures in separate depth directories |

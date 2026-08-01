@@ -137,6 +137,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Replay sampler. Task ids are sampling/loss metadata and never model inputs.",
     )
     parser.add_argument("--learning_rate", type=float, default=1e-4)
+    parser.add_argument("--learning_rate_decay_step", type=int, default=0)
+    parser.add_argument("--learning_rate_decay_scale", type=float, default=1.0)
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--learning_starts", type=int, default=20_000)
     parser.add_argument("--start_epsilon", type=float, default=1.0)
@@ -184,6 +186,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "Atomically save a resumable checkpoint every N environment steps. "
             "0 disables checkpointing and preserves the historical single-save behaviour."
         ),
+    )
+    parser.add_argument(
+        "--diagnostic_checkpoint_steps",
+        type=int,
+        nargs="*",
+        default=[],
+        help="Immutable model-only snapshots for offline evaluation; does not save replay again.",
     )
     parser.add_argument(
         "--resume_from",
@@ -670,8 +679,12 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError(f"frame_skip must be >= 1, got {args.frame_skip}")
     if args.gawf_feedback_lr_scale <= 0:
         raise ValueError("gawf_feedback_lr_scale must be > 0")
+    if args.learning_rate_decay_step < 0 or args.learning_rate_decay_scale <= 0:
+        raise ValueError("learning-rate decay arguments must be non-negative/positive")
     if args.checkpoint_interval_steps < 0:
         raise ValueError("checkpoint_interval_steps must be non-negative")
+    if any(step <= 0 or step > args.total_timesteps for step in args.diagnostic_checkpoint_steps):
+        raise ValueError("diagnostic checkpoint steps must be within (0, total_timesteps]")
     if args.resume_from and args.auto_resume:
         raise ValueError("--resume_from and --auto_resume are mutually exclusive")
     set_atari_seed(args.seed)
@@ -690,6 +703,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
     video_dir = os.path.join(save_dir, "videos")
     history_path = os.path.join(save_dir, "metrics_history.jsonl")
     checkpoint_path = os.path.join(save_dir, CHECKPOINT_FILENAME)
+    diagnostic_checkpoint_dir = os.path.join(save_dir, "diagnostic_checkpoints")
     replay_dir = os.path.join(save_dir, REPLAY_SUBDIR)
 
     resume_path = args.resume_from
@@ -1000,6 +1014,10 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                 episode_counts[env_id] += 1
 
             if global_step >= args.learning_starts and global_step % args.train_frequency == 0:
+                if global_step == args.learning_rate_decay_step:
+                    for group in optimizer.param_groups:
+                        group["lr"] *= args.learning_rate_decay_scale
+                    logger.info("applied learning-rate decay at step=%d", global_step)
                 with acceleration.autocast():
                     if model.is_recurrent:
                         loss, q_mean = _drqn_sequence_loss(
@@ -1083,6 +1101,13 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                 and global_step % args.checkpoint_interval_steps == 0
             ):
                 write_checkpoint()
+            if global_step in args.diagnostic_checkpoint_steps:
+                ensure_dir(diagnostic_checkpoint_dir)
+                snapshot_path = os.path.join(
+                    diagnostic_checkpoint_dir, f"model_step{global_step}.pth"
+                )
+                atomic_torch_save(model.state_dict(), snapshot_path)
+                logger.info("saved diagnostic model snapshot=%s", snapshot_path)
 
         preemption.restore()
         if preempted:

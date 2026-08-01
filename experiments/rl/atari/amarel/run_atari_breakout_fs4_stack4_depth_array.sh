@@ -84,13 +84,13 @@ if [[ "$MODEL" == "ann" ]]; then
   COMPILE_EXPECTED=true
 fi
 
-RESULT_DIR="$AIM3_RESULTS_PATH/data/rl/atari/runs/$SUFFIX"
+RESULT_DIR="$AIM3_RESULTS_PATH/train_data/$SUFFIX"
 DONE_FILE="$STATUS_DIR/${SUFFIX}.done"
 FAIL_FILE="$STATUS_DIR/${SUFFIX}.fail"
 CHECKPOINT="$RESULT_DIR/checkpoint.pth"
 
 set +e
-python -m experiments.amarel.scratch_quota_guard \
+python -m experiments.rl.atari.amarel.scratch_quota_guard \
   --user "${QUOTA_USER:-js3269}" --filesystem scratch \
   --required_gib "${REQUIRED_GIB:-27}" --headroom_factor "${QUOTA_HEADROOM_FACTOR:-2}" \
   --marker_path "$STATUS_DIR/${SUFFIX}.quota"

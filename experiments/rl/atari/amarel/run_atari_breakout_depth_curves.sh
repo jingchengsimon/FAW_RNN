@@ -30,10 +30,29 @@ set -u
 OUT_DIR="$AIM3_RESULTS_PATH/figs/rl/atari/breakout_4action"
 mkdir -p "$OUT_DIR"
 COMMON=(--data-root "$AIM3_RESULTS_PATH/train_data" --smooth 10)
+Y_LIMITS=(--y-min 0 --y-max 190)
+SEEDS_5=(42 1 2 3 4)
+
+for layer in 1 2; do
+  if [[ "$layer" == "1" ]]; then
+    prefix="atari_dqn_breakout_fs4_stack4_l1"
+  else
+    prefix="atari_dqn_breakout_fs4_stack4_l2match"
+  fi
+  layer_dir="$OUT_DIR/fs4_stack4_l${layer}_5seed"
+  for seed in "${SEEDS_5[@]}"; do
+    python -m utils.analysis.rl.atari.atari_learning_curves \
+      --data_root "$AIM3_RESULTS_PATH/train_data" --prefix "$prefix" --setting both \
+      --seed "$seed" --smooth 10 "${Y_LIMITS[@]}" --output "$layer_dir/seed${seed}.png"
+  done
+  python -m utils.analysis.rl.atari.atari_learning_curves \
+    --data_root "$AIM3_RESULTS_PATH/train_data" --prefix "$prefix" --setting both \
+    --smooth 10 "${Y_LIMITS[@]}" --output "$layer_dir/mean_std.png"
+done
 
 python -m utils.analysis.rl.atari.atari_breakout_depth_curves "${COMMON[@]}" \
-  --num-layers 3 --expected-steps 3000000 --seeds 1 2 3 \
+  --num-layers 3 --expected-steps 3000000 --seeds 1 2 3 "${Y_LIMITS[@]}" \
   --output-dir "$OUT_DIR/fs4_stack4_l3_3seed"
 python -m utils.analysis.rl.atari.atari_breakout_depth_curves "${COMMON[@]}" \
-  --num-layers 4 --expected-steps 3000000 --seeds 1 2 3 --partial gawf:1 \
+  --num-layers 4 --expected-steps 3000000 --seeds 1 2 3 --partial gawf:1 "${Y_LIMITS[@]}" \
   --output-dir "$OUT_DIR/fs4_stack4_l4_3seed"

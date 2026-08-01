@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "id": "amarel-atari-breakout-fs4-stack4-l5-repair-59750808",
+  "description": "Repaired L5 plain Breakout fs4/stack4 chain: parameter match, smoke, then 15 recoverable 3M tasks",
+  "host": "amarel",
+  "status": "queued",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "59750808",
+      "59750809",
+      "59750810"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/rl/atari/amarel/artifacts/atari_breakout_fs4_stack4_l5_repair/*.out"
+    ],
+    "status_dir": null,
+    "result_paths": [
+      "/scratch/js3269/results/train_data/atari_dqn_breakout_fs4_stack4_l5match_*_seed*"
+    ]
+  },
+  "tracking": {
+    "expected_units": 15,
+    "auto_complete": false,
+    "result_globs": [
+      "/scratch/js3269/results/train_data/atari_dqn_breakout_fs4_stack4_l5match_*_seed*"
+    ],
+    "done_glob": null,
+    "fail_glob": null,
+    "defaults": {
+      "expected": {
+        "global_step": 3000000
+      },
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1
+    },
+    "units": []
+  },
+  "notes": [
+    "Fixes the stale experiments.atari.atari_ssm_param_match import after the Amarel-side experiments/rl/atari restructure. Formal array is throttled at four concurrent replay consumers."
+  ],
+  "created_at": "2026-07-31T02:14:49+00:00",
+  "updated_at": "2026-07-31T02:14:49+00:00"
+}

@@ -37,6 +37,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-steps", type=int, required=True)
     parser.add_argument("--seeds", type=int, nargs="+", required=True)
     parser.add_argument("--smooth", type=int, default=10)
+    parser.add_argument("--y-min", type=float, default=None)
+    parser.add_argument("--y-max", type=float, default=None)
     parser.add_argument(
         "--partial",
         action="append",
@@ -150,6 +152,12 @@ def style_axis(ax: plt.Axes, title: str) -> None:
     ax.grid(True, alpha=0.3)
 
 
+def apply_y_limits(ax: plt.Axes, args: argparse.Namespace) -> None:
+    """Apply an explicit shared y-axis range when both bounds were supplied."""
+    if args.y_min is not None and args.y_max is not None:
+        ax.set_ylim(args.y_min, args.y_max)
+
+
 def save_seed_figure(
     output_path: Path,
     *,
@@ -193,6 +201,7 @@ def save_seed_figure(
         ax,
         f"Strict 4-action Breakout · fs4/stack4 · L{args.num_layers} · seed {seed}",
     )
+    apply_y_limits(ax, args)
     ax.legend(title="model", fontsize=9)
     fig.tight_layout()
     fig.savefig(output_path, dpi=150, bbox_inches="tight", pad_inches=0.06)
@@ -226,6 +235,7 @@ def save_mean_std_figure(
         f"Strict 4-action Breakout · fs4/stack4 · L{args.num_layers} · "
         f"{len(args.seeds)}-seed mean ± SD",
     )
+    apply_y_limits(ax, args)
     ax.legend(title="model", fontsize=9)
     fig.tight_layout()
     fig.savefig(output_path, dpi=150, bbox_inches="tight", pad_inches=0.06)
@@ -236,6 +246,10 @@ def save_mean_std_figure(
 def main() -> None:
     """Write per-seed figures plus one all-complete-seed mean/std figure for one depth."""
     args = parse_args()
+    if (args.y_min is None) != (args.y_max is None) or (
+        args.y_min is not None and args.y_min >= args.y_max
+    ):
+        raise ValueError("Provide --y-min and --y-max together, with y-min < y-max")
     root = Path(args.data_root)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

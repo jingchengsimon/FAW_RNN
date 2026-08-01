@@ -61,7 +61,6 @@ def load_metrics(path: Path) -> dict[str, Any]:
         "multitask": False,
         "action_space_mode": "minimal",
         "model_type": "gawf",
-        "feedback_mode": "qvalues",
         "frame_skip": 4,
         "frame_stack": 4,
         "flicker_prob": 0.0,
@@ -82,8 +81,8 @@ def load_metrics(path: Path) -> dict[str, Any]:
             f"Unexpected action count for {env_id}: {metrics.get('num_actions')} "
             f"(expected {expected_actions[env_id]})"
         )
-    if int(metrics.get("num_layers", 0)) not in {1, 2}:
-        raise ValueError(f"Expected one or two GaWF layers, got {metrics.get('num_layers')}")
+    if int(metrics.get("num_layers", 0)) < 1:
+        raise ValueError(f"Expected at least one GaWF layer, got {metrics.get('num_layers')}")
     if int(metrics.get("global_step", 0)) < 1:
         raise ValueError("metrics.json does not describe a completed training run")
     return metrics
@@ -97,7 +96,7 @@ def build_model(metrics: dict[str, Any], device: torch.device) -> AtariQNetwork:
         model_type="gawf",
         hidden_size=int(metrics["hidden_size"]),
         encoder_feature_dim=int(metrics.get("encoder_feature_dim", 512)),
-        feedback_mode="qvalues",
+        feedback_mode=str(metrics["feedback_mode"]),
         num_layers=int(metrics["num_layers"]),
     ).to(device)
 

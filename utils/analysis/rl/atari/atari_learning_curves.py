@@ -114,6 +114,8 @@ def parse_args() -> argparse.Namespace:
         help="Plot only this single seed (no band). Default: aggregate all seeds.",
     )
     parser.add_argument("--output", default=None, help="Explicit output png path.")
+    parser.add_argument("--y-min", type=float, default=None, help="Shared y-axis lower bound.")
+    parser.add_argument("--y-max", type=float, default=None, help="Shared y-axis upper bound.")
     parser.add_argument(
         "--run_dir",
         default=None,
@@ -299,6 +301,12 @@ def _plot_setting(ax, args, setting: str) -> int:
     return plotted
 
 
+def _apply_y_limits(ax: plt.Axes, args: argparse.Namespace) -> None:
+    """Apply a shared y-axis range when both explicit bounds were requested."""
+    if args.y_min is not None and args.y_max is not None:
+        ax.set_ylim(args.y_min, args.y_max)
+
+
 def _env_label(env_id: str) -> str:
     """Convert an ALE environment id to a compact plot label."""
     return env_id.removeprefix("ALE/").removesuffix("-v5")
@@ -362,6 +370,7 @@ def _plot_direct_run(args: argparse.Namespace) -> str:
     ax.set_ylabel("episodic return (last 100 episodes)")
     ax.grid(True, alpha=0.3)
     ax.legend(title="task")
+    _apply_y_limits(ax, args)
     fig.tight_layout()
 
     if args.output:
@@ -380,6 +389,10 @@ def _plot_direct_run(args: argparse.Namespace) -> str:
 
 def main() -> None:
     args = parse_args()
+    if (args.y_min is None) != (args.y_max is None) or (
+        args.y_min is not None and args.y_min >= args.y_max
+    ):
+        raise SystemExit("Provide --y-min and --y-max together, with y-min < y-max")
     if args.run_dir:
         _plot_direct_run(args)
         return
@@ -391,6 +404,7 @@ def main() -> None:
     total = 0
     for ax, setting in zip(axes[0], settings):
         total += _plot_setting(ax, args, setting)
+        _apply_y_limits(ax, args)
     if total == 0:
         raise SystemExit(
             "No curves found. Check --prefix/--data_root and that runs have logged "

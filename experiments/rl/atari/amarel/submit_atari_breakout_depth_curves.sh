@@ -16,7 +16,7 @@ while (( $# )); do
 done
 
 if (( DRY_RUN )); then
-  echo "render: seed<N>.png plus mean_std.png under separate L3/L4 directories"
+  echo "render: seed<N>.png plus mean_std.png under separate L1/L4 directories"
   exit 0
 fi
 

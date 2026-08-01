@@ -8,6 +8,33 @@
   ],
   "jobs": [
     {
+      "id": "amarel-atari-breakout-fs4-stack4-l5-repair-59750808",
+      "description": "Repaired L5 plain Breakout fs4/stack4 chain: parameter match, smoke, then 15 recoverable 3M tasks",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "59750808",
+        "59750809",
+        "59750810"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-07-31T02:14:49+00:00"
+    },
+    {
+      "id": "amarel-atari-breakout-l3-gawf-diagnostics-59741829",
+      "description": "Six 3M L3 GaWF seed2 causal diagnostics with dependent fixed-seed greedy checkpoint evaluation",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "59741829",
+        "59741830"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-07-31T00:54:03+00:00"
+    },
+    {
       "id": "amarel-atari-breakout-l3-l4-latest-curves-59704065",
       "description": "Render current strict Breakout L3/L4 per-seed and mean±SD figures",
       "host": "amarel",

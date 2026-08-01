@@ -33,7 +33,7 @@ conda activate "${AIM3_CONDA_ENV:-aim3_rnn}"
 set -u
 
 mkdir -p "$MATCH_DIR"
-python -m experiments.atari.atari_ssm_param_match \
+python -m experiments.rl.atari.atari_ssm_param_match \
   --models rnn gru lstm gawf \
   --num_actions "$NUM_ACTIONS" \
   --num_layers "$NUM_LAYERS" \
