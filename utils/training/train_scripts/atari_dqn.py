@@ -28,6 +28,7 @@ from utils.training.atari.atari_envs import (
     ATARI_TASK_SCHEDULES,
     make_multitask_vector_atari_env,
     make_vector_atari_env,
+    multitask_scheduler_states,
 )
 from utils.training.atari.atari_replay import REPLAY_SAMPLING_MODES, AtariReplayBuffer
 from utils.training.atari.atari_train_acceleration import (
@@ -141,6 +142,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--learning_rate_decay_scale", type=float, default=1.0)
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--learning_starts", type=int, default=20_000)
+    parser.add_argument(
+        "--learning_starts_per_task",
+        type=int,
+        default=0,
+        help=(
+            "For multi-task runs, delay updates until every task has this many valid "
+            "environment steps. 0 preserves the historical global-only gate."
+        ),
+    )
     parser.add_argument("--start_epsilon", type=float, default=1.0)
     parser.add_argument("--end_epsilon", type=float, default=0.01)
     parser.add_argument("--exploration_fraction", type=float, default=0.10)
@@ -251,8 +261,11 @@ RESUME_ARG_KEYS = (
     "buffer_size",
     "replay_sampling",
     "learning_rate",
+    "learning_rate_decay_step",
+    "learning_rate_decay_scale",
     "gamma",
     "learning_starts",
+    "learning_starts_per_task",
     "start_epsilon",
     "end_epsilon",
     "exploration_fraction",
@@ -444,6 +457,21 @@ def _linear_epsilon(args: argparse.Namespace, global_step: int) -> float:
     return max(args.end_epsilon, args.start_epsilon + slope * global_step)
 
 
+def _learning_ready(
+    args: argparse.Namespace,
+    global_step: int,
+    environment_steps: dict[str, int],
+) -> bool:
+    """Return whether both global and per-task replay warm-up gates are satisfied."""
+    if global_step < args.learning_starts:
+        return False
+    if args.learning_starts_per_task <= 0:
+        return True
+    return bool(environment_steps) and min(environment_steps.values()) >= int(
+        args.learning_starts_per_task
+    )
+
+
 class _PreemptionWatcher:
     """Turn Slurm's preemption signals into a checkpoint-then-exit request.
 
@@ -516,6 +544,8 @@ def _checkpoint_payload(
     rolling_returns_by_env: dict[str, list[float]],
     episode_counts: dict[str, int],
     environment_steps: dict[str, int],
+    task_scheduler_states: tuple[dict[str, Any], ...] | None,
+    learning_started_at_step: int | None,
     last_loss: float,
     last_q_mean: float,
     resume_count: int,
@@ -536,6 +566,8 @@ def _checkpoint_payload(
         },
         "episode_counts": dict(episode_counts),
         "environment_steps": dict(environment_steps),
+        "task_scheduler_states": task_scheduler_states,
+        "learning_started_at_step": learning_started_at_step,
         "last_loss": float(last_loss),
         "last_q_mean": float(last_q_mean),
         "resume_count": resume_count,
@@ -543,9 +575,8 @@ def _checkpoint_payload(
         "rng_state": rng_state(),
         "learning_rate": float(args.learning_rate),
         "args": vars(args),
-        # ALE internals and the recurrent hidden state are deliberately not
-        # serialized: the env is re-seeded and the state restarts from zero, so
-        # each resume injects one artificial episode boundary.
+        # ALE internals and recurrent hidden state remain fresh on resume. Multi-task
+        # collection restores only its scheduler counts/cursor so balancing continues.
         "environment_state_restored": False,
         "recurrent_state_restored": False,
     }
@@ -681,6 +712,8 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("gawf_feedback_lr_scale must be > 0")
     if args.learning_rate_decay_step < 0 or args.learning_rate_decay_scale <= 0:
         raise ValueError("learning-rate decay arguments must be non-negative/positive")
+    if args.learning_starts < 0 or args.learning_starts_per_task < 0:
+        raise ValueError("learning-start thresholds must be non-negative")
     if args.checkpoint_interval_steps < 0:
         raise ValueError("checkpoint_interval_steps must be non-negative")
     if any(step <= 0 or step > args.total_timesteps for step in args.diagnostic_checkpoint_steps):
@@ -714,6 +747,10 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         if not os.path.isfile(resume_path):
             raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
         resume_checkpoint = load_checkpoint(resume_path, device)
+        saved_args = resume_checkpoint.get("args")
+        if isinstance(saved_args, dict):
+            # Checkpoints created before the per-task gate retain historical semantics.
+            saved_args.setdefault("learning_starts_per_task", 0)
         validate_resume_protocol(
             resume_checkpoint,
             args,
@@ -740,6 +777,18 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         )
 
     is_multitask = len(env_ids) > 1
+    restored_scheduler_states: tuple[dict[str, Any], ...] | None = None
+    scheduler_state_restored = False
+    if is_multitask and resume_checkpoint is not None:
+        saved_scheduler_states = resume_checkpoint.get("task_scheduler_states")
+        if saved_scheduler_states is not None:
+            restored_scheduler_states = tuple(dict(state) for state in saved_scheduler_states)
+            scheduler_state_restored = True
+        else:
+            logger.warning(
+                "resume checkpoint predates task-scheduler persistence; collection "
+                "balancing restarts while replay and aggregate counters resume"
+            )
     if is_multitask:
         if args.capture_video:
             raise ValueError("Phase0 multi-task training does not support --capture_video")
@@ -751,6 +800,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             frame_skip=args.frame_skip,
             flicker_prob=args.flicker_prob,
             task_schedule=args.task_schedule,
+            scheduler_states=restored_scheduler_states,
         )
     else:
         envs = make_vector_atari_env(
@@ -863,6 +913,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         last_q_mean_tensor: torch.Tensor | None = None
         restored_last_loss = float("nan")
         restored_last_q_mean = float("nan")
+        learning_started_at_step: int | None = None
         final_metrics: dict[str, Any] = {}
 
         if resume_checkpoint is not None:
@@ -890,6 +941,10 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             restored_last_loss = float(resume_checkpoint.get("last_loss", float("nan")))
             restored_last_q_mean = float(
                 resume_checkpoint.get("last_q_mean", float("nan"))
+            )
+            saved_learning_started = resume_checkpoint.get("learning_started_at_step")
+            learning_started_at_step = (
+                int(saved_learning_started) if saved_learning_started is not None else None
             )
             resume_count = int(resume_checkpoint.get("resume_count", 0)) + 1
             resumed_at_steps = [
@@ -937,6 +992,10 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                     rolling_returns_by_env=rolling_returns_by_env,
                     episode_counts=episode_counts,
                     environment_steps=environment_steps,
+                    task_scheduler_states=(
+                        multitask_scheduler_states(envs) if is_multitask else None
+                    ),
+                    learning_started_at_step=learning_started_at_step,
                     last_loss=last_loss_value,
                     last_q_mean=last_q_mean_value,
                     resume_count=resume_count,
@@ -1013,7 +1072,16 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                 rolling_returns_by_env[env_id] = rolling_returns_by_env[env_id][-100:]
                 episode_counts[env_id] += 1
 
-            if global_step >= args.learning_starts and global_step % args.train_frequency == 0:
+            if _learning_ready(args, global_step, environment_steps) and (
+                global_step % args.train_frequency == 0
+            ):
+                if learning_started_at_step is None:
+                    learning_started_at_step = global_step
+                    logger.info(
+                        "learning started at step=%d per_task_steps=%s",
+                        global_step,
+                        environment_steps,
+                    )
                 if global_step == args.learning_rate_decay_step:
                     for group in optimizer.param_groups:
                         group["lr"] *= args.learning_rate_decay_scale
@@ -1150,6 +1218,21 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "num_actions": num_actions,
             "task_schedule": args.task_schedule if is_multitask else None,
             "replay_sampling": args.replay_sampling,
+            "buffer_size": args.buffer_size,
+            "batch_size": args.batch_size,
+            "seq_len": args.seq_len,
+            "sequences_per_batch": args.sequences_per_batch,
+            "learning_rate": args.learning_rate,
+            "learning_rate_decay_step": args.learning_rate_decay_step,
+            "learning_rate_decay_scale": args.learning_rate_decay_scale,
+            "learning_starts": args.learning_starts,
+            "learning_starts_per_task": args.learning_starts_per_task,
+            "learning_started_at_step": learning_started_at_step,
+            "task_scheduler_state_restored": scheduler_state_restored,
+            "task_scheduler_states": (
+                multitask_scheduler_states(envs) if is_multitask else None
+            ),
+            "replay_remainder_cursor": buffer.state_dict()["remainder_cursor"],
             "algo": args.algo,
             "model_type": args.model_type,
             "num_layers": args.num_layers,

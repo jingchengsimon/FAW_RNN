@@ -60,7 +60,7 @@ def _python_invocation_lines(lines: list[str]) -> list[str]:
 
 
 def test_pytorch_parameter_matching_is_not_run_by_login_node_submitters() -> None:
-    unsafe_command = "python -m experiments.atari.atari_ssm_param_match"
+    unsafe_command = "python -m experiments.rl.atari.atari_ssm_param_match"
     for path in SUBMITTERS:
         text = path.read_text(encoding="utf-8")
         assert unsafe_command not in text
@@ -73,7 +73,7 @@ def test_parameter_matching_runner_requests_a_compute_node() -> None:
     text = path.read_text(encoding="utf-8")
     assert "#SBATCH --partition=gpu-redhat" in text
     assert "#SBATCH --gres=gpu:1" in text
-    assert "python -m experiments.atari.atari_ssm_param_match" in text
+    assert "python -m experiments.rl.atari.atari_ssm_param_match" in text
 
 
 def test_all_amarel_submitters_keep_compute_off_login_nodes() -> None:

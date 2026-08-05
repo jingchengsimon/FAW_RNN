@@ -12,11 +12,19 @@ from typing import Any
 ATARI_PILOT_ENVS = (
     "ALE/Pong-v5",
     "ALE/Breakout-v5",
+    "ALE/Assault-v5",
+    "ALE/Seaquest-v5",
+    "ALE/Skiing-v5",
     "ALE/MsPacman-v5",
     "ALE/BeamRider-v5",
 )
 
 ATARI_TASK_SCHEDULES = ("transition_balanced", "round_robin")
+
+# ALE action enum values use the canonical order 0..17. Games such as Skiing expose only
+# non-fire actions even under ``full_action_space=True``. Map fire variants to the matching
+# legal movement (and FIRE to NOOP) so every task still shares one task-blind 18-output head.
+_CANONICAL_ACTION_FALLBACK = (0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 2, 3, 4, 5, 6, 7, 8, 9)
 
 
 class _EpisodeTaskScheduler:
@@ -52,6 +60,31 @@ class _EpisodeTaskScheduler:
             raise IndexError(f"task_idx out of range: {task_idx}")
         self.task_steps[task_idx] += 1
 
+    def state_dict(self) -> dict[str, Any]:
+        """Return the exact episode-boundary scheduling state."""
+        return {
+            "mode": self.mode,
+            "task_steps": list(self.task_steps),
+            "cursor": self._cursor,
+        }
+
+    def load_state_dict(self, state: dict[str, Any]) -> None:
+        """Restore scheduling counts without restoring any ALE state."""
+        if state.get("mode") != self.mode:
+            raise ValueError(
+                f"Scheduler mode mismatch: stored={state.get('mode')!r} expected={self.mode!r}"
+            )
+        task_steps = [int(value) for value in state.get("task_steps", [])]
+        if len(task_steps) != len(self.task_steps) or any(value < 0 for value in task_steps):
+            raise ValueError(
+                "Scheduler task_steps must be non-negative and match the configured task count"
+            )
+        cursor = int(state.get("cursor", -1))
+        if not 0 <= cursor < len(self.task_steps):
+            raise ValueError(f"Scheduler cursor out of range: {cursor}")
+        self.task_steps = task_steps
+        self._cursor = cursor
+
 
 def _register_ale_envs(gym) -> None:
     """Register ALE namespaces for Gymnasium versions that require explicit setup."""
@@ -77,6 +110,38 @@ def _frame_stack(env, gym, frame_stack: int):
     if hasattr(gym.wrappers, "FrameStack"):
         return gym.wrappers.FrameStack(env, num_stack=frame_stack)
     raise RuntimeError("Gymnasium frame stack wrapper not found")
+
+
+def _canonical_18_action_space(env, gym):
+    """Expose Discrete(18), mapping unsupported canonical actions to legal equivalents."""
+    action_set = getattr(env.unwrapped, "_action_set", None)
+    if action_set is None:
+        raise RuntimeError("ALE environment does not expose its legal action set")
+    legal_to_index = {
+        int(getattr(action, "value", action)): index
+        for index, action in enumerate(action_set)
+    }
+    noop_index = legal_to_index.get(0)
+    if noop_index is None:
+        raise RuntimeError("ALE legal action set is missing NOOP")
+    mapping = tuple(
+        legal_to_index.get(action, legal_to_index.get(fallback, noop_index))
+        for action, fallback in enumerate(_CANONICAL_ACTION_FALLBACK)
+    )
+
+    class _Canonical18Action(gym.ActionWrapper):
+        def __init__(self, wrapped_env) -> None:
+            super().__init__(wrapped_env)
+            self.action_space = gym.spaces.Discrete(18)
+            self.canonical_action_mapping = mapping
+
+        def action(self, action: int) -> int:
+            action_index = int(action)
+            if not 0 <= action_index < 18:
+                raise ValueError(f"Canonical Atari action out of range: {action_index}")
+            return self.canonical_action_mapping[action_index]
+
+    return _Canonical18Action(env)
 
 
 def _flicker(env, gym, flicker_prob: float, seed: int):
@@ -213,6 +278,7 @@ def make_multitask_atari_env(
     frame_skip: int = 1,
     flicker_prob: float = 0.0,
     task_schedule: str = "transition_balanced",
+    scheduler_state: dict[str, Any] | None = None,
 ) -> Callable[[], object]:
     """Return one task-blind Atari env that switches games at episode resets.
 
@@ -238,15 +304,18 @@ def make_multitask_atari_env(
         _register_ale_envs(gym)
 
         component_envs = [
-            make_atari_env(
-                env_id=env_id,
-                seed=seed + task_idx * 10_000,
-                idx=idx,
-                frame_stack=frame_stack,
-                frame_skip=frame_skip,
-                flicker_prob=flicker_prob,
-                full_action_space=True,
-            )()
+            _canonical_18_action_space(
+                make_atari_env(
+                    env_id=env_id,
+                    seed=seed + task_idx * 10_000,
+                    idx=idx,
+                    frame_stack=frame_stack,
+                    frame_skip=frame_skip,
+                    flicker_prob=flicker_prob,
+                    full_action_space=True,
+                )(),
+                gym,
+            )
             for task_idx, env_id in enumerate(env_ids)
         ]
 
@@ -262,6 +331,8 @@ def make_multitask_atari_env(
                     start_idx=idx,
                     mode=task_schedule,
                 )
+                if scheduler_state is not None:
+                    self._scheduler.load_state_dict(scheduler_state)
                 self._active_task_idx: int | None = None
                 self._has_reset = [False] * len(self._envs)
                 self.action_space = self._envs[0].action_space
@@ -322,6 +393,10 @@ def make_multitask_atari_env(
                     return None
                 return self._envs[self._active_task_idx].render()
 
+            def task_scheduler_state(self) -> dict[str, Any]:
+                """Return resumable scheduler metadata for this vector slot."""
+                return self._scheduler.state_dict()
+
             def close(self) -> None:
                 for env in self._envs:
                     env.close()
@@ -340,8 +415,13 @@ def make_multitask_vector_atari_env(
     frame_skip: int = 1,
     flicker_prob: float = 0.0,
     task_schedule: str = "transition_balanced",
+    scheduler_states: tuple[dict[str, Any], ...] | None = None,
 ) -> Any:
     """Create task-blind Atari envs that select tasks only at episode boundaries."""
+    if scheduler_states is not None and len(scheduler_states) != num_envs:
+        raise ValueError(
+            f"scheduler_states has {len(scheduler_states)} entries, expected num_envs={num_envs}"
+        )
     try:
         import gymnasium as gym
     except ImportError as exc:
@@ -359,7 +439,16 @@ def make_multitask_vector_atari_env(
             frame_skip=frame_skip,
             flicker_prob=flicker_prob,
             task_schedule=task_schedule,
+            scheduler_state=None if scheduler_states is None else scheduler_states[idx],
         )
         for idx in range(num_envs)
     ]
     return gym.vector.SyncVectorEnv(env_fns)
+
+
+def multitask_scheduler_states(vector_env: Any) -> tuple[dict[str, Any], ...]:
+    """Return exact per-slot scheduler state from a synchronous multi-task vector env."""
+    component_envs = getattr(vector_env, "envs", None)
+    if component_envs is None:
+        raise TypeError("Multi-task scheduler checkpointing requires SyncVectorEnv.envs")
+    return tuple(env.task_scheduler_state() for env in component_envs)

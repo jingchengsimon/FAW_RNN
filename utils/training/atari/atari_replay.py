@@ -127,6 +127,7 @@ class AtariReplayBuffer:
         self.sampling_mode = sampling_mode
         self.storage_dir = storage_dir
         self._rng = np.random.default_rng(seed)
+        self._remainder_cursor = 0
         self._pos = 0
         self._full = False
 
@@ -224,6 +225,7 @@ class AtariReplayBuffer:
                 "pos": int(self._pos),
                 "full": bool(self._full),
                 "stored_task_counts": self._stored_task_counts.tolist(),
+                "remainder_cursor": self._remainder_cursor,
                 "rng_state": self._rng.bit_generator.state,
                 "storage_dir": self.storage_dir,
             }
@@ -250,6 +252,10 @@ class AtariReplayBuffer:
         self._pos = pos
         self._full = bool(state["full"])
         self._stored_task_counts = stored_task_counts
+        remainder_cursor = int(state.get("remainder_cursor", 0))
+        if not 0 <= remainder_cursor < self.num_tasks:
+            raise ValueError(f"remainder_cursor out of range: {remainder_cursor}")
+        self._remainder_cursor = remainder_cursor
         self._rng.bit_generator.state = state["rng_state"]
 
     @property
@@ -305,8 +311,17 @@ class AtariReplayBuffer:
         missing = np.flatnonzero(self._stored_task_counts < 2)
         if missing.size:
             raise ValueError(f"Not enough replay rows for tasks {missing.tolist()}")
-        repeats = (batch_size + self.num_tasks - 1) // self.num_tasks
-        targets = np.tile(np.arange(self.num_tasks, dtype=np.int16), repeats)[:batch_size]
+        base_count, remainder = divmod(batch_size, self.num_tasks)
+        targets = np.repeat(
+            np.arange(self.num_tasks, dtype=np.int16),
+            base_count,
+        )
+        if remainder:
+            extras = (
+                self._remainder_cursor + np.arange(remainder, dtype=np.int16)
+            ) % self.num_tasks
+            targets = np.concatenate((targets, extras))
+            self._remainder_cursor = (self._remainder_cursor + remainder) % self.num_tasks
         self._rng.shuffle(targets)
         return targets
 

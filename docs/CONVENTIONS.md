@@ -76,7 +76,8 @@ to the model/dataset hyperparameters and epoch summaries. Multi-seed result dire
 encode the seed even though checkpoint stems retain the standard model naming contract.
 
 Atari DQN additionally uses `--frame_skip`, `--frame_stack`, `--task_schedule`,
-`--replay_sampling`, `--amp_dtype`, `--allow_tf32`, `--compile_model`, and `--feedback_mode`.
+`--replay_sampling`, `--learning_starts_per_task`, `--amp_dtype`, `--allow_tf32`,
+`--compile_model`, and `--feedback_mode`.
 
 Atari DQN recovery uses `--checkpoint_interval_steps` (0 disables, and is the default),
 `--resume_from` or `--auto_resume`, `--replay_backing {memory,mmap}`, and
@@ -134,7 +135,7 @@ another internal representation.
 
 | Directory | Contents |
 |---|---|
-| `results/data/rl/atari/{runs,pong_6action,multitask_18action}/` | Atari run bundles; `runs/` is job-local output and the named protocol paths are curated |
+| `results/data/rl/atari/{runs,pong_6action,multitask_18action,5task_18action}/` | Atari run bundles; named protocol paths are curated |
 | `results/data/rl/atari/breakout_4action/<protocol>/<model>/seed<N>/` | curated minimal-four-action Breakout bundles; use explicit `fs`, `stack`, layer, and plain/flicker protocol names |
 | `results/data/rl/minigrid/{runs,...}/` | MiniGrid run bundles |
 | `results/data/clutter/runs/` | Clutter checkpoints and training metrics |
@@ -177,6 +178,10 @@ run bundle.
 Active `pong_6action` results must report `action_space_mode=minimal`, `num_actions=6`, and a
 strict matched frame protocol (`fs1_stack1` or `fs4_stack4`). Active
 `multitask_18action` results must report `action_space_mode=full18` and `num_actions=18`.
+The distinct `5task_18action` namespace is reserved for the fixed
+Pong/Breakout/Assault/Seaquest/Skiing L3 protocol and must never overwrite
+`multitask_18action`. Its `smoke/`, `pilot/`, `parameter_match/`, and `figs/` leaves remain
+separate.
 Do not relabel mismatched or ambiguous historical results. Retain them only when explicitly
 curated into a task-specific `results/data/` path; otherwise remove them through the confirmed
 cleanup workflow.

@@ -151,7 +151,13 @@ Task-blind multi-task collection selects a task only at episode boundaries. The 
 `transition_balanced` scheduler chooses the task with the fewest collected environment steps,
 with cyclic tie-breaking; shorter tasks may therefore run more episodes. Replay remains a
 separate concern: `task_balanced` sampling gives tasks equal update weight without exposing the
-task identifier to the model.
+task identifier to the model. Replay batch remainders rotate across tasks so non-divisible batch
+sizes remain balanced over successive updates. Recoverable runs persist each vector slot's task
+counts and tie-breaking cursor; ALE and recurrent state still resume from a fresh reset. Formal
+multi-task runs may additionally require a per-task collection threshold before the first update.
+The shared output remains 18-dimensional even when ALE exposes fewer legal actions for a game:
+unsupported fire variants map to the corresponding legal non-fire movement, and unsupported
+standalone FIRE maps to NOOP. No task-specific action mask is given to the model.
 
 CUDA autocast, TF32, gradient scaling, compilation configuration, cuDNN benchmarking, and fused
 Adam live in `utils/atari_train_acceleration.py`. The current Amarel PyTorch build compiles ANN

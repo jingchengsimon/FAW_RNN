@@ -23,6 +23,7 @@ cd "$ROOT"
 
 : "${AIM3_RESULTS_PATH:?AIM3_RESULTS_PATH is required}"
 NUM_LAYERS="${PARAM_MATCH_NUM_LAYERS:?PARAM_MATCH_NUM_LAYERS is required}"
+NUM_ACTIONS="${PARAM_MATCH_NUM_ACTIONS:-6}"
 MODELS_SPEC="${PARAM_MATCH_MODELS:?PARAM_MATCH_MODELS is required}"
 OUT_DIR="${PARAM_MATCH_OUT_DIR:?PARAM_MATCH_OUT_DIR is required}"
 REQUIRED_SPEC="${PARAM_MATCH_REQUIRED:-ann:$MODELS_SPEC}"
@@ -40,21 +41,25 @@ conda activate "${AIM3_CONDA_ENV:-aim3_rnn}"
 set -u
 export KMP_DUPLICATE_LIB_OK=TRUE
 
-echo "[$(date -Is)] parameter match layers=$NUM_LAYERS models=${MODELS[*]} out=$OUT_DIR"
-python -m experiments.atari.atari_ssm_param_match \
+echo "[$(date -Is)] parameter match layers=$NUM_LAYERS actions=$NUM_ACTIONS"
+echo "models=${MODELS[*]} out=$OUT_DIR"
+python -m experiments.rl.atari.atari_ssm_param_match \
   --conv_out 3136 \
   --hidden_size 512 \
   --ssm_state_size 128 \
-  --num_actions 6 \
+  --num_actions "$NUM_ACTIONS" \
   --num_layers "$NUM_LAYERS" \
   --models "${MODELS[@]}" \
   --out_dir "$OUT_DIR"
 
-python - "$OUT_DIR/atari_param_match.json" "$NUM_LAYERS" "$REQUIRED_SPEC" <<'PY'
+python - "$OUT_DIR/atari_param_match.json" "$NUM_LAYERS" "$NUM_ACTIONS" "$REQUIRED_SPEC" <<'PY'
 import json
 import sys
 
-path, num_layers, required_spec = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+path = sys.argv[1]
+num_layers = int(sys.argv[2])
+num_actions = int(sys.argv[3])
+required_spec = sys.argv[4]
 with open(path, encoding="utf-8") as handle:
     data = json.load(handle)
 required = set(required_spec.split(":"))
@@ -65,8 +70,8 @@ if data.get("candidate_num_layers") != num_layers:
     raise RuntimeError(
         f"candidate_num_layers={data.get('candidate_num_layers')} != {num_layers}"
     )
-if data.get("num_actions") != 6:
-    raise RuntimeError(f"num_actions={data.get('num_actions')} != 6")
+if data.get("num_actions") != num_actions:
+    raise RuntimeError(f"num_actions={data.get('num_actions')} != {num_actions}")
 PY
 
 touch "$STATUS_DIR/complete.done"
