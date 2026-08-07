@@ -299,6 +299,43 @@ SequenceForward = Callable[
 ]
 
 
+def _make_full_gawf_l3_sequence_forward(
+    model: AtariQNetwork,
+    acceleration: AtariAcceleration,
+) -> SequenceForward:
+    """Wrap a compiled tensor-state L3 GaWF scan in the public state interface."""
+    compiled_scan = acceleration.compile_callable(
+        model.forward_sequence_gawf_l3_static,
+        fullgraph=True,
+    )
+
+    def forward(
+        obs: torch.Tensor,
+        prev_dones: torch.Tensor,
+        state: AtariQNetworkState | None = None,
+        has_internal_reset: bool | None = None,
+    ) -> tuple[torch.Tensor, AtariQNetworkState | None]:
+        del has_internal_reset  # GaWF always preserves its exact stepwise reset path.
+        if state is None:
+            q_values, state0, state1, state2, next_q = compiled_scan(
+                obs, prev_dones, None, None, None, None
+            )
+        else:
+            if not isinstance(state.recurrent, list) or len(state.recurrent) != 3:
+                raise TypeError("compiled L3 GaWF requires three recurrent state tensors")
+            q_values, state0, state1, state2, next_q = compiled_scan(
+                obs,
+                prev_dones,
+                state.recurrent[0],
+                state.recurrent[1],
+                state.recurrent[2],
+                state.prev_q,
+            )
+        return q_values, AtariQNetworkState([state0, state1, state2], next_q)
+
+    return forward
+
+
 def _step_with_sequence_forward(
     forward_sequence: SequenceForward,
     obs: torch.Tensor,
@@ -891,8 +928,8 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         scaler = acceleration.build_grad_scaler()
         if full_gawf_scan_requested:
             logger.info("Compiling complete fixed-shape GaWF recurrent scan with fullgraph=True")
-            model_forward = acceleration.compile_callable(model.forward_sequence, fullgraph=True)
-            target_forward = acceleration.compile_callable(target_net.forward_sequence, fullgraph=True)
+            model_forward = _make_full_gawf_l3_sequence_forward(model, acceleration)
+            target_forward = _make_full_gawf_l3_sequence_forward(target_net, acceleration)
         elif compiled_gawf_cores:
             model_forward = model.forward_sequence
             target_forward = target_net.forward_sequence

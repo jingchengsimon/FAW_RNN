@@ -149,12 +149,34 @@ def main() -> None:
 
     configure_gawf_feedback_acceleration(gate_only, enabled=True, compile_mode="reduce-overhead")
     gate_forward = gate_only.forward_sequence
-    full_forward = torch.compile(
-        full_scan.forward_sequence,
+    full_static_forward = torch.compile(
+        full_scan.forward_sequence_gawf_l3_static,
         mode="reduce-overhead",
         fullgraph=True,
         dynamic=False,
     )
+
+    def full_forward(
+        observations: torch.Tensor,
+        dones: torch.Tensor,
+        state: AtariQNetworkState | None,
+        _has_internal_reset: bool,
+    ) -> tuple[torch.Tensor, AtariQNetworkState]:
+        if state is None:
+            q_values, state0, state1, state2, next_q = full_static_forward(
+                observations, dones, None, None, None, None
+            )
+        else:
+            assert isinstance(state.recurrent, list) and len(state.recurrent) == 3
+            q_values, state0, state1, state2, next_q = full_static_forward(
+                observations,
+                dones,
+                state.recurrent[0],
+                state.recurrent[1],
+                state.recurrent[2],
+                state.prev_q,
+            )
+        return q_values, AtariQNetworkState([state0, state1, state2], next_q)
 
     gate_q, gate_state, gate_grads = _run_with_grad(
         gate_forward, gate_only, obs, prev_dones, args.amp_dtype
