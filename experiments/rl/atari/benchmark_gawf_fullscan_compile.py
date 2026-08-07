@@ -49,6 +49,19 @@ def _flatten_state(state: AtariQNetworkState | None) -> list[torch.Tensor]:
     return [*recurrent_parts, state.prev_q]
 
 
+def _clone_state(state: AtariQNetworkState | None) -> AtariQNetworkState | None:
+    """Clone CUDAGraph-backed outputs before a later invocation can reuse them."""
+    if state is None:
+        return None
+    recurrent = state.recurrent
+    if not isinstance(recurrent, list):
+        raise TypeError("The L3 GaWF benchmark expects a list-valued recurrent state")
+    return AtariQNetworkState(
+        recurrent=[part.detach().float().clone() for part in recurrent],
+        prev_q=state.prev_q.detach().float().clone(),
+    )
+
+
 def _run_with_grad(
     forward: Callable[..., tuple[torch.Tensor, AtariQNetworkState | None]],
     model: AtariQNetwork,
@@ -67,7 +80,7 @@ def _run_with_grad(
         for name, parameter in model.named_parameters()
         if parameter.grad is not None
     }
-    return q_values.detach().float(), state, gradients
+    return q_values.detach().float().clone(), _clone_state(state), gradients
 
 
 def _timed_iteration(
