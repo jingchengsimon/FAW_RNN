@@ -61,13 +61,23 @@ class AtariAcceleration:
         except (AttributeError, TypeError):  # PyTorch 2.0/2.1 compatibility.
             return torch.cuda.amp.GradScaler(enabled=enabled)
 
-    def compile_callable(self, fn: Callable[..., T]) -> Callable[..., T]:
-        """Compile ``fn`` when requested, with an explicit eager fallback."""
+    def compile_callable(self, fn: Callable[..., T], *, fullgraph: bool = False) -> Callable[..., T]:
+        """Compile ``fn`` when requested, with an explicit eager fallback.
+
+        ``fullgraph`` is used by the fixed-shape GaWF sequence scan: it makes a
+        graph break a visible test failure rather than silently leaving a
+        stepwise eager fragment in the measured path.
+        """
 
         if not self.compile_model or self.device.type != "cuda":
             return fn
         try:
-            return torch.compile(fn, mode=self.compile_mode, dynamic=False)
+            return torch.compile(
+                fn,
+                mode=self.compile_mode,
+                fullgraph=fullgraph,
+                dynamic=False,
+            )
         except RuntimeError as exc:
             logging.getLogger(__name__).warning(
                 "torch.compile is unavailable (%s); continuing with the eager callable",

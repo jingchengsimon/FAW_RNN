@@ -183,6 +183,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--compile_model", action="store_true")
     parser.add_argument(
+        "--compile_full_gawf_scan",
+        action="store_true",
+        help=(
+            "Compile the complete fixed-shape GaWF forward_sequence scan with fullgraph=True. "
+            "This preserves the GaWF formula and feedback detach semantics; it is an opt-in "
+            "runtime acceleration mode."
+        ),
+    )
+    parser.add_argument(
         "--compile_mode",
         type=str,
         default="reduce-overhead",
@@ -706,6 +715,8 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
     env_ids, action_space_mode = _resolve_task_config(args)
     if args.num_layers < 1:
         raise ValueError(f"num_layers must be >= 1, got {args.num_layers}")
+    if args.compile_full_gawf_scan and (not args.compile_model or args.model_type != "gawf"):
+        raise ValueError("--compile_full_gawf_scan requires --compile_model and --model_type gawf")
     if args.frame_skip < 1:
         raise ValueError(f"frame_skip must be >= 1, got {args.frame_skip}")
     if args.gawf_feedback_lr_scale <= 0:
@@ -842,10 +853,11 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         target_net.load_state_dict(model.state_dict())
         target_net.eval()
         target_net.requires_grad_(False)
+        full_gawf_scan_requested = bool(args.compile_full_gawf_scan and args.model_type == "gawf")
         compiled_gawf_cores = sum(
             configure_gawf_feedback_acceleration(
                 network,
-                enabled=acceleration.compile_model,
+                enabled=acceleration.compile_model and not full_gawf_scan_requested,
                 compile_mode=acceleration.compile_mode,
             )
             for network in (model, target_net)
@@ -877,7 +889,11 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         optimizer_name = "adam"
         logger.info("Optimizer=%s fused=%s", optimizer_name, use_fused_optimizer)
         scaler = acceleration.build_grad_scaler()
-        if compiled_gawf_cores:
+        if full_gawf_scan_requested:
+            logger.info("Compiling complete fixed-shape GaWF recurrent scan with fullgraph=True")
+            model_forward = acceleration.compile_callable(model.forward_sequence, fullgraph=True)
+            target_forward = acceleration.compile_callable(target_net.forward_sequence, fullgraph=True)
+        elif compiled_gawf_cores:
             model_forward = model.forward_sequence
             target_forward = target_net.forward_sequence
         else:
@@ -1263,6 +1279,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "fused_optimizer": use_fused_optimizer,
             "compile_model": acceleration.compile_model,
             "compile_mode": acceleration.compile_mode,
+            "compile_full_gawf_scan": bool(args.compile_full_gawf_scan),
             "per_env": per_env_metrics,
             # Interruption provenance: a resumed run restarts the env and the
             # recurrent state, so these fields belong in the result, not the log.
