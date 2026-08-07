@@ -114,10 +114,9 @@ def _median_ms(
     return float(torch.tensor(samples).median().item())
 
 
-def _assert_close(reference: torch.Tensor, candidate: torch.Tensor, label: str) -> float:
-    """Validate numerical equivalence and return the maximum absolute difference."""
+def _max_abs_difference(reference: torch.Tensor, candidate: torch.Tensor) -> float:
+    """Return the maximum absolute difference without discarding diagnostic evidence."""
     difference = float((reference - candidate).abs().max().item())
-    torch.testing.assert_close(reference, candidate, rtol=2e-2, atol=2e-2, msg=label)
     return difference
 
 
@@ -197,14 +196,14 @@ def main() -> None:
     full_q, full_state, full_grads = _run_with_grad(
         full_forward, full_scan, obs, prev_dones, args.amp_dtype
     )
-    q_max_abs_diff = _assert_close(gate_q, full_q, "Q-values differ")
+    q_max_abs_diff = _max_abs_difference(gate_q, full_q)
     state_max_abs_diff = max(
-        (_assert_close(left.float(), right.float(), "recurrent state differs")
+        (_max_abs_difference(left.float(), right.float())
          for left, right in zip(_flatten_state(gate_state), _flatten_state(full_state))),
         default=0.0,
     )
     gradient_max_abs_diff = max(
-        (_assert_close(gate_grads[name], full_grads[name], f"gradient differs: {name}")
+        (_max_abs_difference(gate_grads[name], full_grads[name])
          for name in gate_grads),
         default=0.0,
     )
@@ -212,9 +211,9 @@ def main() -> None:
     repeat_q, repeat_state, _ = _run_with_grad(
         full_forward, full_scan, obs, prev_dones, args.amp_dtype
     )
-    repeat_q_max_abs_diff = _assert_close(full_q, repeat_q, "full-scan output is non-deterministic")
+    repeat_q_max_abs_diff = _max_abs_difference(full_q, repeat_q)
     repeat_state_max_abs_diff = max(
-        (_assert_close(left.float(), right.float(), "full-scan state is non-deterministic")
+        (_max_abs_difference(left.float(), right.float())
          for left, right in zip(_flatten_state(full_state), _flatten_state(repeat_state))),
         default=0.0,
     )
@@ -234,11 +233,18 @@ def main() -> None:
         "gradient_max_abs_diff": gradient_max_abs_diff,
         "repeat_q_max_abs_diff": repeat_q_max_abs_diff,
         "repeat_state_max_abs_diff": repeat_state_max_abs_diff,
-        "extra_randomness_detected": False,
+        "equivalence_tolerance": 0.001,
+        "extra_randomness_detected": repeat_q_max_abs_diff > 0.001
+        or repeat_state_max_abs_diff > 0.001,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2, sort_keys=True))
+    max_difference = max(q_max_abs_diff, state_max_abs_diff, gradient_max_abs_diff)
+    if max_difference > 0.001:
+        raise SystemExit(
+            f"full-scan equivalence failed: max_abs_diff={max_difference:.6g} exceeds 0.001"
+        )
 
 
 if __name__ == "__main__":
