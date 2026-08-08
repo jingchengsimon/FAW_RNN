@@ -77,7 +77,7 @@ encode the seed even though checkpoint stems retain the standard model naming co
 
 Atari DQN additionally uses `--frame_skip`, `--frame_stack`, `--task_schedule`,
 `--replay_sampling`, `--learning_starts_per_task`, `--amp_dtype`, `--allow_tf32`,
-`--compile_model`, and `--feedback_mode`.
+`--compile_model`, `--cuda_graph_gawf_online_step`, and `--feedback_mode`.
 
 Atari DQN recovery uses `--checkpoint_interval_steps` (0 disables, and is the default),
 `--resume_from` or `--auto_resume`, `--replay_backing {memory,mmap}`, and

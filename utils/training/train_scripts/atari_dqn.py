@@ -192,6 +192,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--cuda_graph_gawf_online_step",
+        action="store_true",
+        help=(
+            "Replay the fixed B=1,T=1 L3 GaWF online inference path with CUDA Graphs while "
+            "keeping update scans eager. This preserves the eager GPU kernel sequence."
+        ),
+    )
+    parser.add_argument(
         "--compile_mode",
         type=str,
         default="reduce-overhead",
@@ -335,6 +343,95 @@ def _make_full_gawf_l3_sequence_forward(
         # The recurrent state is intentionally fed into that next invocation, so
         # clone at the eager wrapper boundary to retain the exact tensor values
         # while giving the persistent runtime state independent storage.
+        return q_values.clone(), AtariQNetworkState(
+            [state0.clone(), state1.clone(), state2.clone()], next_q.clone()
+        )
+
+    return forward
+
+
+def _make_cuda_graph_gawf_l3_online_forward(
+    model: AtariQNetwork,
+    acceleration: AtariAcceleration,
+) -> SequenceForward:
+    """Capture and replay the eager fixed-shape L3 GaWF online sequence on CUDA.
+
+    This intentionally captures the existing eager operators without Inductor
+    fusion. The static graph is only used for ``B=1,T=1`` action selection;
+    replay updates retain the original eager forward/backward implementation.
+    """
+    if acceleration.device.type != "cuda" or acceleration.amp_dtype is None:
+        raise ValueError("CUDA-graph GaWF online stepping requires CUDA autocast")
+
+    graph: torch.cuda.CUDAGraph | None = None
+    static_obs: torch.Tensor | None = None
+    static_dones: torch.Tensor | None = None
+    static_state: list[torch.Tensor] | None = None
+    static_prev_q: torch.Tensor | None = None
+    static_outputs: (
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor] | None
+    ) = None
+
+    def forward(
+        obs: torch.Tensor,
+        prev_dones: torch.Tensor,
+        state: AtariQNetworkState | None = None,
+        has_internal_reset: bool | None = None,
+    ) -> tuple[torch.Tensor, AtariQNetworkState]:
+        nonlocal graph, static_obs, static_dones, static_state, static_prev_q, static_outputs
+        del has_internal_reset
+        if obs.shape[0] != 1 or obs.shape[1] != 1:
+            raise ValueError("CUDA-graph GaWF online path requires fixed B=1,T=1 inputs")
+        if state is None:
+            initial = model.initial_state(
+                obs.shape[0], obs.device, dtype=acceleration.amp_dtype
+            )
+            if initial is None or not isinstance(initial.recurrent, list):
+                raise TypeError("CUDA-graph L3 GaWF requires list-valued recurrent state")
+            state = initial
+        if not isinstance(state.recurrent, list) or len(state.recurrent) != 3:
+            raise TypeError("CUDA-graph L3 GaWF requires three recurrent state tensors")
+
+        if graph is None:
+            static_obs = torch.empty_like(obs)
+            static_dones = torch.empty_like(prev_dones)
+            static_state = [torch.empty_like(part) for part in state.recurrent]
+            static_prev_q = torch.empty_like(state.prev_q)
+            static_obs.copy_(obs)
+            static_dones.copy_(prev_dones)
+            for destination, source in zip(static_state, state.recurrent):
+                destination.copy_(source)
+            static_prev_q.copy_(state.prev_q)
+            for _ in range(3):
+                model.forward_sequence_gawf_l3_static(
+                    static_obs,
+                    static_dones,
+                    static_state[0],
+                    static_state[1],
+                    static_state[2],
+                    static_prev_q,
+                )
+            torch.cuda.synchronize(obs.device)
+            graph = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(graph):
+                static_outputs = model.forward_sequence_gawf_l3_static(
+                    static_obs,
+                    static_dones,
+                    static_state[0],
+                    static_state[1],
+                    static_state[2],
+                    static_prev_q,
+                )
+
+        assert static_obs is not None and static_dones is not None
+        assert static_state is not None and static_prev_q is not None and static_outputs is not None
+        static_obs.copy_(obs)
+        static_dones.copy_(prev_dones)
+        for destination, source in zip(static_state, state.recurrent):
+            destination.copy_(source)
+        static_prev_q.copy_(state.prev_q)
+        graph.replay()
+        q_values, state0, state1, state2, next_q = static_outputs
         return q_values.clone(), AtariQNetworkState(
             [state0.clone(), state1.clone(), state2.clone()], next_q.clone()
         )
@@ -760,6 +857,12 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError(f"num_layers must be >= 1, got {args.num_layers}")
     if args.compile_full_gawf_scan and (not args.compile_model or args.model_type != "gawf"):
         raise ValueError("--compile_full_gawf_scan requires --compile_model and --model_type gawf")
+    if args.cuda_graph_gawf_online_step and (
+        args.model_type != "gawf" or args.num_layers != 3 or args.feedback_mode != "qvalues"
+    ):
+        raise ValueError("--cuda_graph_gawf_online_step requires L3 GaWF qvalues feedback")
+    if args.cuda_graph_gawf_online_step and args.compile_full_gawf_scan:
+        raise ValueError("CUDA-graph eager online stepping cannot be combined with full-scan compile")
     if args.frame_skip < 1:
         raise ValueError(f"frame_skip must be >= 1, got {args.frame_skip}")
     if args.gawf_feedback_lr_scale <= 0:
@@ -942,6 +1045,10 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         else:
             model_forward = acceleration.compile_callable(model.forward_sequence)
             target_forward = acceleration.compile_callable(target_net.forward_sequence)
+        online_model_forward = model_forward
+        if args.cuda_graph_gawf_online_step:
+            logger.info("Capturing eager B=1,T=1 L3 GaWF online inference with CUDA Graphs")
+            online_model_forward = _make_cuda_graph_gawf_l3_online_forward(model, acceleration)
 
         buffer = AtariReplayBuffer(
             buffer_size=args.buffer_size,
@@ -1082,7 +1189,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             # coin picks a random action.
             with torch.no_grad(), acceleration.autocast():
                 q_values, state = _step_with_sequence_forward(
-                    model_forward, next_obs, next_done, state
+                    online_model_forward, next_obs, next_done, state
                 )
             greedy_action = q_values.argmax(dim=-1).cpu().numpy()
             random_action = np.random.randint(0, num_actions, size=args.num_envs)
@@ -1323,6 +1430,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "compile_model": acceleration.compile_model,
             "compile_mode": acceleration.compile_mode,
             "compile_full_gawf_scan": bool(args.compile_full_gawf_scan),
+            "cuda_graph_gawf_online_step": bool(args.cuda_graph_gawf_online_step),
             "per_env": per_env_metrics,
             # Interruption provenance: a resumed run restarts the env and the
             # recurrent state, so these fields belong in the result, not the log.
