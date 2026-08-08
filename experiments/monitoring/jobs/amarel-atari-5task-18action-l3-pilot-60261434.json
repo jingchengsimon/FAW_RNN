@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "id": "amarel-atari-5task-18action-l3-pilot-60261434",
+  "description": "Five-model x three-seed x 5M pilot for fixed five-task full18 Atari L3 protocol",
+  "host": "amarel",
+  "status": "queued",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "60261434"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_pilot/60261434_*.out",
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_pilot/60261434_*.err"
+    ],
+    "status_dir": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_pilot/status",
+    "result_paths": [
+      "/scratch/js3269/results/data/rl/atari/5task_18action/pilot/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_pilot_*"
+    ]
+  },
+  "tracking": {
+    "expected_units": 15,
+    "auto_complete": false,
+    "result_globs": [
+      "/scratch/js3269/results/data/rl/atari/5task_18action/pilot/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_pilot_*"
+    ],
+    "done_glob": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_pilot/status/*.done",
+    "fail_glob": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_pilot/status/*.fail",
+    "defaults": {
+      "expected": {
+        "global_step": 5000000
+      },
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1
+    },
+    "units": []
+  },
+  "notes": [
+    "Source commit 6db6c6d; afterok:60261433; array throttle 4; LR decay at 1M global steps"
+  ],
+  "created_at": "2026-08-05T04:42:38+00:00",
+  "updated_at": "2026-08-05T04:42:38+00:00"
+}

@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "id": "amarel-atari-breakout-l3-10seed-lrdecay-retry-60263230",
+  "description": "Replacement of tasks 19-49 after the prior post-run validator and moved parameter-table path were fixed; 31 recoverable L3 1M-replay LR-decay Breakout units, array throttle 10",
+  "host": "amarel",
+  "status": "queued",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "60263230"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/rl/atari/amarel/artifacts/atari_breakout_fs4_stack4_l3_10seed_lrdecay/60263230_*.out",
+      "experiments/rl/atari/amarel/artifacts/atari_breakout_fs4_stack4_l3_10seed_lrdecay/60263230_*.err"
+    ],
+    "status_dir": "experiments/rl/atari/amarel/artifacts/atari_breakout_fs4_stack4_l3_10seed_lrdecay/status",
+    "result_paths": [
+      "/scratch/js3269/results/train_data/fs4_stack4_l3_10seed_lrdecay/atari_dqn_breakout_fs4_stack4_l3_10seed_lrdecay_*"
+    ]
+  },
+  "tracking": {
+    "expected_units": 31,
+    "auto_complete": false,
+    "result_globs": [
+      "/scratch/js3269/results/train_data/fs4_stack4_l3_10seed_lrdecay/atari_dqn_breakout_fs4_stack4_l3_10seed_lrdecay_*"
+    ],
+    "done_glob": "*.done",
+    "fail_glob": "*.fail",
+    "defaults": {
+      "expected": {
+        "global_step": 3000000
+      },
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1
+    },
+    "units": []
+  },
+  "notes": [
+    "Only task IDs 19-49 were resubmitted; task IDs 0-18 reached 3M steps in job 60236131 and remain outside this replacement array."
+  ],
+  "created_at": "2026-08-05T15:48:11+00:00",
+  "updated_at": "2026-08-05T15:48:11+00:00"
+}

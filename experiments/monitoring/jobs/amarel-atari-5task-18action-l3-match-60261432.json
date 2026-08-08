@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "id": "amarel-atari-5task-18action-l3-match-60261432",
+  "description": "Full18 L3 parameter match for five-task Atari pilot",
+  "host": "amarel",
+  "status": "queued",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "60261432"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_match/60261432.*"
+    ],
+    "status_dir": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_match/status",
+    "result_paths": [
+      "/scratch/js3269/results/data/rl/atari/5task_18action/parameter_match/l3_full18/atari_param_match.json"
+    ]
+  },
+  "tracking": {
+    "expected_units": 1,
+    "auto_complete": false,
+    "result_globs": [
+      "/scratch/js3269/results/data/rl/atari/5task_18action/parameter_match/l3_full18/atari_param_match.json"
+    ],
+    "done_glob": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_match/status/*.done",
+    "fail_glob": null,
+    "defaults": {
+      "expected": {}
+    },
+    "units": []
+  },
+  "notes": [
+    "Source commit 6db6c6d; compute-node parameter match; num_actions=18; candidate_num_layers=3"
+  ],
+  "created_at": "2026-08-05T04:42:38+00:00",
+  "updated_at": "2026-08-05T04:42:38+00:00"
+}

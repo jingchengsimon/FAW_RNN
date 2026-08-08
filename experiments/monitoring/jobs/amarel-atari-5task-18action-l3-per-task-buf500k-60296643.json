@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "id": "amarel-atari-5task-18action-l3-per-task-buf500k-60296643",
+  "description": "Five-model x three-seed x 5M five-task full18 Atari L3 pilot; 0.5M independent replay per task; no smoke",
+  "host": "amarel",
+  "status": "queued",
+  "remote_root": "/scratch/js3269/benchmark_sources/aim3_gawf_rnn_5task_lrpertask_a546a2e",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "60296643"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_per_task_buf500k/pilot/60296643_*.out"
+    ],
+    "status_dir": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_per_task_buf500k/status",
+    "result_paths": [
+      "/scratch/js3269/results/data/rl/atari/5task_18action/per_task_buf500k/pilot/atari_dqn_5task_fs4_stack4_l3_buf0p5m_lrdecay1m_pilot_*"
+    ]
+  },
+  "tracking": {
+    "expected_units": 15,
+    "auto_complete": false,
+    "result_globs": [
+      "/scratch/js3269/results/data/rl/atari/5task_18action/per_task_buf500k/pilot/atari_dqn_5task_fs4_stack4_l3_buf0p5m_lrdecay1m_pilot_*"
+    ],
+    "done_glob": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_per_task_buf500k/status/*.done",
+    "fail_glob": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_per_task_buf500k/status/*.fail",
+    "defaults": {
+      "expected": {
+        "global_step": 5000000
+      },
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1
+    },
+    "units": []
+  },
+  "notes": [
+    "Array 0-14%5; ordinals 0-2 map to GaWF seeds 1-3; no smoke/dependency; per-task mmap replay 500000; LR decay when min task steps reaches 1M; REQUIRED_GIB=66."
+  ],
+  "created_at": "2026-08-08T15:56:27+00:00",
+  "updated_at": "2026-08-08T15:56:27+00:00"
+}

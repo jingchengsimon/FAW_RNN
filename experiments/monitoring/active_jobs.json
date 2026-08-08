@@ -8,6 +8,163 @@
   ],
   "jobs": [
     {
+      "id": "amarel-atari-5task-18action-l3-per-task-buf500k-60296643",
+      "description": "Five-model x three-seed x 5M five-task full18 Atari L3 pilot; 0.5M independent replay per task; no smoke",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "60296643"
+      ],
+      "run_ids": [],
+      "remote_root": "/scratch/js3269/benchmark_sources/aim3_gawf_rnn_5task_lrpertask_a546a2e",
+      "updated_at": "2026-08-08T15:56:27+00:00"
+    },
+    {
+      "id": "sjc-atari-breakout-l3-gru7-gru9-repair-20260808",
+      "description": "Direct two-GPU repair of strict Breakout L3 1M-replay LR-decay GRU seeds 7 and 9, reproducing Amarel 60236131 protocol",
+      "host": "sjc-remote",
+      "status": "running",
+      "job_ids": [],
+      "run_ids": [
+        "3436453",
+        "3436454"
+      ],
+      "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+      "updated_at": "2026-08-08T10:19:27-04:00"
+    },
+    {
+      "id": "amarel-atari-gawf-fullscan-compile-60289041",
+      "description": "Isolated L3 GaWF full-scan torch.compile benchmark: B4/T8 and formal-update B8/T16",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "60289041"
+      ],
+      "run_ids": [],
+      "remote_root": "/scratch/js3269/benchmark_sources/aim3_gawf_rnn_5task_fullscan",
+      "updated_at": "2026-08-07T17:44:03Z"
+    },
+    {
+      "id": "amarel-atari-breakout-l3-10seed-lrdecay-retry-60263230",
+      "description": "Replacement of tasks 19-49 after the prior post-run validator and moved parameter-table path were fixed; 31 recoverable L3 1M-replay LR-decay Breakout units, array throttle 10",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "60263230"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-08-05T15:48:11+00:00"
+    },
+    {
+      "id": "amarel-atari-5task-18action-l3-smoke-60261433",
+      "description": "Five-model smoke gate for fixed five-task full18 Atari L3 protocol",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "60261433"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-08-05T04:42:38+00:00"
+    },
+    {
+      "id": "amarel-atari-5task-18action-l3-pilot-60261434",
+      "description": "Five-model x three-seed x 5M pilot for fixed five-task full18 Atari L3 protocol",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "60261434"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-08-05T04:42:38+00:00"
+    },
+    {
+      "id": "amarel-atari-5task-18action-l3-match-60261432",
+      "description": "Full18 L3 parameter match for five-task Atari pilot",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "60261432"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-08-05T04:42:38+00:00"
+    },
+    {
+      "id": "amarel-atari-breakout-gawf-lrbuf-l3l4-59964950",
+      "description": "Breakout fs4/stack4 GaWF L3/L4 LR-decay and 1M/2M replay-buffer sweep",
+      "host": "amarel",
+      "status": "running",
+      "job_ids": [
+        "59964950"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-08-02T20:22:27-04:00"
+    },
+    {
+      "id": "amarel-dssk-scratch-attribution-59942108",
+      "description": "Four-hour, read-only, race-tolerant attribution of visible DSSK scratch usage and deleted-but-open files on gpuk011",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "59942108"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-08-02T02:43:18+00:00"
+    },
+    {
+      "id": "amarel-atari-breakout-l3-gawf-lrbuf-smoke-59941877",
+      "description": "Five L3 GaWF full-replay smoke tasks for LR-decay and 1M/2M buffer configurations; L4 excluded",
+      "host": "amarel",
+      "status": "running",
+      "job_ids": [
+        "59941877"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-08-02T02:24:21+00:00"
+    },
+    {
+      "id": "amarel-atari-breakout-gawf-lrbuf-l3l4-retry-59941053",
+      "description": "Retry of the unified L3/L4 GaWF LR-decay and replay-buffer sweep after scratch quota cleanup",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "59941053"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-08-02T01:30:34+00:00"
+    },
+    {
+      "id": "amarel-clutter-multiseed-figs-cleanup-smoke-59941855",
+      "description": "Clutter GaWF Figure 3/4/6/7 seed01 smoke with post-decomposition Fig4 raw-source cleanup",
+      "host": "amarel",
+      "status": "running",
+      "job_ids": [
+        "59941855"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-08-01T20:10:00+00:00"
+    },
+    {
+      "id": "amarel-clutter-multiseed-figs-smoke-59939848",
+      "description": "Clutter GaWF Figure 3/4/6/7 seed01 full-pipeline smoke after compute-node Git fallback repair",
+      "host": "amarel",
+      "status": "running",
+      "job_ids": [
+        "59939848"
+      ],
+      "run_ids": [],
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-08-01T19:00:00+00:00"
+    },
+    {
       "id": "amarel-atari-breakout-fs4-stack4-l5-repair-59750808",
       "description": "Repaired L5 plain Breakout fs4/stack4 chain: parameter match, smoke, then 15 recoverable 3M tasks",
       "host": "amarel",

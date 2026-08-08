@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "id": "amarel-atari-breakout-l3-10seed-lrdecay-smoke-60228795",
+  "description": "Five-model smoke gate for L3 1M-replay LR-decay Breakout 10-seed array",
+  "host": "amarel",
+  "status": "completed",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "60228795"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/rl/atari/amarel/artifacts/atari_breakout_fs4_stack4_l3_10seed_lrdecay_smoke/60228795_*.out",
+      "experiments/rl/atari/amarel/artifacts/atari_breakout_fs4_stack4_l3_10seed_lrdecay_smoke/60228795_*.err"
+    ],
+    "status_dir": null,
+    "result_paths": [
+      "/scratch/js3269/results/train_data/fs4_stack4_l3_10seed_lrdecay_smoke/atari_dqn_breakout_fs4_stack4_l3_10seed_lrdecay_smoke_*"
+    ]
+  },
+  "tracking": {
+    "expected_units": 5,
+    "auto_complete": false,
+    "result_globs": [
+      "/scratch/js3269/results/train_data/fs4_stack4_l3_10seed_lrdecay_smoke/atari_dqn_breakout_fs4_stack4_l3_10seed_lrdecay_smoke_*"
+    ],
+    "done_glob": null,
+    "fail_glob": null,
+    "defaults": {
+      "expected": {}
+    },
+    "units": []
+  },
+  "notes": [],
+  "created_at": "2026-08-04T16:17:35+00:00",
+  "updated_at": "2026-08-04T16:33:49+00:00",
+  "completed_at": "2026-08-04T16:33:49+00:00"
+}

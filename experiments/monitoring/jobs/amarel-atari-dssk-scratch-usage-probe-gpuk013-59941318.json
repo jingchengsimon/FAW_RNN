@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "id": "amarel-atari-dssk-scratch-usage-probe-gpuk013-59941318",
+  "description": "Directed DSSK scratch quota probe on gpuk013; quota collected but directory scan timed out",
+  "host": "amarel",
+  "status": "failed",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "59941318"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/rl/atari/amarel/artifacts/atari_scratch_usage_probe/59941318-gpuk013.out"
+    ],
+    "status_dir": null,
+    "result_paths": []
+  },
+  "tracking": {
+    "expected_units": 1,
+    "auto_complete": false,
+    "result_globs": [],
+    "done_glob": null,
+    "fail_glob": null,
+    "defaults": {
+      "expected": {}
+    },
+    "units": []
+  },
+  "notes": [
+    "DSSK quota measured 1,537,902,432 KiB used against 1,073,741,824 KiB soft quota; recursive du scan timed out after 20 minutes."
+  ],
+  "created_at": "2026-08-02T02:16:43+00:00",
+  "updated_at": "2026-08-02T02:16:43+00:00"
+}

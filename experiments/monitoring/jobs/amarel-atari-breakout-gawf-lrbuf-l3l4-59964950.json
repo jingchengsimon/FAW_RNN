@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "id": "amarel-atari-breakout-gawf-lrbuf-l3l4-59964950",
+  "description": "Breakout fs4/stack4 GaWF L3/L4 LR-decay and 1M/2M replay-buffer sweep",
+  "host": "amarel",
+  "status": "running",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "59964950"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/rl/atari/amarel/artifacts/atari_breakout_gawf_lr_buffer_sweep/59964950_*.out",
+      "experiments/rl/atari/amarel/artifacts/atari_breakout_gawf_lr_buffer_sweep/59964950_*.err"
+    ],
+    "status_dir": null,
+    "result_paths": [
+      "/scratch/js3269/results/train_data/diagnostics/breakout_gawf_lrdecay_buffer_sweep/atari_dqn_breakout_fs4_stack4_l*_lrdecay1m_buf*m_gawf_seed*"
+    ]
+  },
+  "tracking": {
+    "expected_units": 11,
+    "auto_complete": false,
+    "result_globs": [
+      "/scratch/js3269/results/train_data/diagnostics/breakout_gawf_lrdecay_buffer_sweep/atari_dqn_breakout_fs4_stack4_l*_lrdecay1m_buf*m_gawf_seed*"
+    ],
+    "done_glob": null,
+    "fail_glob": null,
+    "defaults": {
+      "expected": {
+        "global_step": 3000000
+      },
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1
+    },
+    "units": []
+  },
+  "notes": [
+    "Task 0-4 are L3 hidden_size=605: 1M seeds 1/3 and 2M seeds 1/2/3. Task 5-10 are L4 hidden_size=527: 1M and 2M seeds 1/2/3.",
+    "All tasks use Breakout minimal action space, fs4/stack4, GaWF qvalues feedback, 3M steps, checkpoint every 50k steps, and LR 1e-4 through 1M then 1e-5.",
+    "Array throttle was raised from 4 to 11 at the user's request. All 11 tasks were observed RUNNING on gpuk018, gpu036, gpu040, gpu042, gpu043, and gpu045. Each task requests one Ada Lovelace GPU, 16 CPUs, 64G memory, AIM3_NUM_WORKERS=12, and AIM3_PIN_MEMORY=1.",
+    "Submitted only after five full-replay L3 smoke tasks passed DSSK quota guard and completed 25k steps."
+  ],
+  "created_at": "2026-08-02T20:19:30-04:00",
+  "updated_at": "2026-08-02T20:22:27-04:00"
+}

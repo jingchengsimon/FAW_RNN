@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "id": "amarel-clutter-multiseed-figs-cleanup-smoke-59941855",
+  "description": "Clutter GaWF Figure 3/4/6/7 seed01 smoke with post-decomposition Fig4 raw-source cleanup",
+  "host": "amarel",
+  "status": "running",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": ["59941855"],
+    "run_ids": [],
+    "tmux_session": null,
+    "process_patterns": [],
+    "collect_gpu": false
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/clutter/amarel/artifacts/multiseed_figs_1_10/59941855_1.*"
+    ],
+    "status_dir": null,
+    "result_paths": [
+      "/scratch/js3269/results/data/analysis/multiseed_figs_1_10_cleanup_smoke_seed01/seed01"
+    ]
+  },
+  "tracking": {
+    "expected_units": 1,
+    "auto_complete": false,
+    "validation_mode": "strict",
+    "units": []
+  },
+  "notes": [
+    "Runs on a Slurm compute node and exercises Fig3, Fig4, Fig6, and Fig7 for seed01.",
+    "After successful Fig4 decomposition, only the four raw Fig4 source arrays are physically deleted; final decomposition data and copied source manifests remain.",
+    "A successful .complete marker plus absent raw source arrays is required before the sequential 1-10 array is submitted."
+  ],
+  "created_at": "2026-08-01T20:10:00+00:00",
+  "updated_at": "2026-08-01T20:10:00+00:00"
+}

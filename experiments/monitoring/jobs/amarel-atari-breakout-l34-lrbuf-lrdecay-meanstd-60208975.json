@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "id": "amarel-atari-breakout-l34-lrbuf-lrdecay-meanstd-60208975",
+  "description": "Compute-node rendering of twelve completed L3/L4 Breakout GaWF LR-decay cells as mean-plus-sample-SD curves; fixed-LR baseline excluded",
+  "host": "amarel",
+  "status": "completed",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "60208975"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/rl/atari/amarel/artifacts/atari_breakout_gawf_lr_buffer_completed10_curves/60208975.out",
+      "experiments/rl/atari/amarel/artifacts/atari_breakout_gawf_lr_buffer_completed10_curves/60208975.err"
+    ],
+    "status_dir": null,
+    "result_paths": [
+      "/scratch/js3269/results/figs/rl/atari/breakout_4action/fs4_stack4_l3_3seed/lrdecay_l3_l4_mean_std.png"
+    ]
+  },
+  "tracking": {
+    "expected_units": 1,
+    "auto_complete": false,
+    "result_globs": [
+      "/scratch/js3269/results/figs/rl/atari/breakout_4action/fs4_stack4_l3_3seed/lrdecay_l3_l4_mean_std.png"
+    ],
+    "done_glob": null,
+    "fail_glob": null,
+    "defaults": {
+      "expected": {}
+    },
+    "units": []
+  },
+  "notes": [],
+  "created_at": "2026-08-04T15:18:58+00:00",
+  "updated_at": "2026-08-04T15:20:40+00:00",
+  "completed_at": "2026-08-04T15:20:40+00:00"
+}

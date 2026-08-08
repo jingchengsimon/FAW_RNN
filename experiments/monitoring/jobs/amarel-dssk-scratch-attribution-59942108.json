@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "id": "amarel-dssk-scratch-attribution-59942108",
+  "description": "Four-hour, read-only, race-tolerant attribution of visible DSSK scratch usage and deleted-but-open files on gpuk011",
+  "host": "amarel",
+  "status": "queued",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "59942108"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/rl/atari/amarel/artifacts/atari_dssk_scratch_attribution_probe/59942108-gpuk011.out"
+    ],
+    "status_dir": null,
+    "result_paths": []
+  },
+  "tracking": {
+    "expected_units": 1,
+    "auto_complete": false,
+    "result_globs": [],
+    "done_glob": null,
+    "fail_glob": null,
+    "defaults": {
+      "expected": {}
+    },
+    "units": []
+  },
+  "notes": [
+    "No files are modified. The probe reports DSSK quota, top-level visible usage under /scratch/js3269, results and train_data, and node-local deleted-but-open files."
+  ],
+  "created_at": "2026-08-02T02:43:18+00:00",
+  "updated_at": "2026-08-02T02:43:18+00:00"
+}
