@@ -442,3 +442,202 @@ class AtariReplayBuffer:
             ),
             has_internal_reset=has_internal_reset,
         )
+
+
+class PerTaskAtariReplayBuffer:
+    """Keep an independent circular replay partition for every Atari task.
+
+    ``buffer_size_per_task`` is the capacity of each partition. Collection can
+    still be transition-balanced, while sampling and eviction remain task-local.
+    """
+
+    def __init__(
+        self,
+        buffer_size_per_task: int,
+        num_envs: int,
+        obs_shape: tuple[int, int, int],
+        device: torch.device | str,
+        seed: int,
+        num_tasks: int,
+        sampling_mode: str = "task_balanced",
+        storage_dir: str | None = None,
+        reuse_existing: bool = False,
+    ) -> None:
+        if num_tasks < 2:
+            raise ValueError("Per-task replay requires at least two tasks")
+        if num_envs < 1:
+            raise ValueError("num_envs must be positive")
+        if sampling_mode not in REPLAY_SAMPLING_MODES:
+            raise ValueError(f"Unsupported replay sampling mode: {sampling_mode}")
+        self.num_envs = int(num_envs)
+        self.num_tasks = int(num_tasks)
+        self.sampling_mode = sampling_mode
+        self.buffer_size_per_task = int(buffer_size_per_task)
+        self.storage_dir = storage_dir
+        self._rng = np.random.default_rng(seed)
+        self._remainder_cursor = 0
+        self._buffers = []
+        for task_id in range(self.num_tasks):
+            task_dir = (
+                os.path.join(storage_dir, f"task_{task_id}")
+                if storage_dir is not None
+                else None
+            )
+            self._buffers.append(
+                AtariReplayBuffer(
+                    buffer_size=self.buffer_size_per_task,
+                    num_envs=1,
+                    obs_shape=obs_shape,
+                    device=device,
+                    seed=seed + task_id,
+                    num_tasks=1,
+                    sampling_mode="global_uniform",
+                    storage_dir=task_dir,
+                    reuse_existing=reuse_existing,
+                )
+            )
+
+    @property
+    def size(self) -> int:
+        """Return the total number of stored transitions across partitions."""
+        return sum(buffer.size for buffer in self._buffers)
+
+    def _sample_counts(self, batch_size: int) -> np.ndarray:
+        """Allocate a batch across tasks, rotating any remainder fairly."""
+        if batch_size < self.num_tasks:
+            raise ValueError(
+                f"batch_size={batch_size} must be at least num_tasks={self.num_tasks}"
+            )
+        base, remainder = divmod(batch_size, self.num_tasks)
+        counts = np.full(self.num_tasks, base, dtype=np.int64)
+        if remainder:
+            task_ids = (
+                self._remainder_cursor + np.arange(remainder, dtype=np.int64)
+            ) % self.num_tasks
+            counts += np.bincount(task_ids, minlength=self.num_tasks)
+            self._remainder_cursor = (self._remainder_cursor + remainder) % self.num_tasks
+        return counts
+
+    def add(
+        self,
+        obs: np.ndarray,
+        actions: np.ndarray,
+        rewards: np.ndarray,
+        dones: np.ndarray,
+        resets: np.ndarray,
+        task_ids: np.ndarray,
+    ) -> None:
+        """Route each vector-environment transition to its task partition."""
+        task_ids = np.asarray(task_ids).reshape(self.num_envs).astype(np.int16)
+        for task_id in range(self.num_tasks):
+            slots = np.flatnonzero(task_ids == task_id)
+            for slot in slots:
+                self._buffers[task_id].add(
+                    obs=np.asarray(obs)[slot : slot + 1],
+                    actions=np.asarray(actions)[slot : slot + 1],
+                    rewards=np.asarray(rewards)[slot : slot + 1],
+                    dones=np.asarray(dones)[slot : slot + 1],
+                    resets=np.asarray(resets)[slot : slot + 1],
+                    task_ids=np.zeros(1, dtype=np.int16),
+                )
+
+    def sample_transitions(self, batch_size: int) -> TransitionBatch:
+        """Sample an equal task mixture from independent transition buffers."""
+        counts = self._sample_counts(batch_size)
+        batches = []
+        for task_id, count in enumerate(counts):
+            batch = self._buffers[task_id].sample_transitions(int(count))
+            batches.append(
+                TransitionBatch(
+                    obs=batch.obs,
+                    actions=batch.actions,
+                    rewards=batch.rewards,
+                    dones=batch.dones,
+                    next_obs=batch.next_obs,
+                    task_ids=torch.full_like(batch.task_ids, task_id),
+                )
+            )
+        return TransitionBatch(
+            obs=torch.cat([batch.obs for batch in batches]),
+            actions=torch.cat([batch.actions for batch in batches]),
+            rewards=torch.cat([batch.rewards for batch in batches]),
+            dones=torch.cat([batch.dones for batch in batches]),
+            next_obs=torch.cat([batch.next_obs for batch in batches]),
+            task_ids=torch.cat([batch.task_ids for batch in batches]),
+        )
+
+    def sample_sequences(self, batch_size: int, seq_len: int) -> SequenceBatch:
+        """Sample task-pure recurrent windows from independent partitions."""
+        counts = self._sample_counts(batch_size)
+        batches = []
+        for task_id, count in enumerate(counts):
+            batch = self._buffers[task_id].sample_sequences(int(count), seq_len)
+            batches.append(
+                SequenceBatch(
+                    obs=batch.obs,
+                    actions=batch.actions,
+                    rewards=batch.rewards,
+                    dones=batch.dones,
+                    prev_dones=batch.prev_dones,
+                    loss_mask=batch.loss_mask,
+                    task_ids=torch.full_like(batch.task_ids, task_id),
+                    has_internal_reset=batch.has_internal_reset,
+                )
+            )
+        return SequenceBatch(
+            obs=torch.cat([batch.obs for batch in batches]),
+            actions=torch.cat([batch.actions for batch in batches]),
+            rewards=torch.cat([batch.rewards for batch in batches]),
+            dones=torch.cat([batch.dones for batch in batches]),
+            prev_dones=torch.cat([batch.prev_dones for batch in batches]),
+            loss_mask=torch.cat([batch.loss_mask for batch in batches]),
+            task_ids=torch.cat([batch.task_ids for batch in batches]),
+            has_internal_reset=any(batch.has_internal_reset for batch in batches),
+        )
+
+    def flush(self) -> None:
+        """Flush every task partition before checkpointing."""
+        for buffer in self._buffers:
+            buffer.flush()
+
+    def close(self) -> None:
+        """Close every task partition before successful replay reclamation."""
+        for buffer in self._buffers:
+            buffer.close()
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return independent replay positions and sampler state."""
+        return {
+            "format_version": REPLAY_STATE_FORMAT_VERSION,
+            "replay_layout": "per_task",
+            "buffer_size_per_task": self.buffer_size_per_task,
+            "num_envs": self.num_envs,
+            "num_tasks": self.num_tasks,
+            "sampling_mode": self.sampling_mode,
+            "remainder_cursor": self._remainder_cursor,
+            "rng_state": self._rng.bit_generator.state,
+            "task_states": [buffer.state_dict() for buffer in self._buffers],
+        }
+
+    def load_state_dict(self, state: dict[str, Any]) -> None:
+        """Restore all task partitions and the balanced-sampling cursor."""
+        expected = {
+            "replay_layout": "per_task",
+            "buffer_size_per_task": self.buffer_size_per_task,
+            "num_envs": self.num_envs,
+            "num_tasks": self.num_tasks,
+            "sampling_mode": self.sampling_mode,
+        }
+        for key, value in expected.items():
+            if state.get(key) != value:
+                raise ValueError(
+                    f"Per-task replay mismatch for {key}: "
+                    f"stored={state.get(key)!r} expected={value!r}"
+                )
+        task_states = state.get("task_states", [])
+        if len(task_states) != self.num_tasks:
+            raise ValueError("Checkpoint has the wrong number of replay partitions")
+        for buffer, task_state in zip(self._buffers, task_states):
+            buffer.load_state_dict(task_state)
+        self._remainder_cursor = int(state.get("remainder_cursor", 0)) % self.num_tasks
+        self._rng.bit_generator.state = state["rng_state"]

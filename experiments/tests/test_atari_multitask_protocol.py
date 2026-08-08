@@ -7,7 +7,7 @@ from argparse import Namespace
 import numpy as np
 
 from utils.training.atari.atari_envs import _EpisodeTaskScheduler
-from utils.training.atari.atari_replay import AtariReplayBuffer
+from utils.training.atari.atari_replay import AtariReplayBuffer, PerTaskAtariReplayBuffer
 from utils.training.train_scripts.atari_dqn import _learning_ready
 
 
@@ -63,6 +63,33 @@ def test_old_replay_state_defaults_remainder_cursor_to_zero() -> None:
     restored.load_state_dict(state)
 
     assert restored.state_dict()["remainder_cursor"] == 0
+
+
+def test_per_task_replay_keeps_independent_partitions() -> None:
+    buffer = PerTaskAtariReplayBuffer(
+        buffer_size_per_task=20,
+        num_envs=1,
+        obs_shape=(1, 2, 2),
+        device="cpu",
+        seed=7,
+        num_tasks=5,
+        sampling_mode="task_balanced",
+    )
+    for step in range(20):
+        buffer.add(
+            obs=np.full((1, 1, 2, 2), step, dtype=np.uint8),
+            actions=np.zeros(1, dtype=np.int64),
+            rewards=np.zeros(1, dtype=np.float32),
+            dones=np.zeros(1, dtype=np.uint8),
+            resets=np.zeros(1, dtype=np.uint8),
+            task_ids=np.asarray([step % 5], dtype=np.int16),
+        )
+
+    state = buffer.state_dict()
+    assert state["replay_layout"] == "per_task"
+    assert [task["pos"] for task in state["task_states"]] == [4] * 5
+    batch = buffer.sample_transitions(10)
+    assert np.bincount(batch.task_ids.numpy(), minlength=5).tolist() == [2] * 5
 
 
 def test_scheduler_state_round_trip_preserves_next_choice() -> None:

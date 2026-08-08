@@ -3,10 +3,9 @@
 #SBATCH --partition=gpu-redhat
 #SBATCH --account=general
 #SBATCH --gres=gpu:1
-#SBATCH --constraint=adalovelace
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64G
-#SBATCH --time=72:00:00
+#SBATCH --time=30:00:00
 #SBATCH --requeue
 #SBATCH --signal=B:USR1@120
 
@@ -52,7 +51,7 @@ CHECKPOINT_INTERVAL_STEPS="${CHECKPOINT_INTERVAL_STEPS:-50000}"
 LR_DECAY_STEP="${LR_DECAY_STEP:-1000000}"
 LR_DECAY_PER_TASK_STEPS="${LR_DECAY_PER_TASK_STEPS:-0}"
 LEARNING_STARTS_PER_TASK="${LEARNING_STARTS_PER_TASK:-20000}"
-ARTIFACT_TAG="${ARTIFACT_TAG:-atari_5task_18action_l3_${RUN_PHASE}}"
+ARTIFACT_TAG="${ARTIFACT_TAG:-atari_5task_18action_l3_per_task_buf500k_${RUN_PHASE}}"
 
 CONDA_SH="${AIM3_CONDA_SH:-/home/js3269/enter/etc/profile.d/conda.sh}"
 set +u
@@ -67,7 +66,7 @@ export AIM3_PIN_MEMORY="${AIM3_PIN_MEMORY:-1}"
 ART_ROOT="$ROOT/experiments/rl/atari/amarel/artifacts/$ARTIFACT_TAG"
 STATUS_DIR="$ART_ROOT/status"
 mkdir -p "$STATUS_DIR" "$RESULT_PARENT"
-SUFFIX="atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_${RUN_PHASE}_${MODEL}_seed${SEED}"
+SUFFIX="atari_dqn_5task_fs4_stack4_l3_buf0p5m_lrdecay1m_${RUN_PHASE}_${MODEL}_seed${SEED}"
 RESULT_DIR="$RESULT_PARENT/$SUFFIX"
 CHECKPOINT="$RESULT_DIR/checkpoint.pth"
 DONE_FILE="$STATUS_DIR/${SUFFIX}.done"
@@ -126,7 +125,7 @@ DISABLE_TQDM=1 python run_task.py atari-dqn \
   --learning_starts 20000 --learning_starts_per_task "$LEARNING_STARTS_PER_TASK" \
   --batch_size 32 --seq_len 16 --sequences_per_batch 8 \
   --seed "$SEED" --device cuda --result_suffix "$SUFFIX" --save_dir "$RESULT_DIR" \
-  --replay_backing mmap --buffer_size 1000000 \
+  --replay_backing mmap --replay_layout per_task --buffer_size 500000 \
   --checkpoint_interval_steps "$CHECKPOINT_INTERVAL_STEPS" \
   --learning_rate_decay_step "$LR_DECAY_STEP" \
   --learning_rate_decay_per_task_steps "$LR_DECAY_PER_TASK_STEPS" \
@@ -176,7 +175,10 @@ expected = {
     "frame_skip": 4,
     "frame_stack": 4,
     "global_step": int(total_steps),
-    "buffer_size": 1_000_000,
+    "replay_layout": "per_task",
+    "buffer_size": 500_000,
+    "buffer_size_per_task": 500_000,
+    "total_replay_capacity": 2_500_000,
     "batch_size": 32,
     "seq_len": 16,
     "sequences_per_batch": 8,

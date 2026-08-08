@@ -76,8 +76,10 @@ to the model/dataset hyperparameters and epoch summaries. Multi-seed result dire
 encode the seed even though checkpoint stems retain the standard model naming contract.
 
 Atari DQN additionally uses `--frame_skip`, `--frame_stack`, `--task_schedule`,
-`--replay_sampling`, `--learning_starts_per_task`, `--learning_rate_decay_per_task_steps`,
-`--amp_dtype`, `--allow_tf32`, `--compile_model`, and `--feedback_mode`.
+`--replay_sampling`, `--replay_layout`, `--learning_starts_per_task`,
+`--learning_rate_decay_per_task_steps`, `--amp_dtype`, `--allow_tf32`, `--compile_model`, and
+`--feedback_mode`. Multi-task `--replay_layout per_task` creates one independent replay partition
+per task; `--buffer_size` is the capacity of each partition, rather than a global shared capacity.
 
 Atari DQN recovery uses `--checkpoint_interval_steps` (0 disables, and is the default),
 `--resume_from` or `--auto_resume`, `--replay_backing {memory,mmap}`, and
@@ -93,8 +95,9 @@ As with paper-aligned MiniGrid PPO, the ALE environment and the recurrent state 
 rather than serialized, so a resumed run is a valid continuation and not a bitwise replay;
 metrics record `resume_count` and `resumed_at_steps` so interruptions stay visible in the
 result. A runner must never append to an existing history when no compatible checkpoint is
-present. The mmap backing costs roughly 27 GiB per fs4/stack4 unit against a 1 TiB `/scratch`
-soft quota, so recoverable Atari arrays must cap concurrency (`--array=0-N%8`) and check the
+present. The mmap backing costs roughly 27 GiB per fs4/stack4 shared-replay unit against a 1 TiB
+`/scratch` soft quota. The five-task full-18 `per_task` protocol with five 0.5M partitions costs
+roughly 65.8 GiB per unit, so its array must cap concurrency at five (`--array=0-14%5`) and check the
 quota before starting via `experiments/<task>/amarel/scratch_quota_guard.py`. Measure headroom on a
 `gpuk###` node, not the login node: Amarel serves one `/scratch` namespace from two GPFS
 clusters whose fileset accounting disagrees for identical data (DSSP reports ~652 GiB free,

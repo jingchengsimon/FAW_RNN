@@ -26,11 +26,12 @@ legal non-fire movement，standalone FIRE 映射到 NOOP；模型仍保持 18-di
 task-specific action mask。
 
 历史 global-step decay 的 Amarel 提交入口是
-`experiments/rl/atari/amarel/submit_atari_5task_18action_l3_pilot.sh`。当前 per-task LR decay
-protocol 使用 `submit_atari_5task_18action_l3_lrpertask_pilot.sh`：shared optimizer 仅在每个
-task 都达到 1M environment steps 后才 decay，因此 5M global-step pilot 中 LR 不下降。它先
-提交 5-model smoke，再以 `afterok` 提交 5-model × 3-seed × 5M-step pilot；三个较慢的 GaWF
-seeds 会优先与五个非-GaWF units 并行，array 最大并发仍为 8。
-所有 structured results 和后续 figures 分别写入
-`results/data/rl/atari/5task_18action/{parameter_match,smoke,pilot,figs}/`，不得写入或覆盖
-`multitask_18action`。
+`experiments/rl/atari/amarel/submit_atari_5task_18action_l3_pilot.sh`。当前正式 five-task
+protocol 使用 `submit_atari_5task_18action_l3_lrpertask_pilot.sh`：每个 task 的 LR 在其自身
+达到 1M environment steps 后才 decay；该 5M global-step pilot 因而不会触发 decay。它不设
+smoke gate，提交 5-model × 3-seed × 5M-step array，三个较慢的 GaWF seeds 优先，最大并发为 5。
+每个 task 使用独立的 0.5M mmap replay（每个 unit 总容量 2.5M transitions）；任务完成后清理
+replay。Amarel 请求为单 GPU、16 CPUs、64G memory、30 小时 walltime，且不固定 GPU 型号，
+以提高 backfill 机会。structured results 和后续 figures 分别写入
+`results/data/rl/atari/5task_18action/{parameter_match,smoke,pilot,figs}/`；此 protocol 的 pilot
+结果根为 `pilot/per_task_buf500k/`，不得写入或覆盖 `multitask_18action`。

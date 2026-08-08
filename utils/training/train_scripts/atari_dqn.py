@@ -1,7 +1,7 @@
 """Train Atari DQN models: classic CNN-DQN and a GaWF-gated recurrent variant.
 
-This entry point mirrors ``utils.training.train_scripts.atari_a2c`` conventions but stays decoupled from
-it. The classic branch uses iid single-transition replay; the GaWF branch uses
+This entry point mirrors ``utils.training.train_scripts.atari_a2c`` conventions but stays
+decoupled from it. The classic branch uses iid single-transition replay; the GaWF branch uses
 DRQN-style sequence replay, unrolling from zero state with detached previous
 Q-values as gate feedback.
 """
@@ -30,7 +30,11 @@ from utils.training.atari.atari_envs import (
     make_vector_atari_env,
     multitask_scheduler_states,
 )
-from utils.training.atari.atari_replay import REPLAY_SAMPLING_MODES, AtariReplayBuffer
+from utils.training.atari.atari_replay import (
+    REPLAY_SAMPLING_MODES,
+    AtariReplayBuffer,
+    PerTaskAtariReplayBuffer,
+)
 from utils.training.atari.atari_train_acceleration import (
     AtariAcceleration,
     configure_atari_acceleration,
@@ -43,6 +47,8 @@ from utils.training.atari.atari_train_utils import (
     set_atari_seed,
     to_channel_first_obs,
 )
+
+ReplayBuffer = AtariReplayBuffer | PerTaskAtariReplayBuffer
 from utils.training.recurrent_cores import configure_gawf_feedback_acceleration
 from utils.training.checkpointing import (
     atomic_torch_save,
@@ -130,6 +136,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--total_timesteps", type=int, default=1_000_000)
     parser.add_argument("--num_envs", type=int, default=1)
     parser.add_argument("--buffer_size", type=int, default=1_000_000)
+    parser.add_argument(
+        "--replay_layout",
+        type=str,
+        default="shared",
+        choices=["shared", "per_task"],
+        help="Use one shared replay or one independent replay partition per task.",
+    )
     parser.add_argument(
         "--replay_sampling",
         type=str,
@@ -268,6 +281,7 @@ RESUME_ARG_KEYS = (
     "total_timesteps",
     "num_envs",
     "buffer_size",
+    "replay_layout",
     "replay_sampling",
     "learning_rate",
     "learning_rate_decay_step",
@@ -533,7 +547,7 @@ class _PreemptionWatcher:
 
 def _release_replay_storage(
     *,
-    buffer: AtariReplayBuffer,
+    buffer: ReplayBuffer,
     replay_dir: str,
     keep: bool,
     logger: logging.Logger,
@@ -559,7 +573,7 @@ def _checkpoint_payload(
     target_net: AtariQNetwork,
     optimizer: optim.Optimizer,
     scaler: Any,
-    buffer: AtariReplayBuffer,
+    buffer: ReplayBuffer,
     args: argparse.Namespace,
     global_step: int,
     elapsed_seconds: float,
@@ -616,7 +630,7 @@ def _aggregate_td_loss(
     elementwise_loss: torch.Tensor,
     task_ids: torch.Tensor,
     loss_mask: torch.Tensor,
-    buffer: AtariReplayBuffer,
+    buffer: ReplayBuffer,
 ) -> torch.Tensor:
     """Aggregate TD errors globally or as an equal-weight mean across tasks."""
     if buffer.sampling_mode == "global_uniform":
@@ -634,7 +648,7 @@ def _aggregate_td_loss(
 def _dqn_transition_loss(
     model_forward: SequenceForward,
     target_forward: SequenceForward,
-    buffer: AtariReplayBuffer,
+    buffer: ReplayBuffer,
     args: argparse.Namespace,
     device: torch.device,
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -665,7 +679,7 @@ def _dqn_transition_loss(
 def _drqn_sequence_loss(
     model_forward: SequenceForward,
     target_forward: SequenceForward,
-    buffer: AtariReplayBuffer,
+    buffer: ReplayBuffer,
     args: argparse.Namespace,
     device: torch.device,
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -760,7 +774,9 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         compile_mode=args.compile_mode,
     )
     configure_atari_acceleration(acceleration, logger)
-    save_dir = args.save_dir or os.path.join("results", "data", "rl", "atari", "runs", args.result_suffix)
+    save_dir = args.save_dir or os.path.join(
+        "results", "data", "rl", "atari", "runs", args.result_suffix
+    )
     ensure_dir(save_dir)
     video_dir = os.path.join(save_dir, "videos")
     history_path = os.path.join(save_dir, "metrics_history.jsonl")
@@ -913,17 +929,28 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             model_forward = acceleration.compile_callable(model.forward_sequence)
             target_forward = acceleration.compile_callable(target_net.forward_sequence)
 
-        buffer = AtariReplayBuffer(
-            buffer_size=args.buffer_size,
-            num_envs=args.num_envs,
+        replay_kwargs = dict(
             obs_shape=tuple(next_obs.shape[1:]),
             device=device,
             seed=args.seed,
-            num_tasks=len(env_ids),
             sampling_mode=args.replay_sampling,
             storage_dir=replay_dir if args.replay_backing == "mmap" else None,
             reuse_existing=resume_checkpoint is not None,
         )
+        if args.replay_layout == "per_task":
+            buffer = PerTaskAtariReplayBuffer(
+                buffer_size_per_task=args.buffer_size,
+                num_envs=args.num_envs,
+                num_tasks=len(env_ids),
+                **replay_kwargs,
+            )
+        else:
+            buffer = AtariReplayBuffer(
+                buffer_size=args.buffer_size,
+                num_envs=args.num_envs,
+                num_tasks=len(env_ids),
+                **replay_kwargs,
+            )
 
         state = None
         next_done = torch.ones(args.num_envs, device=device)
@@ -1259,7 +1286,16 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "num_actions": num_actions,
             "task_schedule": args.task_schedule if is_multitask else None,
             "replay_sampling": args.replay_sampling,
+            "replay_layout": args.replay_layout,
             "buffer_size": args.buffer_size,
+            "buffer_size_per_task": (
+                args.buffer_size if args.replay_layout == "per_task" else None
+            ),
+            "total_replay_capacity": (
+                args.buffer_size * len(env_ids)
+                if args.replay_layout == "per_task"
+                else args.buffer_size
+            ),
             "batch_size": args.batch_size,
             "seq_len": args.seq_len,
             "sequences_per_batch": args.sequences_per_batch,
