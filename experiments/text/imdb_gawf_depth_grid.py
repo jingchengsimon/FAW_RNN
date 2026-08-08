@@ -60,15 +60,15 @@ class TaskConfig:
 
     @property
     def metrics_relpath(self) -> str:
-        return f"train_data/{self.result_suffix}/{self.result_stem}_metrics.json"
+        return f"data/text/imdb/{self.result_suffix}/{self.result_stem}_metrics.json"
 
     @property
     def pkl_relpath(self) -> str:
-        return f"train_data/{self.result_suffix}/{self.result_stem}.pkl"
+        return f"data/text/imdb/{self.result_suffix}/{self.result_stem}.pkl"
 
     @property
     def model_relpath(self) -> str:
-        return f"train_data/{self.result_suffix}/{self.result_stem}_model.pth"
+        return f"data/text/imdb/{self.result_suffix}/{self.result_stem}_model.pth"
 
 
 def iter_task_configs() -> Iterable[TaskConfig]:

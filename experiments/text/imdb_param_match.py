@@ -80,15 +80,15 @@ class TaskConfig:
 
     @property
     def metrics_relpath(self) -> str:
-        return f"train_data/{self.result_suffix}/{self.result_stem}_metrics.json"
+        return f"data/text/imdb/{self.result_suffix}/{self.result_stem}_metrics.json"
 
     @property
     def pkl_relpath(self) -> str:
-        return f"train_data/{self.result_suffix}/{self.result_stem}.pkl"
+        return f"data/text/imdb/{self.result_suffix}/{self.result_stem}.pkl"
 
     @property
     def model_relpath(self) -> str:
-        return f"train_data/{self.result_suffix}/{self.result_stem}_model.pth"
+        return f"data/text/imdb/{self.result_suffix}/{self.result_stem}_model.pth"
 
 
 def default_results_root() -> str:
@@ -386,7 +386,7 @@ def cmd_status(args: argparse.Namespace) -> None:
 
 def cmd_summarize(args: argparse.Namespace) -> None:
     root = os.path.abspath(args.root)
-    result_root = os.path.join(root, "results", "train_data", RESULT_ROOT_SUFFIX)
+    result_root = os.path.join(root, "results", "data", "text", "imdb", RESULT_ROOT_SUFFIX)
     out_dir = os.path.abspath(args.out_dir or artifact_dir())
     rows = load_all_metrics(result_root)
     if not rows:
