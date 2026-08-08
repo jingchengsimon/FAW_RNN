@@ -424,60 +424,6 @@ class AtariQNetwork(nn.Module):
         next_state = AtariQNetworkState(recurrent, prev_q)
         return torch.stack(q_steps, dim=1), next_state
 
-    def forward_sequence_gawf_l3_static(
-        self,
-        obs: torch.Tensor,
-        prev_dones: torch.Tensor,
-        state0: torch.Tensor | None = None,
-        state1: torch.Tensor | None = None,
-        state2: torch.Tensor | None = None,
-        prev_q: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Run the exact L3 GaWF scan with tensor-only state for ``torch.compile``.
-
-        The public ``forward_sequence`` keeps the general state container.  This
-        fixed-L3 path has the same done mask, detached adjacent-layer feedback,
-        detached previous-Q feedback, gate computation, and Q readout order,
-        but moves the four runtime state tensors across the compile boundary
-        directly.  It is intentionally limited to the current Atari L3 GaWF
-        protocol rather than changing generic recurrent-state semantics.
-        """
-        if self.model_type != "gawf" or self.num_layers != 3 or self.feedback_mode != "qvalues":
-            raise ValueError("forward_sequence_gawf_l3_static requires L3 GaWF qvalues feedback")
-        if obs.ndim != 5:
-            raise ValueError(f"obs must have shape (B,T,C,H,W), got {tuple(obs.shape)}")
-        if any(value is None for value in (state0, state1, state2, prev_q)):
-            if not all(value is None for value in (state0, state1, state2, prev_q)):
-                raise ValueError("L3 GaWF state tensors must be provided together or all omitted")
-
-        encoded = self._encode_sequence(obs)
-        batch_size, n_steps = encoded.shape[:2]
-        if state0 is None:
-            state0 = torch.zeros(batch_size, self.hidden_size, device=encoded.device, dtype=encoded.dtype)
-            state1 = torch.zeros_like(state0)
-            state2 = torch.zeros_like(state0)
-            prev_q = torch.zeros(batch_size, self.num_actions, device=encoded.device, dtype=encoded.dtype)
-        assert state1 is not None and state2 is not None and prev_q is not None
-
-        q_steps = []
-        for timestep in range(n_steps):
-            done_t = prev_dones[:, timestep].to(device=encoded.device, dtype=encoded.dtype)
-            keep = (1.0 - done_t.float()).to(done_t.device).view(-1, 1)
-            state0 = state0 * keep
-            state1 = state1 * keep
-            state2 = state2 * keep
-            prev_q = prev_q * keep
-
-            # This is the L3 expansion of ``recurrent[1:] + [feedback]`` in
-            # ``_core_step``. Each feedback tensor is detached at the same point.
-            state0 = self.core._step_layer(0, encoded[:, timestep, :], state0, state1.detach())
-            state1 = self.core._step_layer(1, state0, state1, state2.detach())
-            state2 = self.core._step_layer(2, state1, state2, prev_q.float().detach())
-            q_t = self.head(state2)
-            q_steps.append(q_t)
-            prev_q = q_t
-        return torch.stack(q_steps, dim=1), state0, state1, state2, prev_q
-
     def _step_sequence_core(
         self,
         obs: torch.Tensor,

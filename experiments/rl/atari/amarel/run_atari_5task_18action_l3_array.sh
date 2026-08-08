@@ -38,6 +38,7 @@ SEED=$((TASK_ID % SEED_COUNT + 1))
 TOTAL_TIMESTEPS="${TOTAL_TIMESTEPS:?TOTAL_TIMESTEPS is required}"
 CHECKPOINT_INTERVAL_STEPS="${CHECKPOINT_INTERVAL_STEPS:-50000}"
 LR_DECAY_STEP="${LR_DECAY_STEP:-1000000}"
+LR_DECAY_PER_TASK_STEPS="${LR_DECAY_PER_TASK_STEPS:-0}"
 LEARNING_STARTS_PER_TASK="${LEARNING_STARTS_PER_TASK:-20000}"
 ARTIFACT_TAG="${ARTIFACT_TAG:-atari_5task_18action_l3_${RUN_PHASE}}"
 
@@ -115,7 +116,9 @@ DISABLE_TQDM=1 python run_task.py atari-dqn \
   --seed "$SEED" --device cuda --result_suffix "$SUFFIX" --save_dir "$RESULT_DIR" \
   --replay_backing mmap --buffer_size 1000000 \
   --checkpoint_interval_steps "$CHECKPOINT_INTERVAL_STEPS" \
-  --learning_rate_decay_step "$LR_DECAY_STEP" --learning_rate_decay_scale 0.1 \
+  --learning_rate_decay_step "$LR_DECAY_STEP" \
+  --learning_rate_decay_per_task_steps "$LR_DECAY_PER_TASK_STEPS" \
+  --learning_rate_decay_scale 0.1 \
   "${RESUME_ARGS[@]}" "${ACCEL_ARGS[@]}"
 TRAIN_RC=$?
 set -e

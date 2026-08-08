@@ -131,11 +131,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num_envs", type=int, default=1)
     parser.add_argument("--buffer_size", type=int, default=1_000_000)
     parser.add_argument(
-        "--replay_pinned_transfer",
-        action="store_true",
-        help="Reuse pinned CPU and CUDA staging buffers for replay batch transfers.",
-    )
-    parser.add_argument(
         "--replay_sampling",
         type=str,
         default="task_balanced",
@@ -145,6 +140,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--learning_rate", type=float, default=1e-4)
     parser.add_argument("--learning_rate_decay_step", type=int, default=0)
     parser.add_argument("--learning_rate_decay_scale", type=float, default=1.0)
+    parser.add_argument(
+        "--learning_rate_decay_per_task_steps",
+        type=int,
+        default=0,
+        help=(
+            "For multi-task runs, decay the shared optimizer only after every task reaches "
+            "this many environment steps. 0 uses --learning_rate_decay_step."
+        ),
+    )
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--learning_starts", type=int, default=20_000)
     parser.add_argument(
@@ -187,23 +191,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Use CUDA fused Adam for supported non-S5 models.",
     )
     parser.add_argument("--compile_model", action="store_true")
-    parser.add_argument(
-        "--compile_full_gawf_scan",
-        action="store_true",
-        help=(
-            "Compile the complete fixed-shape GaWF forward_sequence scan with fullgraph=True. "
-            "This preserves the GaWF formula and feedback detach semantics; it is an opt-in "
-            "runtime acceleration mode."
-        ),
-    )
-    parser.add_argument(
-        "--cuda_graph_gawf_online_step",
-        action="store_true",
-        help=(
-            "Replay the fixed B=1,T=1 L3 GaWF online inference path with CUDA Graphs while "
-            "keeping update scans eager. This preserves the eager GPU kernel sequence."
-        ),
-    )
     parser.add_argument(
         "--compile_mode",
         type=str,
@@ -285,6 +272,7 @@ RESUME_ARG_KEYS = (
     "learning_rate",
     "learning_rate_decay_step",
     "learning_rate_decay_scale",
+    "learning_rate_decay_per_task_steps",
     "gamma",
     "learning_starts",
     "learning_starts_per_task",
@@ -310,138 +298,6 @@ SequenceForward = Callable[
     [torch.Tensor, torch.Tensor, AtariQNetworkState | None, bool | None],
     tuple[torch.Tensor, AtariQNetworkState | None],
 ]
-
-
-def _make_full_gawf_l3_sequence_forward(
-    model: AtariQNetwork,
-    acceleration: AtariAcceleration,
-) -> SequenceForward:
-    """Wrap a compiled tensor-state L3 GaWF scan in the public state interface."""
-    compiled_scan = acceleration.compile_callable(
-        model.forward_sequence_gawf_l3_static,
-        fullgraph=True,
-    )
-
-    def forward(
-        obs: torch.Tensor,
-        prev_dones: torch.Tensor,
-        state: AtariQNetworkState | None = None,
-        has_internal_reset: bool | None = None,
-    ) -> tuple[torch.Tensor, AtariQNetworkState | None]:
-        del has_internal_reset  # GaWF always preserves its exact stepwise reset path.
-        if state is None:
-            q_values, state0, state1, state2, next_q = compiled_scan(
-                obs, prev_dones, None, None, None, None
-            )
-        else:
-            if not isinstance(state.recurrent, list) or len(state.recurrent) != 3:
-                raise TypeError("compiled L3 GaWF requires three recurrent state tensors")
-            q_values, state0, state1, state2, next_q = compiled_scan(
-                obs,
-                prev_dones,
-                state.recurrent[0],
-                state.recurrent[1],
-                state.recurrent[2],
-                state.prev_q,
-            )
-        # Inductor CUDAGraph outputs reuse their storage on the next invocation.
-        # The recurrent state is intentionally fed into that next invocation, so
-        # clone at the eager wrapper boundary to retain the exact tensor values
-        # while giving the persistent runtime state independent storage.
-        return q_values.clone(), AtariQNetworkState(
-            [state0.clone(), state1.clone(), state2.clone()], next_q.clone()
-        )
-
-    return forward
-
-
-def _make_cuda_graph_gawf_l3_online_forward(
-    model: AtariQNetwork,
-    acceleration: AtariAcceleration,
-) -> SequenceForward:
-    """Capture and replay the eager fixed-shape L3 GaWF online sequence on CUDA.
-
-    This intentionally captures the existing eager operators without Inductor
-    fusion. The static graph is only used for ``B=1,T=1`` action selection;
-    replay updates retain the original eager forward/backward implementation.
-    """
-    if acceleration.device.type != "cuda" or acceleration.amp_dtype is None:
-        raise ValueError("CUDA-graph GaWF online stepping requires CUDA autocast")
-
-    graph: torch.cuda.CUDAGraph | None = None
-    static_obs: torch.Tensor | None = None
-    static_dones: torch.Tensor | None = None
-    static_state: list[torch.Tensor] | None = None
-    static_prev_q: torch.Tensor | None = None
-    static_outputs: (
-        tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor] | None
-    ) = None
-
-    def forward(
-        obs: torch.Tensor,
-        prev_dones: torch.Tensor,
-        state: AtariQNetworkState | None = None,
-        has_internal_reset: bool | None = None,
-    ) -> tuple[torch.Tensor, AtariQNetworkState]:
-        nonlocal graph, static_obs, static_dones, static_state, static_prev_q, static_outputs
-        del has_internal_reset
-        if obs.shape[0] != 1 or obs.shape[1] != 1:
-            raise ValueError("CUDA-graph GaWF online path requires fixed B=1,T=1 inputs")
-        if state is None:
-            initial = model.initial_state(
-                obs.shape[0], obs.device, dtype=acceleration.amp_dtype
-            )
-            if initial is None or not isinstance(initial.recurrent, list):
-                raise TypeError("CUDA-graph L3 GaWF requires list-valued recurrent state")
-            state = initial
-        if not isinstance(state.recurrent, list) or len(state.recurrent) != 3:
-            raise TypeError("CUDA-graph L3 GaWF requires three recurrent state tensors")
-
-        if graph is None:
-            static_obs = torch.empty_like(obs)
-            static_dones = torch.empty_like(prev_dones)
-            static_state = [torch.empty_like(part) for part in state.recurrent]
-            static_prev_q = torch.empty_like(state.prev_q)
-            static_obs.copy_(obs)
-            static_dones.copy_(prev_dones)
-            for destination, source in zip(static_state, state.recurrent):
-                destination.copy_(source)
-            static_prev_q.copy_(state.prev_q)
-            for _ in range(3):
-                model.forward_sequence_gawf_l3_static(
-                    static_obs,
-                    static_dones,
-                    static_state[0],
-                    static_state[1],
-                    static_state[2],
-                    static_prev_q,
-                )
-            torch.cuda.synchronize(obs.device)
-            graph = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(graph):
-                static_outputs = model.forward_sequence_gawf_l3_static(
-                    static_obs,
-                    static_dones,
-                    static_state[0],
-                    static_state[1],
-                    static_state[2],
-                    static_prev_q,
-                )
-
-        assert static_obs is not None and static_dones is not None
-        assert static_state is not None and static_prev_q is not None and static_outputs is not None
-        static_obs.copy_(obs)
-        static_dones.copy_(prev_dones)
-        for destination, source in zip(static_state, state.recurrent):
-            destination.copy_(source)
-        static_prev_q.copy_(state.prev_q)
-        graph.replay()
-        q_values, state0, state1, state2, next_q = static_outputs
-        return q_values.clone(), AtariQNetworkState(
-            [state0.clone(), state1.clone(), state2.clone()], next_q.clone()
-        )
-
-    return forward
 
 
 def _step_with_sequence_forward(
@@ -626,6 +482,19 @@ def _learning_ready(
     )
 
 
+def _learning_rate_decay_ready(
+    args: argparse.Namespace,
+    global_step: int,
+    environment_steps: dict[str, int],
+) -> bool:
+    """Return whether the configured global or per-task LR decay threshold is met."""
+    if args.learning_rate_decay_per_task_steps > 0:
+        return bool(environment_steps) and min(environment_steps.values()) >= int(
+            args.learning_rate_decay_per_task_steps
+        )
+    return args.learning_rate_decay_step > 0 and global_step >= args.learning_rate_decay_step
+
+
 class _PreemptionWatcher:
     """Turn Slurm's preemption signals into a checkpoint-then-exit request.
 
@@ -700,6 +569,7 @@ def _checkpoint_payload(
     environment_steps: dict[str, int],
     task_scheduler_states: tuple[dict[str, Any], ...] | None,
     learning_started_at_step: int | None,
+    learning_rate_decay_applied: bool,
     last_loss: float,
     last_q_mean: float,
     resume_count: int,
@@ -722,6 +592,7 @@ def _checkpoint_payload(
         "environment_steps": dict(environment_steps),
         "task_scheduler_states": task_scheduler_states,
         "learning_started_at_step": learning_started_at_step,
+        "learning_rate_decay_applied": bool(learning_rate_decay_applied),
         "last_loss": float(last_loss),
         "last_q_mean": float(last_q_mean),
         "resume_count": resume_count,
@@ -860,19 +731,15 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
     env_ids, action_space_mode = _resolve_task_config(args)
     if args.num_layers < 1:
         raise ValueError(f"num_layers must be >= 1, got {args.num_layers}")
-    if args.compile_full_gawf_scan and (not args.compile_model or args.model_type != "gawf"):
-        raise ValueError("--compile_full_gawf_scan requires --compile_model and --model_type gawf")
-    if args.cuda_graph_gawf_online_step and (
-        args.model_type != "gawf" or args.num_layers != 3 or args.feedback_mode != "qvalues"
-    ):
-        raise ValueError("--cuda_graph_gawf_online_step requires L3 GaWF qvalues feedback")
-    if args.cuda_graph_gawf_online_step and args.compile_full_gawf_scan:
-        raise ValueError("CUDA-graph eager online stepping cannot be combined with full-scan compile")
     if args.frame_skip < 1:
         raise ValueError(f"frame_skip must be >= 1, got {args.frame_skip}")
     if args.gawf_feedback_lr_scale <= 0:
         raise ValueError("gawf_feedback_lr_scale must be > 0")
-    if args.learning_rate_decay_step < 0 or args.learning_rate_decay_scale <= 0:
+    if (
+        args.learning_rate_decay_step < 0
+        or args.learning_rate_decay_per_task_steps < 0
+        or args.learning_rate_decay_scale <= 0
+    ):
         raise ValueError("learning-rate decay arguments must be non-negative/positive")
     if args.learning_starts < 0 or args.learning_starts_per_task < 0:
         raise ValueError("learning-start thresholds must be non-negative")
@@ -1004,11 +871,10 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         target_net.load_state_dict(model.state_dict())
         target_net.eval()
         target_net.requires_grad_(False)
-        full_gawf_scan_requested = bool(args.compile_full_gawf_scan and args.model_type == "gawf")
         compiled_gawf_cores = sum(
             configure_gawf_feedback_acceleration(
                 network,
-                enabled=acceleration.compile_model and not full_gawf_scan_requested,
+                enabled=acceleration.compile_model,
                 compile_mode=acceleration.compile_mode,
             )
             for network in (model, target_net)
@@ -1040,20 +906,12 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         optimizer_name = "adam"
         logger.info("Optimizer=%s fused=%s", optimizer_name, use_fused_optimizer)
         scaler = acceleration.build_grad_scaler()
-        if full_gawf_scan_requested:
-            logger.info("Compiling complete fixed-shape GaWF recurrent scan with fullgraph=True")
-            model_forward = _make_full_gawf_l3_sequence_forward(model, acceleration)
-            target_forward = _make_full_gawf_l3_sequence_forward(target_net, acceleration)
-        elif compiled_gawf_cores:
+        if compiled_gawf_cores:
             model_forward = model.forward_sequence
             target_forward = target_net.forward_sequence
         else:
             model_forward = acceleration.compile_callable(model.forward_sequence)
             target_forward = acceleration.compile_callable(target_net.forward_sequence)
-        online_model_forward = model_forward
-        if args.cuda_graph_gawf_online_step:
-            logger.info("Capturing eager B=1,T=1 L3 GaWF online inference with CUDA Graphs")
-            online_model_forward = _make_cuda_graph_gawf_l3_online_forward(model, acceleration)
 
         buffer = AtariReplayBuffer(
             buffer_size=args.buffer_size,
@@ -1065,7 +923,6 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             sampling_mode=args.replay_sampling,
             storage_dir=replay_dir if args.replay_backing == "mmap" else None,
             reuse_existing=resume_checkpoint is not None,
-            pinned_transfer=args.replay_pinned_transfer,
         )
 
         state = None
@@ -1086,6 +943,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         restored_last_loss = float("nan")
         restored_last_q_mean = float("nan")
         learning_started_at_step: int | None = None
+        learning_rate_decay_applied = False
         final_metrics: dict[str, Any] = {}
 
         if resume_checkpoint is not None:
@@ -1117,6 +975,9 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             saved_learning_started = resume_checkpoint.get("learning_started_at_step")
             learning_started_at_step = (
                 int(saved_learning_started) if saved_learning_started is not None else None
+            )
+            learning_rate_decay_applied = bool(
+                resume_checkpoint.get("learning_rate_decay_applied", False)
             )
             resume_count = int(resume_checkpoint.get("resume_count", 0)) + 1
             resumed_at_steps = [
@@ -1168,6 +1029,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                         multitask_scheduler_states(envs) if is_multitask else None
                     ),
                     learning_started_at_step=learning_started_at_step,
+                    learning_rate_decay_applied=learning_rate_decay_applied,
                     last_loss=last_loss_value,
                     last_q_mean=last_q_mean_value,
                     resume_count=resume_count,
@@ -1195,7 +1057,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             # coin picks a random action.
             with torch.no_grad(), acceleration.autocast():
                 q_values, state = _step_with_sequence_forward(
-                    online_model_forward, next_obs, next_done, state
+                    model_forward, next_obs, next_done, state
                 )
             greedy_action = q_values.argmax(dim=-1).cpu().numpy()
             random_action = np.random.randint(0, num_actions, size=args.num_envs)
@@ -1254,10 +1116,17 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                         global_step,
                         environment_steps,
                     )
-                if global_step == args.learning_rate_decay_step:
+                if not learning_rate_decay_applied and _learning_rate_decay_ready(
+                    args, global_step, environment_steps
+                ):
                     for group in optimizer.param_groups:
                         group["lr"] *= args.learning_rate_decay_scale
-                    logger.info("applied learning-rate decay at step=%d", global_step)
+                    learning_rate_decay_applied = True
+                    logger.info(
+                        "applied learning-rate decay at global_step=%d min_task_steps=%d",
+                        global_step,
+                        min(environment_steps.values()) if environment_steps else 0,
+                    )
                 with acceleration.autocast():
                     if model.is_recurrent:
                         loss, q_mean = _drqn_sequence_loss(
@@ -1391,13 +1260,15 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "task_schedule": args.task_schedule if is_multitask else None,
             "replay_sampling": args.replay_sampling,
             "buffer_size": args.buffer_size,
-            "replay_pinned_transfer": bool(args.replay_pinned_transfer),
             "batch_size": args.batch_size,
             "seq_len": args.seq_len,
             "sequences_per_batch": args.sequences_per_batch,
             "learning_rate": args.learning_rate,
             "learning_rate_decay_step": args.learning_rate_decay_step,
             "learning_rate_decay_scale": args.learning_rate_decay_scale,
+            "learning_rate_decay_per_task_steps": args.learning_rate_decay_per_task_steps,
+            "learning_rate_decay_applied": learning_rate_decay_applied,
+            "effective_learning_rate": float(optimizer.param_groups[0]["lr"]),
             "learning_starts": args.learning_starts,
             "learning_starts_per_task": args.learning_starts_per_task,
             "learning_started_at_step": learning_started_at_step,
@@ -1436,8 +1307,6 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "fused_optimizer": use_fused_optimizer,
             "compile_model": acceleration.compile_model,
             "compile_mode": acceleration.compile_mode,
-            "compile_full_gawf_scan": bool(args.compile_full_gawf_scan),
-            "cuda_graph_gawf_online_step": bool(args.cuda_graph_gawf_online_step),
             "per_env": per_env_metrics,
             # Interruption provenance: a resumed run restarts the env and the
             # recurrent state, so these fields belong in the result, not the log.

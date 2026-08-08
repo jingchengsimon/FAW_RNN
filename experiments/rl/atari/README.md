@@ -25,9 +25,12 @@ Skiing 的 ALE legal action set 只有 9 个动作，因此 unsupported fire var
 legal non-fire movement，standalone FIRE 映射到 NOOP；模型仍保持 18-dim output，且不使用
 task-specific action mask。
 
-Amarel 提交入口是
-`experiments/rl/atari/amarel/submit_atari_5task_18action_l3_pilot.sh`。它依次提交 full-18
-parameter match、5-model smoke 和 `afterok` gated 的 5-model × 3-seed × 5M-step pilot。
+历史 global-step decay 的 Amarel 提交入口是
+`experiments/rl/atari/amarel/submit_atari_5task_18action_l3_pilot.sh`。当前 per-task LR decay
+protocol 使用 `submit_atari_5task_18action_l3_lrpertask_pilot.sh`：shared optimizer 仅在每个
+task 都达到 1M environment steps 后才 decay，因此 5M global-step pilot 中 LR 不下降。它先
+提交 5-model smoke，再以 `afterok` 提交 5-model × 3-seed × 5M-step pilot；三个较慢的 GaWF
+seeds 会优先与五个非-GaWF units 并行，array 最大并发仍为 8。
 所有 structured results 和后续 figures 分别写入
 `results/data/rl/atari/5task_18action/{parameter_match,smoke,pilot,figs}/`，不得写入或覆盖
 `multitask_18action`。

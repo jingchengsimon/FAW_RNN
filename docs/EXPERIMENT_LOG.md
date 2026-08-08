@@ -323,3 +323,27 @@
   `utils/analysis/feedback_ablation.py`（`--shuffle` 追加三个 shuffle 条件），汇总图
   `utils/analysis/` 中对应 Figure workflow（上 zero / 下 shuffle 两行、按 readout 分组、
   跨 seed error bar + 散点，PNG-only）。
+
+## 2026-08-07 — Atari GaWF BF16 acceleration acceptance baseline
+
+- **改动（Change）：** 为 Atari GaWF 建立 acceleration acceptance protocol：固定 BF16、
+  `allow_tf32=True`、L3、Breakout、`B=8`、`T=16`，以两条 matched baseline 和两条 candidate
+  的完整 RL trajectory 比较；acceptance 不再要求 eager/optimized 的逐位或固定 `rtol/atol`
+  相等，而要求 candidate 不扩大 baseline 的跨 run/GPU numerical dispersion，且不出现超出
+  baseline envelope 的系统性偏移。固定输入的 Q/state/gradient diagnostic 仅用于定位差异来源。
+- **原因（Reason）：** BF16 Inductor/CUDA Graph 等优化可在不改变 Python formula 的情况下改变
+  kernel fusion、归约次序或 capture execution；固定输入 tolerance 不能区分这种改变和 RL
+  自然跨次波动，也不能证明 end-to-end learning trajectory 保持可比。
+- **证据（Evidence）：** `compile_full_gawf_scan` 在 BF16 fixed-input diagnostic 中相对 eager
+  出现 Q/state/gradient 差异，并在 40k-step Breakout trajectory test 中超出 baseline envelope，
+  因此拒绝。B=1,T=1 online CUDA Graph replay 也在实际 RL trajectory 中产生偏移，拒绝。gate-only
+  `torch.compile` 同样依赖 BF16 kernel fusion，不满足“保留 GPU arithmetic path”的前提，未作为
+  candidate。FP32 full-scan 与保持 BF16 的实验约束冲突，未采用。
+- **现状（Current）：** 所有后续 acceleration/optimization 首先保持 sampling、batch content、
+  loss、update cadence、模型结构与 GPU arithmetic path；随后执行 matched repeated end-to-end
+  variance acceptance。对 replay batch 的 pinned CPU/CUDA staging buffer（每个 batch field 独立
+  buffer，避免同 shape/dtype 字段覆盖）进行了完整测试：四条 trajectory 的
+  `loss`、`q_values_mean`、`episodic_return_100` 均为 0 差异，数值上通过；但 `20k→40k`
+  的 `B=8,T=16` update 段从 582.21 s 变为 586.76 s（`0.992×`，`−0.78%`），无实际加速，
+  因而不用于正式训练。该开关保持 default-off，仅作为未来 data-transfer optimization 的
+  对照基线。
