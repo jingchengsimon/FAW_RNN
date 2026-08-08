@@ -331,7 +331,13 @@ def _make_full_gawf_l3_sequence_forward(
                 state.recurrent[2],
                 state.prev_q,
             )
-        return q_values, AtariQNetworkState([state0, state1, state2], next_q)
+        # Inductor CUDAGraph outputs reuse their storage on the next invocation.
+        # The recurrent state is intentionally fed into that next invocation, so
+        # clone at the eager wrapper boundary to retain the exact tensor values
+        # while giving the persistent runtime state independent storage.
+        return q_values.clone(), AtariQNetworkState(
+            [state0.clone(), state1.clone(), state2.clone()], next_q.clone()
+        )
 
     return forward
 

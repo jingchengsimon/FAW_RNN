@@ -191,7 +191,11 @@ def _make_static_forward(
                 state.recurrent[2],
                 state.prev_q,
             )
-        return q_values, AtariQNetworkState([state0, state1, state2], next_q)
+        # Match the training wrapper: compiled CUDAGraph outputs need stable
+        # storage before recurrent state crosses the next invocation boundary.
+        return q_values.clone(), AtariQNetworkState(
+            [state0.clone(), state1.clone(), state2.clone()], next_q.clone()
+        )
 
     return forward
 
