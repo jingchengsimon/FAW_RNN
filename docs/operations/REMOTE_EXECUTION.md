@@ -79,6 +79,62 @@ After submission, verify and report:
 - result suffix or result directory;
 - the single command used to inspect status and valid outputs.
 
+### Routine operation templates
+
+Use these templates for a recurring, already-reviewed workflow. They are deliberately shorter
+than the first-development path: repeat safety work only when the launcher or protocol changes.
+
+#### Standard recoverable training array
+
+1. In one foreground SSH query, check the exact result suffixes for active writers, the relevant
+   scheduler/accounting state, and the quota headroom required by the requested array throttle.
+2. If an existing reviewed launcher and result protocol are reused unchanged, submit once with its
+   declared recovery settings and throttle. Do not rerun `bash -n`, the submit-safety test, or a
+   launcher dry-run solely because a new seed array is being submitted.
+3. If a launcher is new or modified, run the existing required local validation sequence once,
+   synchronize the exact changed files in one scoped transfer, then submit once.
+4. Make one post-submission scheduler check to confirm the array, dependency, result root, and
+   compute-node allocation. Register the job manifest in the same turn. Do not poll again unless
+   the user requests progress, completion, or diagnosis.
+
+#### Standard completed-result visualisation
+
+1. Identify the exact structured files required (`metrics.json`, histories, or analysis arrays).
+   Transfer them once to the local result-data leaf if absent.
+2. Render, inspect, and save the figure locally using the retained plotting entry point.
+3. If an Amarel copy is required, synchronize the one completed figure leaf once and confirm its
+   presence. Do not submit a remote plotting job for an ordinary curve, aggregation, label, or
+   axis revision.
+
+#### Status-only request
+
+Use one consolidated scheduler/log/metrics query and report the answer. Do not modify scripts,
+synchronize files, submit a probe, or create a monitoring job unless the user also asks for an
+operation.
+
+For every template, stop after the specified verification step. Escalate to the fuller
+first-development workflow only when a safety gate fails, a target is ambiguous, a recovery
+condition changes, or evidence indicates a genuine failure.
+
+### Project-wide smoke acceptance contract
+
+All large-training smoke launchers use this common acceptance contract:
+
+1. The training process completes its requested smoke budget without a training, quota, I/O, or
+   non-finite-numerics error.
+2. The run emits the protocol's required structured evidence: normally final metrics/history and
+   a final or resumable checkpoint, plus task-specific immutable protocol fields.
+3. Optional metadata fields are never mandatory smoke evidence. In particular, do not require a
+   `seed` field in final metrics unless the owning training entry point explicitly guarantees it.
+   The launcher task map and result suffix are the canonical seed provenance.
+4. A preempted but recoverable run is `paused`/`recovering`, not failed. A true failure is a
+   nonzero training exit, missing required artifacts after a claimed completion, non-finite saved
+   output, or an explicit quota/I/O error.
+
+Task launchers may add narrow protocol checks, but must not override this contract with an
+optional-schema requirement. This contract applies to every Amarel training family in this
+repository, not just Atari.
+
 In the same turn, register the job in the project-local monitoring registry described in
 `experiments/monitoring/README.md`. Record every scheduler/run ID, the exact remote root, log and
 result paths, expected units, and validity evidence. This internal registry replaces ad-hoc

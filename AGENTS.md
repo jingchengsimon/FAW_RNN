@@ -80,6 +80,19 @@ is missing, copy `.agents/local.example.md` and fill it in. Do not guess remote 
 - Do not delete experiment results, checkpoints, or pending-cleanup records without explicit
   human confirmation. Completion, failure, timeout, or staleness is not deletion permission.
 
+### 全局 smoke 验收
+
+- 每个大规模训练的 smoke 以“训练能在请求的 smoke budget 内正常结束、协议关键结构化结果
+  完整、没有明确训练/存储/数值错误”为通过条件。协议关键证据包括适用的最终 metrics/history、
+  预期 checkpoint 或可恢复 checkpoint，以及任务特定的帧/数据协议字段。
+- 不得把可选、历史上未保证持久化的 metadata（例如 final metrics 中的 `seed`）设为 smoke
+  成功的必要条件。seed、array task 与结果目录的对应关系应由 launcher 的确定性 mapping 和
+  路径命名追踪。
+- 正常的可恢复中断应保留 checkpoint 并 requeue 或报告为 paused/recovering，不得伪报为
+  训练失败；真实非零训练退出、缺少协议关键产物、非有限数值或明确 quota/I/O 错误才是失败。
+- 每个具体 launcher 可以增加与其任务协议直接相关的验证，但不得收紧上述规则为依赖可选
+  字段的 schema lock。
+
 ## Remote synchronization safety
 
 - Never run `rsync --delete` against a repository root, `results/`, `source/clutter/stimuli/`, or another broad
@@ -112,6 +125,18 @@ is missing, copy `.agents/local.example.md` and fill it in. Do not guess remote 
   create a new result by simply cropping, compositing, or relabelling an existing raster figure.
 
 ## Remote execution
+
+### 常规操作模板
+
+对于已验证 launcher 的常规训练提交、状态查询和结果可视化，遵循
+`docs/operations/REMOTE_EXECUTION.md` 中的 "Routine operation templates"。除非 launcher、
+资源规格、恢复语义或结果协议发生改变，不要把首次开发的逐项排查流程重复用于常规操作。
+一次操作应以模板规定的一次合并预检、一次提交/本地渲染和一次验证为界；不要为无变化的
+状态重复同步、重复 dry-run、重复安全测试或逐轮提交绘图 job。
+
+小规模分析、可视化和已有结构化结果的图更新默认在本地直接运行，不需要 smoke，也不得仅为
+执行这类工作提交 Amarel job。只有源数据无法安全获取到本地或确实需要远端专用计算时，才按
+远端 runbook 申请计算节点。
 
 - Before remote diagnostics, tests, training, or result inspection, read the remote runbook and
   local configuration. Use the `aim3_rnn` environment; never use the remote default Python.

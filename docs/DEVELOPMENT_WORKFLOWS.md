@@ -171,6 +171,22 @@ ambiguous mixed artifacts remain in place and appear in its migration report.
 Plotting belongs in `utils/analysis/` beside its owning analysis and reads saved result files rather
 than loading models independently.
 
+### Local-first result visualisation
+
+- For updates to an already completed experiment, prefer local rendering from the synchronized
+  structured results. Do not submit an Amarel plotting job merely to change labels, limits,
+  aggregation, smoothing, or figure layout.
+- If the required structured result files are not local, fetch the exact metrics/history files in
+  one scoped transfer, render and verify the figure locally, and synchronize only the requested
+  figure leaf if a remote copy is needed.
+- Use a compute-node plotting job only when the required source data cannot be safely or
+  practicably transferred, or when the plot genuinely requires remote-only compute. In that case,
+  combine source validation, rendering, output verification, and one scoped figure transfer into
+  one workflow; do not iteratively submit or poll separate plotting jobs for routine revisions.
+- Small analyses and visualisations do not need a training smoke test or an Amarel job. Run them
+  locally from saved structured results, validate the output, and synchronize the exact figure
+  only when a remote copy is requested.
+
 - Call `matplotlib.use("Agg")` before importing pyplot.
 - Default to 150 DPI and save with `bbox_inches="tight", pad_inches=0.06`.
 - Close every figure immediately after saving.
