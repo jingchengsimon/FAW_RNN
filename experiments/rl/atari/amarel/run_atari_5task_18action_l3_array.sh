@@ -33,8 +33,20 @@ if (( TASK_ID < 0 || TASK_ID >= N_TASKS )); then
   echo "task $TASK_ID outside valid range 0..$((N_TASKS - 1))" >&2
   exit 2
 fi
-MODEL="${MODELS[$((TASK_ID / SEED_COUNT))]}"
-SEED=$((TASK_ID % SEED_COUNT + 1))
+CANONICAL_TASK_ID="$TASK_ID"
+if [[ "${GAWF_FIRST_SCHEDULING:-0}" == "1" ]]; then
+  if (( SEED_COUNT != 3 || N_TASKS != 15 )); then
+    echo "GAWF_FIRST_SCHEDULING requires the 5-model x 3-seed pilot" >&2
+    exit 2
+  fi
+  # Slurm normalizes an array specification to ascending numeric task IDs.
+  # Remap the first three array ordinals to the three slow GaWF seeds, then
+  # run the twelve non-GaWF units in their ordinary canonical order.
+  GAWF_FIRST_ORDER=(12 13 14 0 1 2 3 4 5 6 7 8 9 10 11)
+  CANONICAL_TASK_ID="${GAWF_FIRST_ORDER[$TASK_ID]}"
+fi
+MODEL="${MODELS[$((CANONICAL_TASK_ID / SEED_COUNT))]}"
+SEED=$((CANONICAL_TASK_ID % SEED_COUNT + 1))
 TOTAL_TIMESTEPS="${TOTAL_TIMESTEPS:?TOTAL_TIMESTEPS is required}"
 CHECKPOINT_INTERVAL_STEPS="${CHECKPOINT_INTERVAL_STEPS:-50000}"
 LR_DECAY_STEP="${LR_DECAY_STEP:-1000000}"

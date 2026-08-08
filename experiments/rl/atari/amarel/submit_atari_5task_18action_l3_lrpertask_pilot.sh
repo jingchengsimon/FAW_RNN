@@ -20,7 +20,7 @@ ARTIFACT_ROOT="$ROOT/experiments/rl/atari/amarel/artifacts/atari_5task_18action_
 if (( DRY_RUN )); then
   echo "protocol: five-task full18 L3; 5M global (=about 1M/task); no task ID"
   echo "LR: decay only when min_task_steps reaches 1M; therefore no decay within this pilot"
-  echo "GaWF: standard eager recurrent scan; task order 12-14,0-11 with max concurrency 8"
+  echo "GaWF: standard eager recurrent scan; array ordinals 0-2 map to GaWF seeds, max concurrency 8"
   echo "results: $BASE"
   exit 0
 fi
@@ -40,9 +40,10 @@ PILOT_EXPORTS="$COMMON,RESULT_PARENT=$BASE/pilot,SEED_COUNT=3,RUN_PHASE=pilot"
 PILOT_EXPORTS="$PILOT_EXPORTS,TOTAL_TIMESTEPS=5000000,CHECKPOINT_INTERVAL_STEPS=50000"
 PILOT_EXPORTS="$PILOT_EXPORTS,LR_DECAY_STEP=0,LR_DECAY_PER_TASK_STEPS=1000000"
 PILOT_EXPORTS="$PILOT_EXPORTS,LEARNING_STARTS_PER_TASK=20000,REQUIRED_GIB=27"
-# Task ids 12-14 are the three GaWF seeds. Submit them first so the slowest
-# model overlaps five non-GaWF units instead of becoming the final tail.
-PILOT_RAW="$(sbatch --parsable --job-name=aim3-atari-5task-lrpertask-pilot --array=12-14,0-11%8 \
+PILOT_EXPORTS="$PILOT_EXPORTS,GAWF_FIRST_SCHEDULING=1"
+# Array ordinals 0-2 deterministically map to the three GaWF seeds, so all
+# GaWF runs overlap five non-GaWF units under the eight-GPU throttle.
+PILOT_RAW="$(sbatch --parsable --job-name=aim3-atari-5task-lrpertask-pilot --array=0-14%8 \
   --time=72:00:00 --chdir="$ROOT" --output="$ARTIFACT_ROOT/pilot/%A_%a.out" \
   --error="$ARTIFACT_ROOT/pilot/%A_%a.err" --dependency="afterok:$SMOKE_JOB_ID" \
   --export="ALL,$PILOT_EXPORTS" "$RUNNER")"
