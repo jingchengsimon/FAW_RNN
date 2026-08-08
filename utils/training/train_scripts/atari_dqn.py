@@ -190,6 +190,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--capture_video", action="store_true")
     parser.add_argument("--log_interval", type=int, default=1000)
     parser.add_argument(
+        "--record_timing",
+        action="store_true",
+        help=(
+            "Record host-wall environment/replay I/O and optimizer-update timing in final metrics. "
+            "This is for performance benchmarks and does not change training behaviour."
+        ),
+    )
+    parser.add_argument(
         "--amp_dtype",
         type=str,
         default="none",
@@ -972,6 +980,13 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         learning_started_at_step: int | None = None
         learning_rate_decay_applied = False
         final_metrics: dict[str, Any] = {}
+        timing = {
+            "environment_seconds": 0.0,
+            "replay_io_seconds": 0.0,
+            "inference_seconds": 0.0,
+            "optimization_seconds": 0.0,
+            "optimizer_updates": 0,
+        }
 
         if resume_checkpoint is not None:
             model.load_state_dict(resume_checkpoint["model"])
@@ -1082,6 +1097,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             # Always advance the model step so the GaWF recurrent state and
             # prev-Q feedback evolve identically whether or not the epsilon
             # coin picks a random action.
+            inference_start = time.perf_counter() if args.record_timing else 0.0
             with torch.no_grad(), acceleration.autocast():
                 q_values, state = _step_with_sequence_forward(
                     model_forward, next_obs, next_done, state
@@ -1090,8 +1106,13 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             random_action = np.random.randint(0, num_actions, size=args.num_envs)
             explore = np.random.random(size=args.num_envs) < epsilon
             action_np = np.where(explore, random_action, greedy_action)
+            if args.record_timing:
+                timing["inference_seconds"] += time.perf_counter() - inference_start
 
+            environment_start = time.perf_counter() if args.record_timing else 0.0
             next_obs_np, reward_np, terminated_np, truncated_np, infos = envs.step(action_np)
+            if args.record_timing:
+                timing["environment_seconds"] += time.perf_counter() - environment_start
             done_np = np.logical_or(terminated_np, truncated_np).astype(np.uint8)
             # NEXT_STEP autoreset consumes one ignored action after a terminal
             # row. Reset before that invalid row and again before the first
@@ -1110,6 +1131,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                 if env_id in environment_steps and not prev_done_np[slot]:
                     environment_steps[env_id] += 1
 
+            replay_io_start = time.perf_counter() if args.record_timing else 0.0
             buffer.add(
                 obs=current_obs_np,
                 actions=action_np,
@@ -1118,6 +1140,8 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                 resets=prev_done_np,
                 task_ids=task_ids_np,
             )
+            if args.record_timing:
+                timing["replay_io_seconds"] += time.perf_counter() - replay_io_start
             prev_done_np = done_np
             current_obs_np = to_channel_first_obs(next_obs_np)
             next_obs = torch.as_tensor(current_obs_np, device=device)
@@ -1154,6 +1178,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                         global_step,
                         min(environment_steps.values()) if environment_steps else 0,
                     )
+                optimization_start = time.perf_counter() if args.record_timing else 0.0
                 with acceleration.autocast():
                     if model.is_recurrent:
                         loss, q_mean = _drqn_sequence_loss(
@@ -1176,6 +1201,9 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                     scaler.update()
                 else:
                     optimizer.step()
+                if args.record_timing:
+                    timing["optimization_seconds"] += time.perf_counter() - optimization_start
+                    timing["optimizer_updates"] += 1
                 last_loss_tensor = loss.detach()
                 last_q_mean_tensor = q_mean.detach()
 
@@ -1268,6 +1296,29 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             last_q_mean_tensor,
         )
         rolling_return = float(np.mean(rolling_returns)) if rolling_returns else float("nan")
+        elapsed_seconds = elapsed_before_resume + (time.time() - start_time)
+        timing_metrics = None
+        if args.record_timing:
+            environment_seconds = float(timing["environment_seconds"])
+            replay_io_seconds = float(timing["replay_io_seconds"])
+            inference_seconds = float(timing["inference_seconds"])
+            optimization_seconds = float(timing["optimization_seconds"])
+            optimizer_updates = int(timing["optimizer_updates"])
+            timing_metrics = {
+                "host_wall_elapsed_seconds": elapsed_seconds,
+                "environment_seconds": environment_seconds,
+                "replay_io_seconds": replay_io_seconds,
+                "inference_seconds": inference_seconds,
+                "optimization_seconds": optimization_seconds,
+                "optimizer_updates": optimizer_updates,
+                "environment_io_ms_per_step": 1_000 * (
+                    environment_seconds + replay_io_seconds
+                ) / max(global_step, 1),
+                "optimization_ms_per_update": 1_000 * optimization_seconds / max(
+                    optimizer_updates, 1
+                ),
+                "optimization_ms_per_step": 1_000 * optimization_seconds / max(global_step, 1),
+            }
         per_env_metrics = {
             env_id: {
                 "episodic_return_100": (
@@ -1331,6 +1382,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "raw_ale_frames": global_step * args.frame_skip,
             "flicker_prob": args.flicker_prob,
             "global_step": global_step,
+            "timing": timing_metrics,
             "episodic_return_100": rolling_return,
             "fps": fps,
             "loss": last_loss,
