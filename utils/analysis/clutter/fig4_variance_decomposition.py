@@ -182,6 +182,18 @@ def parse_args() -> argparse.Namespace:
             "PNGs in the local results tree (no automatic 6-Writing sync)."
         ),
     )
+    parser.add_argument(
+        "--output_dir",
+        type=Path,
+        default=None,
+        help="Optional exact per-seed numeric-output directory for a multi-seed campaign.",
+    )
+    parser.add_argument(
+        "--figure_dir",
+        type=Path,
+        default=None,
+        help="Optional exact per-seed development-figure directory.",
+    )
     return parser.parse_args()
 
 
@@ -913,13 +925,21 @@ def _save_trace_arrays(
 
 
 def _git_commit() -> str:
-    completed = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=PROJECT_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    """Return the source revision when Git is available on the executing host.
+
+    Compute-node environments may intentionally omit the Git executable.  Provenance
+    capture must not make an otherwise complete numeric analysis fail in that case.
+    """
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=PROJECT_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        return "unavailable"
     return completed.stdout.strip() if completed.returncode == 0 else "unknown"
 
 
@@ -985,8 +1005,10 @@ def main() -> None:
         f"seed={balance.seed}",
         flush=True,
     )
-    data_dir = output_dir(CATEGORY, SCRIPT_NAME, "data")
-    figure_dir = output_dir(CATEGORY, SCRIPT_NAME, "figs")
+    data_dir = args.output_dir if args.output_dir is not None else output_dir(CATEGORY, SCRIPT_NAME, "data")
+    figure_dir = args.figure_dir if args.figure_dir is not None else output_dir(CATEGORY, SCRIPT_NAME, "figs")
+    data_dir.mkdir(parents=True, exist_ok=True)
+    figure_dir.mkdir(parents=True, exist_ok=True)
     results: dict[str, RepeatedDecomposition] = {}
     tidy_rows: list[dict[str, str | float]] = []
     for object_name in OBJECT_ORDER:
@@ -1060,8 +1082,8 @@ def main() -> None:
         "git_commit": _git_commit(),
         "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
         "category": CATEGORY,
-        "data_root": str(data_dir.relative_to(PROJECT_ROOT)),
-        "figure_root": str(figure_dir.relative_to(PROJECT_ROOT)),
+        "data_root": str(data_dir),
+        "figure_root": str(figure_dir),
         "data_files": data_files,
         "figure_files": figure_files,
         "files_written": files,
@@ -1073,7 +1095,8 @@ def main() -> None:
     (data_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    _write_index(PROJECT_ROOT / "results" / "anal_index")
+    if args.output_dir is None and args.figure_dir is None:
+        _write_index(PROJECT_ROOT / "results" / "anal_index")
     print(f"Saved unified data to {data_dir}; figures to {figure_dir}")
     if unexplained and not args.skip_published_regression:
         raise RuntimeError(

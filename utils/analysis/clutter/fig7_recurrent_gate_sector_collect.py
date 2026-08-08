@@ -27,31 +27,27 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from utils.analysis.anal_paths import output_dir
-
-CACHE_CATEGORY = "E_relevance_alignment"
-CACHE_SCRIPT_NAME = "gawf_recurrent_gate_single_digit_diagnostic_collect"  # shared cache dir
 SECTORS = tuple(range(9))
 MAX_SAMPLES_PER_SECTOR = 1200
 TOP_FRACTION = 0.10
 SECTOR_LABEL_COL = 1  # labels[:, t, 0]=digit, labels[:, t, 1]=sector
 
-CKPT_PATH = PROJECT_ROOT / (
-    "results/data/clutter/runs/best_6model_param_matched_40h/"
-    "gawf_sector_acc_h256_lr0.005_wd0.001_cdo0.0_rdo0.5_model.pth"
-)
-SELECTIVITY_PATH = PROJECT_ROOT / (
-    "results/data/analysis/D_variance_decomposition/"
-    "gawf_symmetric_relevance_timing/part1_selectivity.npz"
-)
-DATA_DIR = PROJECT_ROOT / "source" / "clutter" / "stimuli"
-DATA_SUFFIX = "40h-uint8"
-EXPECTED_SHA256 = "5b109ff973bc54726be5a58cb50699d3e150da9d521da0a1126c089a2aeefc25"
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse one checkpoint's selectivity artifact and isolated output cache."""
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--ckpt", required=True, type=Path)
+    parser.add_argument("--selectivity", required=True, type=Path)
+    parser.add_argument("--cache_dir", required=True, type=Path)
+    parser.add_argument("--data_dir", default=str(PROJECT_ROOT / "source" / "clutter" / "stimuli"))
+    parser.add_argument("--data_suffix", default="40h-uint8")
+    parser.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    return parser.parse_args()
 
 
 def main() -> None:
-    import hashlib
-
     import torch
     from torch.utils.data import DataLoader
 
@@ -59,17 +55,15 @@ def main() -> None:
     from utils.analysis.clutter.fig7_relevance_timing import _gate_tensors
     from utils.analysis.clutter.fig7_relevance_stats import relevance_masks
 
-    checksum = hashlib.sha256(CKPT_PATH.read_bytes()).hexdigest()
-    if checksum != EXPECTED_SHA256:
-        raise RuntimeError(f"checkpoint sha256 mismatch: {checksum} != {EXPECTED_SHA256}")
-
-    args = argparse.Namespace(
-        data_dir=str(DATA_DIR), data_suffix=DATA_SUFFIX, use_mmap=True,
+    cli = parse_args()
+    dataset_args = argparse.Namespace(
+        data_dir=str(cli.data_dir), data_suffix=cli.data_suffix, use_mmap=True,
         chan_num=2, use_sector_mode=True, predict_all_chars=False,
     )
-    device = resolve_device("cpu")
-    dataset, num_pos = build_eval_dataset(args, "test")
-    model = build_model_from_ckpt(str(CKPT_PATH), num_pos, device, chan_num=2)
+    cli.cache_dir.mkdir(parents=True, exist_ok=True)
+    device = resolve_device(cli.device, require_cuda_if_requested=True)
+    dataset, num_pos = build_eval_dataset(dataset_args, "test")
+    model = build_model_from_ckpt(str(cli.ckpt), num_pos, device, chan_num=2)
     hidden_size = int(model.rnn.hidden_size)
     input_size = int(model.rnn.input_size)
     print(f"dataset sequences={len(dataset)}, hidden_size={hidden_size}, "
@@ -77,7 +71,7 @@ def main() -> None:
 
     W = model.rnn.weight_hh_l0.detach().cpu().numpy().astype(np.float64)
 
-    with np.load(SELECTIVITY_PATH, allow_pickle=False) as sel:
+    with np.load(cli.selectivity, allow_pickle=False) as sel:
         tuning_sector = np.asarray(sel["primary_hidden_tuning_sector"], dtype=np.float64)
         passed_sector = np.asarray(sel["primary_hidden_passed_sector"], dtype=bool)
         dominant = np.asarray(sel["primary_hidden_interaction_dominant"], dtype=bool)
@@ -86,7 +80,7 @@ def main() -> None:
     print(f"eligible (sector)={int(eligible_sector.sum())}  "
           f"T_old sizes per sector: {[int(T_old_all[s].sum()) for s in SECTORS]}", flush=True)
 
-    loader = DataLoader(dataset, batch_size=32, shuffle=False, num_workers=0)
+    loader = DataLoader(dataset, batch_size=32, shuffle=False, num_workers=0, pin_memory=device.type == "cuda")
     gate_chunks: dict[int, list[np.ndarray]] = {s: [] for s in SECTORS}
     act_chunks: dict[int, list[np.ndarray]] = {s: [] for s in SECTORS}
     counts: dict[int, int] = {s: 0 for s in SECTORS}
@@ -95,13 +89,13 @@ def main() -> None:
     with torch.no_grad():
         for batch_idx, batch in enumerate(loader):
             frames, labels = batch[0], batch[1]
-            frames = frames.to(dtype=torch.float32)
-            labels = labels.to(dtype=torch.int64)
+            frames = frames.to(device=device, dtype=torch.float32, non_blocking=device.type == "cuda")
+            labels = labels.to(device=device, dtype=torch.int64, non_blocking=device.type == "cuda")
             encoded_maps = model.encoder_module(frames.reshape(-1, *frames.shape[2:]))
             encoded = encoded_maps.reshape(frames.shape[0], frames.shape[1], -1)
             batch_size_actual, frame_num, _ = encoded.shape
-            hidden = torch.zeros(batch_size_actual, hidden_size, dtype=encoded.dtype)
-            feedback = torch.zeros(batch_size_actual, model.feedback_dim, dtype=torch.float32)
+            hidden = torch.zeros(batch_size_actual, hidden_size, dtype=encoded.dtype, device=device)
+            feedback = torch.zeros(batch_size_actual, model.feedback_dim, dtype=torch.float32, device=device)
             for time_idx in range(frame_num):
                 gate_input, gate_recurrent = _gate_tensors(feedback, model, input_size)
                 sector_labels = labels[:, time_idx, SECTOR_LABEL_COL]
@@ -135,7 +129,6 @@ def main() -> None:
                 print("  all sector caps reached, stopping early", flush=True)
                 break
 
-    data_dir_out = output_dir(CACHE_CATEGORY, CACHE_SCRIPT_NAME, "data")
     for s in SECTORS:
         if not gate_chunks[s]:
             raise RuntimeError(f"sector {s}: no frames collected")
@@ -151,7 +144,7 @@ def main() -> None:
         gate = G_flat.reshape(1, n_samples, 1, hidden_size, hidden_size)
         act = act_flat.reshape(1, n_samples, 1, hidden_size)
 
-        cache_path = data_dir_out / f"sector{s}_gate_act_cache.npz"
+        cache_path = cli.cache_dir / f"sector{s}_gate_act_cache.npz"
         np.savez(cache_path, W=W.astype(np.float32), gate=gate, act=act,
                  T_new=T_new, T_old=T_old_all[s])
         print(f"Saved {cache_path}", flush=True)

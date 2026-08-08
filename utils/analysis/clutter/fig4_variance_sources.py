@@ -85,6 +85,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--chan_num", type=int, default=2)
     parser.add_argument("--use_mmap", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--flush_every_batches", type=int, default=25)
+    parser.add_argument(
+        "--output_dir",
+        type=Path,
+        default=None,
+        help="Optional exact per-checkpoint output directory for multi-seed analyses.",
+    )
     return parser.parse_args()
 
 
@@ -278,7 +284,8 @@ def main() -> None:
             "batch_size/flush_every_batches must be positive and num_workers nonnegative"
         )
     device = resolve_device(args.device, require_cuda_if_requested=True)
-    data_dir = output_dir(CATEGORY, SCRIPT_NAME, "data")
+    data_dir = args.output_dir if args.output_dir is not None else output_dir(CATEGORY, SCRIPT_NAME, "data")
+    data_dir.mkdir(parents=True, exist_ok=True)
 
     dataset_args = argparse.Namespace(
         data_dir=str(args.data_dir),

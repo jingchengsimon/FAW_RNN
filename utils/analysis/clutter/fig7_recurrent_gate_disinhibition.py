@@ -9,14 +9,15 @@ dimmed) because it is the group where the sign gap is largest and most robust to
 context control; putting digit and sector side by side is meant to make "digit's TT gap is
 large, sector's is much smaller" legible at a glance.
 
-Re-derives the pooled data and clean (overlap-band-only) regression in-memory by calling each
-module's analyze(contexts, kind) -- this only replays cheap pandas/statsmodels work against the
-already-collected npz caches, not the expensive torch forward pass, so it is fast enough to not
-warrant a separate persisted-data intermediate.
+Re-derives the pooled data in memory from the already-collected NPZ caches. The poster uses only
+the overlap-band gate means; it intentionally skips the optional OLS regression and never reruns
+the expensive torch forward pass.
 """
 
 from __future__ import annotations
 
+import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -235,24 +236,68 @@ def render_poster_vertical(
         _save_png_and_pdf(fig, fig_path, dpi)
 
 
+def parse_args() -> argparse.Namespace:
+    """Parse isolated cache locations and an optional 10-seed output destination."""
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--cache_dirs", nargs="+", type=Path, default=None)
+    parser.add_argument("--fig_dir", type=Path, default=None)
+    parser.add_argument("--output_stem", default="recurrent_gate_disinhibition_poster")
+    return parser.parse_args()
+
+
+def _cross_seed_stats(records: list[dict[str, dict]]) -> dict[str, dict]:
+    """Collapse per-seed overlap-band means to cross-seed mean +/- SD."""
+
+    result: dict[str, dict] = {}
+    for group in GROUP_NAMES:
+        result[group] = {}
+        for sign in ("+", "-"):
+            values = np.asarray([record[group][sign]["mean"] for record in records], dtype=np.float64)
+            if not np.all(np.isfinite(values)):
+                raise RuntimeError(f"Non-finite per-seed Fig7 statistic for {group}/{sign}")
+            result[group][sign] = {
+                "mean": float(values.mean()),
+                "sem": float(values.std(ddof=1)) if values.size > 1 else 0.0,
+                "n": int(values.size),
+            }
+    return result
+
+
 # --------------------------------------------------------------------------------------------
 # Main
 # --------------------------------------------------------------------------------------------
 def main() -> None:
+    """Render a single-seed or cross-seed poster from structured cache data."""
+
+    args = parse_args()
+    if args.cache_dirs is not None and len(args.cache_dirs) < 2:
+        raise ValueError("--cache_dirs requires at least two per-seed cache directories")
     stats_by_variable: dict[str, dict[str, dict]] = {}
     gap_by_variable: dict[str, dict[str, float]] = {}
     p_by_variable: dict[str, dict[str, float]] = {}
 
     for kind in VARIABLES:
-        pooled, _meta, overlap_stats, _regs_full, regs_clean = analyze(CONTEXTS_BY_VARIABLE[kind], kind)
-        print_overlap_bands(kind, overlap_stats)
-
-        stats = overlap_band_sign_stats(pooled, overlap_stats)
-        stats_by_variable[kind] = stats
+        if args.cache_dirs is None:
+            pooled, _meta, overlap_stats, _regs_full, regs_clean = analyze(
+                CONTEXTS_BY_VARIABLE[kind], kind, run_regressions=False
+            )
+            print_overlap_bands(kind, overlap_stats)
+            stats = overlap_band_sign_stats(pooled, overlap_stats)
+            stats_by_variable[kind] = stats
+        else:
+            per_seed_stats: list[dict[str, dict]] = []
+            for cache_dir in args.cache_dirs:
+                pooled, _meta, overlap_stats, _regs_full, _regs_clean = analyze(
+                    CONTEXTS_BY_VARIABLE[kind], kind, cache_dir=cache_dir, run_regressions=False
+                )
+                per_seed_stats.append(overlap_band_sign_stats(pooled, overlap_stats))
+            stats = _cross_seed_stats(per_seed_stats)
+            stats_by_variable[kind] = stats
         gap_by_variable[kind] = {
             g: stats[g]["+"]["mean"] - stats[g]["-"]["mean"] for g in GROUP_NAMES
         }
-        p_by_variable[kind] = {g: sign_p_value(regs_clean.get(g)) for g in GROUP_NAMES}
+        p_by_variable[kind] = {g: float("nan") for g in GROUP_NAMES}
 
     print("\n=== summary (|W|-matched overlap band, controlling for |W| + context) ===")
     header = f"{'kind':>7} {'group':>6} {'n_+':>8} {'n_-':>8} {'of+':>8} {'of-':>8} {'gap':>8} {'p (clean, sign coef)':>22}"
@@ -265,11 +310,23 @@ def main() -> None:
                   f"{neg['mean']:>8.4f} {gap_by_variable[kind][g]:>8.4f} "
                   f"{p_by_variable[kind][g]:>22.3e}")
 
-    fig_dir = output_dir(CATEGORY, SCRIPT_NAME, "figs")
-    render_poster(stats_by_variable, fig_dir / "recurrent_gate_disinhibition_poster.png")
-    render_poster_vertical(
-        stats_by_variable, fig_dir / "recurrent_gate_disinhibition_poster_vertical.png"
-    )
+    fig_dir = args.fig_dir if args.fig_dir is not None else output_dir(CATEGORY, SCRIPT_NAME, "figs")
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    render_poster(stats_by_variable, fig_dir / f"{args.output_stem}.png")
+    if args.cache_dirs is not None:
+        summary_path = fig_dir / f"{args.output_stem}_metadata.json"
+        summary_path.write_text(
+            json.dumps(
+                {
+                    "n_seeds": len(args.cache_dirs),
+                    "cache_dirs": [str(path.resolve()) for path in args.cache_dirs],
+                    "aggregation": "per-seed overlap-band means; bars show cross-seed mean +/- SD",
+                    "seed42_included": False,
+                },
+                indent=2,
+            ) + "\n",
+            encoding="utf-8",
+        )
 
 
 if __name__ == "__main__":

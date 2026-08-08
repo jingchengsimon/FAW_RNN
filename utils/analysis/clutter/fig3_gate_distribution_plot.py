@@ -47,6 +47,27 @@ def parse_args() -> argparse.Namespace:
         help="Deprecated compatibility override; sends every figure to one directory.",
     )
     parser.add_argument("--format", choices=["png", "pdf"], default="png")
+    parser.add_argument(
+        "--seed_dirs",
+        nargs="+",
+        default=None,
+        help="Per-seed Fig3 directories. Histograms are pooled before plotting.",
+    )
+    parser.add_argument(
+        "--only_gate_weight_2x2",
+        action="store_true",
+        help="Render only the final gate/weight 2x2 summary.",
+    )
+    parser.add_argument(
+        "--gate_weight_stem",
+        default="07_gate_and_weight_distributions_2x2",
+        help="Filename stem used with --only_gate_weight_2x2.",
+    )
+    parser.add_argument(
+        "--metadata_path",
+        default=None,
+        help="Optional JSON destination for multi-seed aggregation provenance.",
+    )
     return parser.parse_args()
 
 
@@ -193,6 +214,133 @@ def _weight_probability_axes(axes: np.ndarray, arrays: dict[str, np.ndarray]) ->
         _style_probability_axis(axis)
 
 
+def _histogram_median(counts: np.ndarray, edges: np.ndarray) -> float:
+    """Return the fixed-bin median represented by a nonempty histogram."""
+
+    cumulative = np.cumsum(np.asarray(counts, dtype=np.int64))
+    if cumulative.size == 0 or cumulative[-1] <= 0:
+        raise ValueError("Cannot compute a median from an empty histogram")
+    index = int(np.searchsorted(cumulative, (int(cumulative[-1]) - 1) // 2 + 1))
+    return float((edges[index] + edges[index + 1]) / 2.0)
+
+
+def _reproject_histogram_counts(
+    counts: np.ndarray,
+    source_edges: np.ndarray,
+    target_edges: np.ndarray,
+) -> np.ndarray:
+    """Project a histogram to different bins, uniformly within each source interval.
+
+    Weight ranges differ across independently trained checkpoints.  The saved counts contain no
+    sample-level values, so overlap-weighted projection is the exact aggregation permitted by
+    the histogram representation under its standard uniform-within-bin assumption.
+    """
+
+    source_counts = np.asarray(counts, dtype=np.float64)
+    source_edges = np.asarray(source_edges, dtype=np.float64)
+    target_edges = np.asarray(target_edges, dtype=np.float64)
+    if source_counts.ndim != 1 or source_edges.size != source_counts.size + 1:
+        raise ValueError("Histogram counts and source edges have incompatible shapes")
+    if target_edges.ndim != 1 or target_edges.size < 2 or np.any(np.diff(target_edges) <= 0):
+        raise ValueError("Target histogram edges must be strictly increasing")
+    projected = np.zeros(target_edges.size - 1, dtype=np.float64)
+    for index, count in enumerate(source_counts):
+        if count == 0:
+            continue
+        left = source_edges[index]
+        right = source_edges[index + 1]
+        width = right - left
+        if width <= 0:
+            raise ValueError("Source histogram edges must be strictly increasing")
+        start = max(0, int(np.searchsorted(target_edges, left, side="right") - 1))
+        stop = min(projected.size, int(np.searchsorted(target_edges, right, side="left") + 1))
+        for target_index in range(start, stop):
+            overlap = min(right, target_edges[target_index + 1]) - max(left, target_edges[target_index])
+            if overlap > 0:
+                projected[target_index] += count * overlap / width
+    if not np.isclose(projected.sum(), source_counts.sum(), rtol=1e-10, atol=1e-6):
+        raise ValueError("Target histogram range does not cover all source bins")
+    return projected
+
+
+def _load_multiseed_gate_statistics(seed_dirs: list[str]) -> tuple[dict[str, np.ndarray], dict[str, object]]:
+    """Pool same-bin Fig3 histograms and preserve an explicit 10-seed provenance record."""
+
+    if len(seed_dirs) < 2:
+        raise ValueError("--seed_dirs requires at least two independent seed directories")
+    arrays_by_seed: list[dict[str, np.ndarray]] = []
+    metadata_by_seed: list[dict[str, object]] = []
+    for directory in seed_dirs:
+        stats_path = os.path.join(directory, "gawf_gate_distribution_stats.npz")
+        metadata_path = os.path.join(directory, "gawf_gate_distribution_meta.json")
+        with np.load(stats_path, allow_pickle=False) as loaded:
+            arrays_by_seed.append({key: np.asarray(loaded[key]) for key in loaded.files})
+        with open(metadata_path, encoding="utf-8") as file_obj:
+            metadata_by_seed.append(json.load(file_obj))
+    reference = arrays_by_seed[0]
+    pooled: dict[str, np.ndarray] = {}
+    weight_hist_keys = {
+        "hist_weight_input",
+        "hist_weight_recurrent",
+        "hist_effective_input",
+        "hist_effective_recurrent",
+    }
+    for key, value in reference.items():
+        values = [item[key] for item in arrays_by_seed]
+        if any(value.shape != item.shape for item in values):
+            raise ValueError(f"Per-seed Fig3 array shape mismatch for {key}")
+        if key in weight_hist_keys or key.startswith("effective_edges_"):
+            continue
+        if key.startswith("hist_") or key == "context_counts":
+            pooled[key] = np.sum(np.stack(values, axis=0), axis=0, dtype=np.int64)
+        elif key.startswith("context_mean_"):
+            pooled[key] = np.mean(np.stack(values, axis=0), axis=0, dtype=np.float64).astype(np.float32)
+        else:
+            if any(not np.array_equal(value, item) for item in values[1:]):
+                raise ValueError(f"Per-seed Fig3 bin/weight array mismatch for {key}")
+            pooled[key] = value
+    for kind in ("input", "recurrent"):
+        edge_key = f"effective_edges_{kind}"
+        histogram_size = reference[edge_key].size - 1
+        max_abs = max(
+            float(np.max(np.abs(item[edge_key]))) for item in arrays_by_seed
+        )
+        target_edges = np.linspace(-max_abs, max_abs, histogram_size + 1, dtype=np.float32)
+        pooled[edge_key] = target_edges
+        for prefix in ("hist_weight", "hist_effective"):
+            pooled[f"{prefix}_{kind}"] = np.sum(
+                np.stack(
+                    [
+                        _reproject_histogram_counts(
+                            item[f"{prefix}_{kind}"], item[edge_key], target_edges
+                        )
+                        for item in arrays_by_seed
+                    ],
+                    axis=0,
+                ),
+                axis=0,
+                dtype=np.float64,
+            )
+    metadata = dict(metadata_by_seed[0])
+    distribution = dict(metadata.get("distribution", {}))
+    for kind in ("input", "recurrent"):
+        record = dict(distribution.get(kind, {}))
+        record["median"] = _histogram_median(pooled[f"hist_{kind}_all"], pooled["gate_edges"])
+        distribution[kind] = record
+    metadata["distribution"] = distribution
+    metadata["multiseed_aggregation"] = {
+        "n_seeds": len(seed_dirs),
+        "seed_dirs": [os.path.abspath(directory) for directory in seed_dirs],
+        "definition": (
+            "Same-bin gate histograms are summed across seeds and gate medians are recomputed "
+            "from the pooled histogram. Weight and effective-weight histograms are first "
+            "reprojected by bin overlap to a common symmetric range before summation."
+        ),
+        "seed42_included": False,
+    }
+    return pooled, metadata
+
+
 def main() -> None:
     """Read analysis outputs and save seven independent figures."""
 
@@ -200,16 +348,48 @@ def main() -> None:
     _resolve_output_dirs(args)
     for directory in (args.raw_dir, args.context_dir, args.delta_dir, args.relevance_dir):
         os.makedirs(directory, exist_ok=True)
-    stats_path = os.path.join(args.data_dir, "gawf_gate_distribution_stats.npz")
-    metadata_path = os.path.join(args.data_dir, "gawf_gate_distribution_meta.json")
-    with np.load(stats_path) as loaded:
-        arrays = {key: loaded[key] for key in loaded.files}
-    with open(metadata_path, encoding="utf-8") as file_obj:
-        metadata = json.load(file_obj)
+    if args.seed_dirs is None:
+        stats_path = os.path.join(args.data_dir, "gawf_gate_distribution_stats.npz")
+        metadata_path = os.path.join(args.data_dir, "gawf_gate_distribution_meta.json")
+        with np.load(stats_path) as loaded:
+            arrays = {key: loaded[key] for key in loaded.files}
+        with open(metadata_path, encoding="utf-8") as file_obj:
+            metadata = json.load(file_obj)
+    else:
+        arrays, metadata = _load_multiseed_gate_statistics(args.seed_dirs)
+    if args.metadata_path is not None:
+        with open(args.metadata_path, "w", encoding="utf-8") as file_obj:
+            json.dump(metadata, file_obj, indent=2)
     suffix = args.format
 
     edges = arrays["gate_edges"]
     centers = (edges[:-1] + edges[1:]) / 2.0
+    if args.only_gate_weight_2x2:
+        with plt.rc_context(
+            {
+                "font.size": 16,
+                "axes.labelsize": 16,
+                "axes.titlesize": 16,
+                "xtick.labelsize": 16,
+                "ytick.labelsize": 16,
+                "legend.fontsize": 16,
+            }
+        ):
+            fig, axes = plt.subplots(2, 2, figsize=(0.7 * 2 * 5.05, 2 * 4.1))
+            _pooled_gate_probability_axes(axes[0], edges, arrays, metadata)
+            _weight_probability_axes(axes[1], arrays)
+            fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.88))
+            handles = axes[0, 0].get_legend_handles_labels()[0] + axes[1, 0].get_legend_handles_labels()[0]
+            labels = axes[0, 0].get_legend_handles_labels()[1] + axes[1, 0].get_legend_handles_labels()[1]
+            fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.954), ncol=4, frameon=False)
+            stem = args.gate_weight_stem
+            for extension in ("png", "pdf"):
+                path = os.path.join(args.raw_dir, f"{stem}.{extension}")
+                fig.savefig(path, dpi=150, bbox_inches="tight", pad_inches=0.06)
+                print(f"Saved figure: {path}")
+            plt.close(fig)
+        return
+
     fig, axes = plt.subplots(1, 2, figsize=(10, 3.8), sharey=False)
     _gate_axes(axes, edges, arrays, metadata)
     fig.suptitle("GaWF gate values pooled across all test frames")

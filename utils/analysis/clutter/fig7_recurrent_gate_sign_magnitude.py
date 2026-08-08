@@ -39,7 +39,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.lines import Line2D
 import pandas as pd
-import statsmodels.formula.api as smf
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -68,10 +67,14 @@ RNG_SEED = 0
 # --------------------------------------------------------------------------------------------
 # DATA LOADING -- real per-context (digit or sector) caches, synthetic fallback if none found.
 # --------------------------------------------------------------------------------------------
-def load_context_data(context: int, kind: str = "digit") -> dict | None:
+def load_context_data(context: int, kind: str = "digit", cache_dir: Path | None = None) -> dict | None:
     """Load one digit/sector's (W, gate_raw, act, T) from the real cache; None if absent."""
 
-    cache_path = cache_path_for_context(context, kind=kind)
+    cache_path = (
+        cache_dir / f"{kind}{context}_gate_act_cache.npz"
+        if cache_dir is not None
+        else cache_path_for_context(context, kind=kind)
+    )
     if not cache_path.is_file():
         return None
     with np.load(cache_path, allow_pickle=False) as cached:
@@ -115,15 +118,17 @@ def build_synthetic_dataset(contexts: tuple[int, ...], hidden_size: int = 64,
     return data
 
 
-def load_all_contexts(contexts: tuple[int, ...], kind: str = "digit") -> dict[int, dict]:
+def load_all_contexts(
+    contexts: tuple[int, ...], kind: str = "digit", cache_dir: Path | None = None
+) -> dict[int, dict]:
     found: dict[int, dict] = {}
     for ctx in contexts:
-        loaded = load_context_data(ctx, kind=kind)
+        loaded = load_context_data(ctx, kind=kind, cache_dir=cache_dir)
         if loaded is not None:
             found[ctx] = loaded
     if found:
-        cache_dir = cache_path_for_context(contexts[0], kind=kind).parent
-        print(f"Loaded real gate/act caches for {kind}s {sorted(found)} from {cache_dir}")
+        resolved_dir = cache_dir or cache_path_for_context(contexts[0], kind=kind).parent
+        print(f"Loaded real gate/act caches for {kind}s {sorted(found)} from {resolved_dir}")
         return found
     print(f"No real {kind} gate/act caches found on disk; using synthetic multi-{kind} "
           "placeholder data so the script runs end-to-end.")
@@ -316,9 +321,17 @@ def binned_mean_curve(
 # Regression: y_col ~ signpos + absW + C(context)  (y_col is "of" by default, or "delta_of")
 # --------------------------------------------------------------------------------------------
 def run_ols(df: pd.DataFrame, label: str, y_col: str = "of") -> dict | None:
+    """Fit the optional sign/magnitude regression when statsmodels is installed."""
+
     if df["signpos"].nunique() < 2:
         print(f"  [{label}] skipped: only one sign present, signpos coefficient is undefined")
         return None
+    try:
+        import statsmodels.formula.api as smf
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "statsmodels is required for the optional Fig7 sign/magnitude regression"
+        ) from exc
     formula = f"{y_col} ~ signpos + absW" + (" + C(context)" if df["context"].nunique() > 1 else "")
     model = smf.ols(formula, data=df).fit()
     ci = model.conf_int().loc["signpos"]
@@ -539,7 +552,11 @@ def print_summary_table(
 # Main
 # --------------------------------------------------------------------------------------------
 def analyze(
-    contexts: tuple[int, ...], kind: str,
+    contexts: tuple[int, ...],
+    kind: str,
+    *,
+    cache_dir: Path | None = None,
+    run_regressions: bool = True,
 ) -> tuple[dict[str, pd.DataFrame], dict, dict[str, dict], dict[str, dict | None], dict[str, dict | None]]:
     """Shared pipeline (load -> pool -> overlap check -> regressions) for digit or sector.
 
@@ -551,7 +568,7 @@ def analyze(
     print("Reminder: gate[..., i, j] / W[i, j] convention = src j -> dst i (row=dst, col=src).")
     print(f"kind={kind}  exclude_diagonal={EXCLUDE_DIAGONAL}  strict_fraction={STRICT_FRACTION}\n")
 
-    all_contexts = load_all_contexts(contexts, kind=kind)
+    all_contexts = load_all_contexts(contexts, kind=kind, cache_dir=cache_dir)
     pooled, meta = collect_pooled_records(all_contexts, exclude_diagonal=EXCLUDE_DIAGONAL)
 
     overlap_stats: dict[str, dict] = {}
@@ -567,15 +584,20 @@ def analyze(
         low, high = check_overlap(g, stats, x_pos, x_neg)
         overlap_stats[g] = stats
 
-        print(f"--- regression [{g}] full range ---")
-        regressions_full[g] = run_ols(df, f"{g} full")
+        if run_regressions:
+            print(f"--- regression [{g}] full range ---")
+            regressions_full[g] = run_ols(df, f"{g} full")
 
-        if np.isfinite(low) and np.isfinite(high) and high > low:
-            clean_df = df[(df["absW"] >= low) & (df["absW"] <= high)]
-            print(f"--- regression [{g}] overlap-only (clean) ---")
-            regressions_clean[g] = run_ols(clean_df, f"{g} clean")
+            if np.isfinite(low) and np.isfinite(high) and high > low:
+                clean_df = df[(df["absW"] >= low) & (df["absW"] <= high)]
+                print(f"--- regression [{g}] overlap-only (clean) ---")
+                regressions_clean[g] = run_ols(clean_df, f"{g} clean")
+            else:
+                print(f"--- regression [{g}] overlap-only skipped: no overlap band ---")
+                regressions_clean[g] = None
         else:
-            print(f"--- regression [{g}] overlap-only skipped: no overlap band ---")
+            print(f"--- regression [{g}] skipped for this consumer ---")
+            regressions_full[g] = None
             regressions_clean[g] = None
 
     print_summary_table(pooled, overlap_stats, regressions_full, regressions_clean, meta, kind=kind)

@@ -64,21 +64,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data_suffix", default="40h-uint8")
     parser.add_argument(
         "--decomposition_dir",
-        default=str(
-            output_dir("D_variance_decomposition", "gawf_symmetric_relevance_timing", "data")
-        ),
+        default=None,
     )
     parser.add_argument(
         "--relevance_dir",
-        default=str(output_dir("E_relevance_alignment", "gawf_symmetric_relevance_timing", "data")),
+        default=None,
     )
     parser.add_argument(
         "--timing_dir",
-        default=str(output_dir("F_timing", "gawf_symmetric_relevance_timing", "data")),
+        default=None,
     )
     parser.add_argument(
         "--control_dir",
-        default=str(output_dir("H_controls", "gawf_symmetric_relevance_timing", "data")),
+        default=None,
     )
     parser.add_argument(
         "--save_dir",
@@ -802,6 +800,19 @@ def main() -> None:
         args.decomposition_dir = args.relevance_dir = args.timing_dir = args.control_dir = (
             args.save_dir
         )
+    else:
+        if args.decomposition_dir is None:
+            args.decomposition_dir = str(
+                output_dir("D_variance_decomposition", "gawf_symmetric_relevance_timing", "data")
+            )
+        if args.relevance_dir is None:
+            args.relevance_dir = str(
+                output_dir("E_relevance_alignment", "gawf_symmetric_relevance_timing", "data")
+            )
+        if args.timing_dir is None:
+            args.timing_dir = str(output_dir("F_timing", "gawf_symmetric_relevance_timing", "data"))
+        if args.control_dir is None:
+            args.control_dir = str(output_dir("H_controls", "gawf_symmetric_relevance_timing", "data"))
     for directory in (
         args.decomposition_dir,
         args.relevance_dir,

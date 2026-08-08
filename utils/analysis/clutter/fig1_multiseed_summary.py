@@ -47,7 +47,14 @@ DIGIT_COLOR = "#E76F51"
 SECTOR_COLOR = "#264653"
 SAVE_DATA_ROOT = PROJECT_ROOT / "results" / "save_data"
 FIG_DIR = PROJECT_ROOT / "results" / "train_figs" / "clutter" / "clutter_best6_multiseed_40h_ep150"
-TRAIN_DATA_DIR = PROJECT_ROOT / "results" / "train_data" / "clutter_best6_multiseed_40h_ep150"
+TRAIN_DATA_DIR = (
+    PROJECT_ROOT
+    / "results"
+    / "data"
+    / "clutter"
+    / "seed_search"
+    / "clutter_best6_multiseed_40h_ep150"
+)
 
 
 def parse_args() -> argparse.Namespace:

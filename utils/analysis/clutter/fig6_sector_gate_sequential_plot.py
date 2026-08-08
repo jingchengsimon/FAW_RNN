@@ -48,10 +48,24 @@ def parse_args() -> argparse.Namespace:
         default=str(output_dir("B_gate_by_context", "sector_sigmoid_gate_sequential", "figs")),
     )
     parser.add_argument("--dpi", type=int, default=150)
+    parser.add_argument(
+        "--stem",
+        default="fig2_sector_gate_mean_sequential_equal_n",
+        help="Output filename stem; point-included/excluded suffix is appended.",
+    )
+    parser.add_argument(
+        "--seed_data",
+        type=str,
+        nargs="+",
+        default=None,
+        help="Ten per-seed Fig6 NPZ files; their point maps are averaged before plotting.",
+    )
     return parser.parse_args()
 
 
-def plot_sector_grid(maps: np.ndarray, point_key: str, fig_dir: str, dpi: int) -> tuple[str, str]:
+def plot_sector_grid(
+    maps: np.ndarray, point_key: str, fig_dir: str, dpi: int, stem_prefix: str
+) -> tuple[str, str]:
     """Write one sector-only 3x3 raw gate-mean grid as PNG and PDF."""
 
     values = np.asarray(maps, dtype=np.float32)
@@ -64,19 +78,29 @@ def plot_sector_grid(maps: np.ndarray, point_key: str, fig_dir: str, dpi: int) -
     fig, axes = plt.subplots(3, 3, figsize=(7.2, 6.8), constrained_layout=True)
     image = None
     for sector, axis in enumerate(axes.flat):
-        image = axis.imshow(
+        # Match Supple2's vector-cell rendering so PDF and PNG share the same discrete 6-by-6
+        # geometry without interpolation.  Fig6 retains its own absolute gate-mean values.
+        image = axis.pcolormesh(
             values[sector],
             cmap="RdBu_r",
             norm=norm,
-            interpolation="none",
+            shading="flat",
+            edgecolors="face",
+            linewidth=0.01,
+            antialiased=False,
+            rasterized=False,
+            snap=True,
         )
+        axis.set_xlim(0, 6)
+        axis.set_ylim(6, 0)
+        axis.set_aspect("equal")
         axis.set_title(f"Sector {sector}", fontsize=16)
         axis.set_xticks([])
         axis.set_yticks([])
     assert image is not None
     fig.suptitle("Sequential input-gate mean (equal-n sectors)\n" f"0.5 point mass {suffix}")
     fig.colorbar(image, ax=axes.ravel().tolist(), shrink=0.82)
-    stem = f"fig2_sector_gate_mean_sequential_equal_n_{point_key}"
+    stem = f"{stem_prefix}_{point_key}"
     png_path = os.path.join(fig_dir, f"{stem}.png")
     pdf_path = os.path.join(fig_dir, f"{stem}.pdf")
     fig.savefig(png_path, dpi=dpi, bbox_inches="tight", pad_inches=0.06)
@@ -92,9 +116,26 @@ def main() -> None:
 
     args = parse_args()
     os.makedirs(args.fig_dir, exist_ok=True)
-    with np.load(args.data, allow_pickle=False) as loaded:
-        for point_key in ("point_included", "point_excluded"):
-            plot_sector_grid(loaded[point_key], point_key, args.fig_dir, args.dpi)
+    if args.seed_data is None:
+        with np.load(args.data, allow_pickle=False) as loaded:
+            maps = {key: np.asarray(loaded[key], dtype=np.float32) for key in loaded.files}
+    else:
+        if len(args.seed_data) < 2:
+            raise ValueError("--seed_data requires at least two independent seed files")
+        per_seed = []
+        for path in args.seed_data:
+            with np.load(path, allow_pickle=False) as loaded:
+                per_seed.append({key: np.asarray(loaded[key], dtype=np.float32) for key in loaded.files})
+        required = ("point_included", "point_excluded")
+        if any(any(key not in item for key in required) for item in per_seed):
+            raise ValueError("Every --seed_data file must contain both point maps")
+        maps = {
+            key: np.mean(np.stack([item[key] for item in per_seed], axis=0), axis=0, dtype=np.float64)
+            .astype(np.float32)
+            for key in required
+        }
+    for point_key in ("point_included", "point_excluded"):
+        plot_sector_grid(maps[point_key], point_key, args.fig_dir, args.dpi, args.stem)
 
 
 if __name__ == "__main__":
