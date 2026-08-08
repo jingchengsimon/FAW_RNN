@@ -131,6 +131,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num_envs", type=int, default=1)
     parser.add_argument("--buffer_size", type=int, default=1_000_000)
     parser.add_argument(
+        "--replay_pinned_transfer",
+        action="store_true",
+        help="Reuse pinned CPU and CUDA staging buffers for replay batch transfers.",
+    )
+    parser.add_argument(
         "--replay_sampling",
         type=str,
         default="task_balanced",
@@ -1060,6 +1065,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             sampling_mode=args.replay_sampling,
             storage_dir=replay_dir if args.replay_backing == "mmap" else None,
             reuse_existing=resume_checkpoint is not None,
+            pinned_transfer=args.replay_pinned_transfer,
         )
 
         state = None
@@ -1385,6 +1391,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "task_schedule": args.task_schedule if is_multitask else None,
             "replay_sampling": args.replay_sampling,
             "buffer_size": args.buffer_size,
+            "replay_pinned_transfer": bool(args.replay_pinned_transfer),
             "batch_size": args.batch_size,
             "seq_len": args.seq_len,
             "sequences_per_batch": args.sequences_per_batch,

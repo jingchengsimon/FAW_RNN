@@ -108,6 +108,7 @@ class AtariReplayBuffer:
         sampling_mode: str = "task_balanced",
         storage_dir: str | None = None,
         reuse_existing: bool = False,
+        pinned_transfer: bool = False,
     ) -> None:
         if buffer_size < num_envs:
             raise ValueError("buffer_size must be at least num_envs")
@@ -126,6 +127,10 @@ class AtariReplayBuffer:
             raise ValueError("reuse_existing requires storage_dir")
         self.sampling_mode = sampling_mode
         self.storage_dir = storage_dir
+        self.pinned_transfer = bool(pinned_transfer and self.device.type == "cuda")
+        self._transfer_cache: dict[
+            tuple[str, tuple[int, ...], torch.dtype], tuple[torch.Tensor, torch.Tensor]
+        ] = {}
         self._rng = np.random.default_rng(seed)
         self._remainder_cursor = 0
         self._pos = 0
@@ -211,6 +216,7 @@ class AtariReplayBuffer:
         The buffer is unusable afterwards; call this only once the run's results
         are written.
         """
+        self._transfer_cache.clear()
         if self.storage_dir is None:
             return
         self.flush()
@@ -303,6 +309,31 @@ class AtariReplayBuffer:
     def _physical(self, logical: np.ndarray) -> np.ndarray:
         return (self._pos - self.size + logical) % self.capacity
 
+    def _to_device(self, value: np.ndarray, *, field: str) -> torch.Tensor:
+        """Transfer a sampled array, optionally via reusable pinned/device buffers.
+
+        The optional path only changes allocation and host-to-device scheduling:
+        NumPy sampling indices, source values, dtypes, and the consumer stream
+        order remain unchanged.
+        """
+        if not self.pinned_transfer:
+            return torch.as_tensor(value, device=self.device)
+        source = torch.as_tensor(np.ascontiguousarray(value))
+        # Fields such as dones, prev_dones, and loss_mask have identical
+        # shape/dtype but coexist in one SequenceBatch. They must not share a
+        # writable staging allocation.
+        key = (field, tuple(source.shape), source.dtype)
+        cached = self._transfer_cache.get(key)
+        if cached is None:
+            pinned = torch.empty_like(source, pin_memory=True)
+            device_buffer = torch.empty_like(source, device=self.device)
+            self._transfer_cache[key] = (pinned, device_buffer)
+        else:
+            pinned, device_buffer = cached
+        pinned.copy_(source)
+        device_buffer.copy_(pinned, non_blocking=True)
+        return device_buffer
+
     def _balanced_task_targets(self, batch_size: int) -> np.ndarray:
         if batch_size < self.num_tasks:
             raise ValueError(
@@ -357,15 +388,15 @@ class AtariReplayBuffer:
         next_phys = self._physical(logical + 1)
 
         return TransitionBatch(
-            obs=torch.as_tensor(self._obs[phys, env_idx], device=self.device),
-            actions=torch.as_tensor(self._actions[phys, env_idx], device=self.device),
-            rewards=torch.as_tensor(self._rewards[phys, env_idx], device=self.device),
-            dones=torch.as_tensor(
-                self._dones[phys, env_idx].astype(np.float32), device=self.device
+            obs=self._to_device(self._obs[phys, env_idx], field="transition_obs"),
+            actions=self._to_device(self._actions[phys, env_idx], field="transition_actions"),
+            rewards=self._to_device(self._rewards[phys, env_idx], field="transition_rewards"),
+            dones=self._to_device(
+                self._dones[phys, env_idx].astype(np.float32), field="transition_dones"
             ),
-            next_obs=torch.as_tensor(self._obs[next_phys, env_idx], device=self.device),
-            task_ids=torch.as_tensor(
-                self._task_ids[phys, env_idx].astype(np.int64), device=self.device
+            next_obs=self._to_device(self._obs[next_phys, env_idx], field="transition_next_obs"),
+            task_ids=self._to_device(
+                self._task_ids[phys, env_idx].astype(np.int64), field="transition_task_ids"
             ),
         )
 
@@ -429,16 +460,16 @@ class AtariReplayBuffer:
         has_internal_reset = bool(np.any(prev_dones[:, 1:] != 0))
 
         return SequenceBatch(
-            obs=torch.as_tensor(self._obs[phys, env_col], device=self.device),
-            actions=torch.as_tensor(self._actions[phys, env_col], device=self.device),
-            rewards=torch.as_tensor(self._rewards[phys, env_col], device=self.device),
-            dones=torch.as_tensor(
-                self._dones[phys, env_col].astype(np.float32), device=self.device
+            obs=self._to_device(self._obs[phys, env_col], field="sequence_obs"),
+            actions=self._to_device(self._actions[phys, env_col], field="sequence_actions"),
+            rewards=self._to_device(self._rewards[phys, env_col], field="sequence_rewards"),
+            dones=self._to_device(
+                self._dones[phys, env_col].astype(np.float32), field="sequence_dones"
             ),
-            prev_dones=torch.as_tensor(prev_dones, device=self.device),
-            loss_mask=torch.as_tensor(loss_mask, device=self.device),
-            task_ids=torch.as_tensor(
-                self._task_ids[phys, env_col].astype(np.int64), device=self.device
+            prev_dones=self._to_device(prev_dones, field="sequence_prev_dones"),
+            loss_mask=self._to_device(loss_mask, field="sequence_loss_mask"),
+            task_ids=self._to_device(
+                self._task_ids[phys, env_col].astype(np.int64), field="sequence_task_ids"
             ),
             has_internal_reset=has_internal_reset,
         )
