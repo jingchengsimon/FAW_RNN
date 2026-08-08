@@ -58,6 +58,12 @@ is missing, copy `.agents/local.example.md` and fill it in. Do not guess remote 
   `base_lr * --gawf_feedback_lr_scale` (default scale `1.0`).
 - `prev_feedback` is runtime state, not a learned parameter. Filter it when loading checkpoints,
   use `strict=False`, and report missing and unexpected keys.
+- Acceleration or optimization changes are accepted by a task-level variance protocol, not by
+  requiring bitwise or fixed-tolerance eager equivalence.  Compare matched repeated baseline and
+  accelerated runs across the available GPUs: the accelerated runs must not exceed the baseline
+  run-to-run numerical/metric dispersion and must not show a systematic shift outside that
+  baseline envelope.  Record the fixed-input numerical diagnostic separately; it identifies the
+  source of differences but cannot replace the end-to-end RL variance check.
 
 ## Data and result safety
 
