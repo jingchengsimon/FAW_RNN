@@ -14,6 +14,14 @@ frame skip、frame stack、feedback mode 和结果 suffix，不依赖旧 Atari w
 metadata JSON，注明训练 seed、evaluation seed、逐 episode return、被选中的最佳 episode、
 frame protocol 和 checkpoint。
 
+## GaWF acceleration diagnostic
+
+`benchmark_gawf_acceleration.py` 是一个独立的、显式 opt-in 的 RTX A6000 诊断工具。它使用
+L3 `gawf`、`qvalues` feedback、`B=8`、`L=16`（实际 `L+1=17`）和正式 DRQN loss/update path，
+比较 `eager`、`cast_cache` 与 `combined_transform`。输出目录必须是新的精确 leaf；该工具不会
+改变普通训练默认路径、采样、checkpoint 或结果命名。只有通过固定输入记录、smoke 和后续
+matched RL variance acceptance 的 candidate 才能考虑进入正式 launcher。
+
 ## Five-task full-18 pilot
 
 固定 five-task 协议使用 Pong、Breakout、Assault、Seaquest 和 Skiing，所有任务共享

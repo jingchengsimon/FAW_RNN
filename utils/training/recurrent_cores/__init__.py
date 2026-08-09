@@ -7,6 +7,7 @@ from .gawf import (
     GaWFDiagnosticsMixin,
     _compute_gawf_transforms,
     configure_gawf_feedback_acceleration,
+    configure_gawf_feedback_execution,
 )
 from .rnn import GRUCore, LSTMCore, RNNCore, TorchRecurrentCore
 
@@ -19,4 +20,5 @@ __all__ = [
     "TorchRecurrentCore",
     "_compute_gawf_transforms",
     "configure_gawf_feedback_acceleration",
+    "configure_gawf_feedback_execution",
 ]

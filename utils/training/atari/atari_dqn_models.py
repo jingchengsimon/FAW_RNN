@@ -14,6 +14,7 @@ additionally gates its recurrence with the detached previous-step Q-values.
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Literal
 
@@ -411,15 +412,19 @@ class AtariQNetwork(nn.Module):
             return q_values, AtariQNetworkState(recurrent, q_values[:, -1, :])
 
         q_steps = []
-        for t in range(n_steps):
-            done_t = prev_dones[:, t].to(device=device, dtype=dtype)
-            recurrent = self._mask_recurrent_state(recurrent, done_t)
-            prev_q = self._mask_output_state(prev_q, done_t)
-            feedback = self._build_feedback(prev_q)
-            features, recurrent = self._core_step(encoded[:, t, :], recurrent, feedback)
-            q_t = self.head(features)
-            q_steps.append(q_t)
-            prev_q = q_t
+        sequence_context = (
+            self.core.feedback_sequence() if self.model_type == "gawf" else nullcontext()
+        )
+        with sequence_context:
+            for t in range(n_steps):
+                done_t = prev_dones[:, t].to(device=device, dtype=dtype)
+                recurrent = self._mask_recurrent_state(recurrent, done_t)
+                prev_q = self._mask_output_state(prev_q, done_t)
+                feedback = self._build_feedback(prev_q)
+                features, recurrent = self._core_step(encoded[:, t, :], recurrent, feedback)
+                q_t = self.head(features)
+                q_steps.append(q_t)
+                prev_q = q_t
 
         next_state = AtariQNetworkState(recurrent, prev_q)
         return torch.stack(q_steps, dim=1), next_state

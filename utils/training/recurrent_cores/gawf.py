@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager, nullcontext
 import warnings
 
 import torch
@@ -278,6 +279,57 @@ class GaWFCore(GaWFDiagnosticsMixin, nn.Module):
             )
         self._init_gawf_diagnostics_state()
         self._compiled_feedback_preactivation: Callable[..., torch.Tensor] | None = None
+        self._feedback_execution = "eager"
+        self._bf16_parameter_cache: dict[str, torch.Tensor] | None = None
+        self._profile_gate_transforms = False
+
+    def set_feedback_execution(self, strategy: str) -> None:
+        """Select an opt-in eager GaWF feedback execution strategy.
+
+        The strategy is runtime-only: it neither adds parameters nor changes
+        checkpoint keys. ``cast_cache`` is active only within a CUDA BF16
+        autocast sequence; all other contexts retain historical eager math.
+        """
+
+        if strategy not in {"eager", "cast_cache", "combined_transform"}:
+            raise ValueError(f"Unsupported GaWF feedback execution strategy: {strategy!r}")
+        self._feedback_execution = strategy
+
+    def set_gate_transform_profiling(self, enabled: bool) -> None:
+        """Enable named profiler regions for one explicit diagnostic run."""
+
+        self._profile_gate_transforms = bool(enabled)
+
+    @contextmanager
+    def feedback_sequence(self) -> Iterator[None]:
+        """Scope transient BF16 parameter views to one recurrent sequence."""
+
+        self._bf16_parameter_cache = {} if self._feedback_execution == "cast_cache" else None
+        try:
+            yield
+        finally:
+            self._bf16_parameter_cache = None
+
+    def _cached_bf16_parameter(self, name: str, parameter: torch.Tensor) -> torch.Tensor:
+        """Return a sequence-local BF16 view while preserving autograd to ``parameter``."""
+
+        if self._bf16_parameter_cache is None:
+            return parameter.to(dtype=torch.bfloat16)
+        cached = self._bf16_parameter_cache.get(name)
+        if cached is None:
+            cached = parameter.to(dtype=torch.bfloat16)
+            self._bf16_parameter_cache[name] = cached
+        return cached
+
+    @staticmethod
+    def _bf16_autocast_active(x_t: torch.Tensor) -> bool:
+        """Return whether the cache candidate can match CUDA BF16 autocast execution."""
+
+        return bool(
+            x_t.device.type == "cuda"
+            and torch.is_autocast_enabled()
+            and torch.get_autocast_gpu_dtype() == torch.bfloat16
+        )
 
     def configure_feedback_acceleration(
         self,
@@ -364,7 +416,31 @@ class GaWFCore(GaWFDiagnosticsMixin, nn.Module):
             )
         else:
             fb_t = fb.clamp(-10, 10).unsqueeze(2)
-            trans_ih, trans_hh = _compute_gawf_transforms(U, fb_t, V, input_size)
+            profile_context = (
+                torch.profiler.record_function(f"gawf_gate_transform_layer_{layer_idx}")
+                if self._profile_gate_transforms
+                else nullcontext()
+            )
+            with profile_context:
+                if self._feedback_execution == "cast_cache" and self._bf16_autocast_active(x_t):
+                    # Preserve the two historical GEMM shapes and ordering.  The
+                    # FP32 feedback-scaled U is converted exactly once, while V's
+                    # two BF16 views live for this whole sequence.
+                    scaled_u_bf16 = (U.unsqueeze(0) * fb_t.transpose(1, 2)).to(torch.bfloat16)
+                    prefix = f"layer{layer_idx}"
+                    trans_ih = torch.matmul(
+                        scaled_u_bf16,
+                        self._cached_bf16_parameter(f"{prefix}_V_ih", V[:, :input_size]),
+                    )
+                    trans_hh = torch.matmul(
+                        scaled_u_bf16,
+                        self._cached_bf16_parameter(f"{prefix}_V_hh", V[:, input_size:]),
+                    )
+                elif self._feedback_execution == "combined_transform":
+                    transform = _compute_gawf_transform(U, fb_t, V)
+                    trans_ih, trans_hh = transform[..., :input_size], transform[..., input_size:]
+                else:
+                    trans_ih, trans_hh = _compute_gawf_transforms(U, fb_t, V, input_size)
             gate_logits_ih = trans_ih / self.gate_tau
             gate_logits_hh = trans_hh / self.gate_tau
             gate_ih = torch.sigmoid(gate_logits_ih)
@@ -475,4 +551,24 @@ def configure_gawf_feedback_acceleration(
         compile_feedback = bool(enabled and device_type == "cuda")
         child.configure_feedback_acceleration(compile_feedback, compile_mode)
         configured += int(child._compiled_feedback_preactivation is not None)
+    return configured
+
+
+def configure_gawf_feedback_execution(
+    module: nn.Module,
+    strategy: str,
+    profile_gate_transforms: bool = False,
+) -> int:
+    """Configure an opt-in eager GaWF execution strategy on nested cores.
+
+    This is intentionally separate from ``torch.compile`` configuration.  It
+    affects no persisted state and defaults to the historical ``eager`` path.
+    """
+
+    configured = 0
+    for child in module.modules():
+        if isinstance(child, GaWFCore):
+            child.set_feedback_execution(strategy)
+            child.set_gate_transform_profiling(profile_gate_transforms)
+            configured += 1
     return configured
