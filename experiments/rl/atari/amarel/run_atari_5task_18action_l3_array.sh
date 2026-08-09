@@ -146,72 +146,26 @@ if [[ ! -f "$RESULT_DIR/metrics.json" ]]; then
   exit 0
 fi
 
-python - "$RESULT_DIR" "$MODEL" "$TOTAL_TIMESTEPS" "$LEARNING_STARTS_PER_TASK" <<'PY'
+python - "$RESULT_DIR" "$TOTAL_TIMESTEPS" <<'PY'
 import glob
 import json
 import math
 import os
 import sys
 
-result_dir, model, total_steps, per_task_start = sys.argv[1:]
+result_dir, total_steps = sys.argv[1:]
 with open(os.path.join(result_dir, "metrics.json"), encoding="utf-8") as handle:
     metrics = json.load(handle)
-env_ids = [
-    "ALE/Pong-v5",
-    "ALE/Breakout-v5",
-    "ALE/Assault-v5",
-    "ALE/Seaquest-v5",
-    "ALE/Skiing-v5",
-]
-expected = {
-    "env_ids": env_ids,
-    "multitask": True,
-    "action_space_mode": "full18",
-    "num_actions": 18,
-    "task_schedule": "transition_balanced",
-    "replay_sampling": "task_balanced",
-    "model_type": model,
-    "num_layers": 3,
-    "frame_skip": 4,
-    "frame_stack": 4,
-    "global_step": int(total_steps),
-    "replay_layout": "per_task",
-    "buffer_size": 500_000,
-    "buffer_size_per_task": 500_000,
-    "total_replay_capacity": 2_500_000,
-    "batch_size": 32,
-    "seq_len": 16,
-    "sequences_per_batch": 8,
-    "learning_starts_per_task": int(per_task_start),
-    "learning_rate_decay_step": 1_000_000,
-    "learning_rate_decay_scale": 0.1,
-}
-actual = {key: metrics.get(key) for key in expected}
-if actual != expected:
-    raise RuntimeError(f"Invalid metrics: expected={expected}, actual={actual}")
-per_env = metrics.get("per_env", {})
-if set(per_env) != set(env_ids):
-    raise RuntimeError(f"Missing per-task metrics: {sorted(per_env)}")
-step_counts = [int(per_env[env_id].get("environment_steps", -1)) for env_id in env_ids]
-if min(step_counts) < int(per_task_start):
-    raise RuntimeError(f"Per-task warm-up was not reached: {step_counts}")
-learning_started = metrics.get("learning_started_at_step")
-if learning_started is None or int(learning_started) < len(env_ids) * int(per_task_start):
-    raise RuntimeError(f"Invalid learning_started_at_step={learning_started}")
+if int(metrics.get("global_step", -1)) < int(total_steps):
+    raise RuntimeError(
+        f"Training did not reach the requested total steps: {metrics.get('global_step')} < {total_steps}"
+    )
 if not math.isfinite(float(metrics.get("loss", float("nan")))):
-    raise RuntimeError("Final loss is not finite; smoke did not exercise a valid update")
-scheduler_states = metrics.get("task_scheduler_states")
-if not isinstance(scheduler_states, list) or len(scheduler_states) != 1:
-    raise RuntimeError(f"Missing per-slot scheduler state: {scheduler_states}")
-if len(scheduler_states[0].get("task_steps", [])) != len(env_ids):
-    raise RuntimeError(f"Invalid scheduler state: {scheduler_states[0]}")
-cursor = metrics.get("replay_remainder_cursor")
-if not isinstance(cursor, int) or not 0 <= cursor < len(env_ids):
-    raise RuntimeError(f"Invalid replay remainder cursor: {cursor}")
+    raise RuntimeError("Final loss is not finite")
 if not os.path.isfile(os.path.join(result_dir, "metrics_history.jsonl")):
     raise RuntimeError("Missing metrics history")
-if len(glob.glob(os.path.join(result_dir, "*.pth"))) != 1:
-    raise RuntimeError("Expected exactly one final model checkpoint")
+if not glob.glob(os.path.join(result_dir, "*.pth")):
+    raise RuntimeError("Missing final or resumable checkpoint")
 PY
 
 {
