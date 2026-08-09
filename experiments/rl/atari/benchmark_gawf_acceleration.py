@@ -14,12 +14,18 @@ from copy import deepcopy
 import json
 from pathlib import Path
 import statistics
+import sys
 import time
 from typing import Any, Callable
 
 import torch
 
-from utils.training.atari.atari_dqn_models import AtariQNetwork, AtariQNetworkState
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from utils.training.atari.atari_dqn_models import AtariQNetwork
 from utils.training.atari.atari_replay import SequenceBatch
 from utils.training.recurrent_cores import configure_gawf_feedback_execution
 from utils.training.train_scripts.atari_dqn import _build_atari_optimizer, _drqn_sequence_loss
