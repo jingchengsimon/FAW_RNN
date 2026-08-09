@@ -142,6 +142,11 @@ stack and a final linear Q head; only the readout slot changes.
 - `s5`, `mamba`: full-window sequence readout with rolling online context.
 - GaWF `qvalues`: detached previous-step Q values gate recurrence.
 
+Optional Atari DQN `--feedback_dim/--dz > 0` applies a learned projector to the detached
+adjacent-upper-hidden feedback of each non-final GaWF layer. The final layer continues to consume
+the detached previous Q-value vector without projection, so the action-feedback contract is
+unchanged. Projectors share the GaWF feedback optimizer group.
+
 The replay buffer and training loop preserve episode-reset metadata. RNN/GRU/LSTM use a
 whole-sequence cuDNN fast path only when a sampled window has no internal reset, otherwise they
 fall back to the reset-aware stepwise path. GaWF remains stepwise because feedback evolves at

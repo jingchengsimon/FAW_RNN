@@ -78,8 +78,11 @@ encode the seed even though checkpoint stems retain the standard model naming co
 Atari DQN additionally uses `--frame_skip`, `--frame_stack`, `--task_schedule`,
 `--replay_sampling`, `--replay_layout`, `--learning_starts_per_task`,
 `--learning_rate_decay_per_task_steps`, `--amp_dtype`, `--allow_tf32`, `--compile_model`, and
-`--feedback_mode`. Multi-task `--replay_layout per_task` creates one independent replay partition
-per task; `--buffer_size` is the capacity of each partition, rather than a global shared capacity.
+`--feedback_mode`. For multi-layer GaWF, positive `--feedback_dim`/`--dz` projects only each
+non-final layer's detached adjacent-hidden feedback; final previous-Q feedback remains in the
+task action dimension. Multi-task `--replay_layout per_task` creates one independent replay
+partition per task; `--buffer_size` is the capacity of each partition, rather than a global shared
+capacity.
 `--record_timing` is benchmark-only: it records host-wall environment/replay I/O and optimizer
 timing in final metrics without changing the training protocol.
 

@@ -97,6 +97,7 @@ def build_model(metrics: dict[str, Any], device: torch.device) -> AtariQNetwork:
         hidden_size=int(metrics["hidden_size"]),
         encoder_feature_dim=int(metrics.get("encoder_feature_dim", 512)),
         feedback_mode=str(metrics["feedback_mode"]),
+        lower_feedback_dim=metrics.get("feedback_dim"),
         num_layers=int(metrics["num_layers"]),
     ).to(device)
 

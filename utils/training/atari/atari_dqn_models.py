@@ -104,6 +104,7 @@ class AtariQNetwork(nn.Module):
         encoder_feature_dim: int = 512,
         core_dropout: float = 0.0,
         feedback_mode: DQNFeedbackMode = "none",
+        lower_feedback_dim: int | None = None,
         detach_feedback: bool = True,
         ssm_d_model: int = 256,
         ssm_state_size: int = 128,
@@ -131,6 +132,27 @@ class AtariQNetwork(nn.Module):
         self.feedback_mode = feedback_mode
         self.detach_feedback = bool(detach_feedback)
         self.ssm_context_len = int(ssm_context_len)
+        requested_lower_feedback_dim = (
+            None if lower_feedback_dim is None else int(lower_feedback_dim)
+        )
+        if requested_lower_feedback_dim is not None and requested_lower_feedback_dim < 0:
+            raise ValueError(
+                "lower_feedback_dim must be non-negative, got "
+                f"{requested_lower_feedback_dim}"
+            )
+        self.lower_feedback_dim = (
+            requested_lower_feedback_dim
+            if requested_lower_feedback_dim is not None
+            and requested_lower_feedback_dim > 0
+            else None
+        )
+        if self.lower_feedback_dim is not None:
+            if self.model_type != "gawf":
+                raise ValueError("lower_feedback_dim is only valid for GaWF")
+            if self.num_layers < 2:
+                raise ValueError("lower_feedback_dim requires num_layers >= 2")
+            if self.feedback_mode != "qvalues":
+                raise ValueError("lower_feedback_dim requires qvalues feedback")
 
         # Pluggable observation encoder. Default = the Nature-DQN conv stack
         # (Atari, unchanged). A callable ``encoder_factory`` lets other domains
@@ -157,6 +179,9 @@ class AtariQNetwork(nn.Module):
             top_feedback_dim = max(
                 1, self.feedback_dim_for_mode(self.feedback_mode, self.num_actions)
             )
+            lower_dims = [
+                self.lower_feedback_dim or self.hidden_size
+            ] * (self.num_layers - 1)
             self.core = GaWFCore(
                 input_size=conv_out,
                 hidden_size=self.hidden_size,
@@ -164,10 +189,18 @@ class AtariQNetwork(nn.Module):
                 dropout=core_dropout,
                 num_layers=self.num_layers,
                 layer_feedback_dims=(
-                    [self.hidden_size] * (self.num_layers - 1) + [top_feedback_dim]
+                    lower_dims + [top_feedback_dim]
                     if self.num_layers > 1
                     else None
                 ),
+            )
+            self.lower_feedback_projectors = nn.ModuleList(
+                [
+                    nn.Linear(self.hidden_size, self.lower_feedback_dim)
+                    for _ in range(self.num_layers - 1)
+                ]
+                if self.lower_feedback_dim is not None
+                else []
             )
             head_input_size = self.core.output_size
         elif self.model_type == "s5":
@@ -352,7 +385,17 @@ class AtariQNetwork(nn.Module):
                 return features, features
             if not isinstance(recurrent, list):
                 raise TypeError("multi-layer GaWF state must be a list")
-            feedbacks = [part.detach() for part in recurrent[1:]] + [feedback]
+            if self.lower_feedback_dim is None:
+                lower_feedbacks = [part.detach() for part in recurrent[1:]]
+            else:
+                lower_feedbacks = [
+                    projector(part.detach())
+                    for projector, part in zip(
+                        self.lower_feedback_projectors,
+                        recurrent[1:],
+                    )
+                ]
+            feedbacks = lower_feedbacks + [feedback]
             features, next_recurrent = self.core.step(x_t, recurrent, feedbacks)
             return features, next_recurrent
         # RNN/GRU/LSTM: run one timestep through the torch recurrent core.

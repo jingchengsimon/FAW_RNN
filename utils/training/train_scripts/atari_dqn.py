@@ -104,6 +104,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--hidden_size", type=int, default=512)
     parser.add_argument("--num_layers", type=int, default=1)
+    parser.add_argument(
+        "--feedback_dim",
+        "--dz",
+        dest="feedback_dim",
+        type=int,
+        default=None,
+        help=(
+            "GaWF only: project each non-final layer's detached adjacent-hidden "
+            "feedback to this positive dimension; final previous-Q feedback is unchanged."
+        ),
+    )
     parser.add_argument("--gawf_feedback_lr_scale", type=float, default=1.0)
     parser.add_argument("--encoder_feature_dim", type=int, default=512)
     parser.add_argument("--core_dropout", type=float, default=0.0)
@@ -276,6 +287,7 @@ RESUME_ARG_KEYS = (
     "feedback_mode",
     "hidden_size",
     "num_layers",
+    "feedback_dim",
     "gawf_feedback_lr_scale",
     "encoder_feature_dim",
     "core_dropout",
@@ -367,7 +379,9 @@ def _build_atari_optimizer(
         gate_params = [
             param
             for name, param in model.named_parameters()
-            if name.startswith("core.U") or name.startswith("core.V")
+            if name.startswith("core.U")
+            or name.startswith("core.V")
+            or name.startswith("lower_feedback_projectors")
         ]
         gate_ids = {id(param) for param in gate_params}
         base_params = [param for param in model.parameters() if id(param) not in gate_ids]
@@ -757,6 +771,15 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError(f"frame_skip must be >= 1, got {args.frame_skip}")
     if args.gawf_feedback_lr_scale <= 0:
         raise ValueError("gawf_feedback_lr_scale must be > 0")
+    if args.feedback_dim is not None:
+        if args.feedback_dim <= 0:
+            raise ValueError("feedback_dim/dz must be > 0 when supplied")
+        if args.model_type != "gawf":
+            raise ValueError("feedback_dim/dz is only valid for model_type=gawf")
+        if args.num_layers < 2:
+            raise ValueError("feedback_dim/dz requires num_layers >= 2")
+        if args.feedback_mode != "qvalues":
+            raise ValueError("feedback_dim/dz requires qvalues feedback")
     if (
         args.learning_rate_decay_step < 0
         or args.learning_rate_decay_per_task_steps < 0
@@ -884,6 +907,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             encoder_feature_dim=args.encoder_feature_dim,
             core_dropout=args.core_dropout,
             feedback_mode=args.feedback_mode,
+            lower_feedback_dim=args.feedback_dim,
             ssm_d_model=args.ssm_d_model,
             ssm_state_size=args.ssm_state_size,
             ssm_num_layers=args.ssm_num_layers,
@@ -1376,6 +1400,10 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "gawf_feedback_lr_scale": (
                 args.gawf_feedback_lr_scale if args.model_type == "gawf" else None
             ),
+            "feedback_dim": args.feedback_dim if args.model_type == "gawf" else None,
+            "lower_feedback_projected": bool(
+                args.model_type == "gawf" and args.feedback_dim is not None
+            ),
             "feedback_mode": args.feedback_mode,
             "frame_stack": args.frame_stack,
             "frame_skip": args.frame_skip,
@@ -1404,9 +1432,15 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "resumed_at_steps": resumed_at_steps,
         }
         layer_suffix = f"_L{args.num_layers}" if args.num_layers > 1 else ""
+        dz_suffix = (
+            f"_dz{args.feedback_dim}"
+            if args.model_type == "gawf" and args.feedback_dim is not None
+            else ""
+        )
         env_tag = "__".join(env_id.replace("/", "_") for env_id in env_ids)
         ckpt_name = (
-            f"{args.algo}_{args.model_type}_{args.feedback_mode}{layer_suffix}_{env_tag}.pth"
+            f"{args.algo}_{args.model_type}_{args.feedback_mode}{layer_suffix}"
+            f"{dz_suffix}_{env_tag}.pth"
         )
         ckpt_path = os.path.join(save_dir, ckpt_name)
         torch.save(model.state_dict(), ckpt_path)

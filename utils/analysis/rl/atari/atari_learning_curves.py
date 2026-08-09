@@ -10,6 +10,9 @@ colours, legend, and category-indexed analysis output).
 
 The result prefix must state both environment advance and observation history,
 for example ``atari_dqn_pong_fs1_stack1`` or ``atari_dqn_pong_fs4_stack1``.
+Single-seed figures may also overlay explicitly named ablation runs via repeated
+``--extra-run LABEL=RUN_DIR`` arguments. Explicit overlays are never included in
+cross-seed aggregation.
 
 Examples:
   python -m utils.analysis.rl.atari.atari_learning_curves --setting both
@@ -114,6 +117,19 @@ def parse_args() -> argparse.Namespace:
         help="Plot only this single seed (no band). Default: aggregate all seeds.",
     )
     parser.add_argument("--output", default=None, help="Explicit output png path.")
+    parser.add_argument(
+        "--extra-run",
+        action="append",
+        default=[],
+        metavar="LABEL=RUN_DIR",
+        help="Single-seed only: overlay one explicit run directory; may be repeated.",
+    )
+    parser.add_argument(
+        "--extra-expected-steps",
+        type=int,
+        default=None,
+        help="Require every --extra-run metrics.json to report this global_step.",
+    )
     parser.add_argument("--y-min", type=float, default=None, help="Shared y-axis lower bound.")
     parser.add_argument("--y-max", type=float, default=None, help="Shared y-axis upper bound.")
     parser.add_argument(
@@ -266,6 +282,76 @@ def _aggregate_seeds(
     return grid, stacked.mean(0), stacked.std(0), len(curves)
 
 
+def _parse_extra_runs(specs: list[str]) -> list[tuple[str, Path]]:
+    """Parse and validate explicit single-seed overlay specifications."""
+    parsed = []
+    for spec in specs:
+        label, separator, run_dir = spec.partition("=")
+        if not separator or not label.strip() or not run_dir.strip():
+            raise SystemExit(f"Invalid --extra-run {spec!r}; expected LABEL=RUN_DIR")
+        parsed.append((label.strip(), Path(run_dir).expanduser()))
+    return parsed
+
+
+def _validate_extra_run(
+    run_dir: Path,
+    *,
+    expected_steps: int | None,
+) -> None:
+    """Reject incomplete or non-projected GaWF runs before plotting them."""
+    metrics_path = run_dir / "metrics.json"
+    history_path = run_dir / "metrics_history.jsonl"
+    if not metrics_path.is_file() or not history_path.is_file():
+        raise SystemExit(f"Incomplete --extra-run artifacts: {run_dir}")
+    try:
+        metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise SystemExit(f"Invalid {metrics_path}: {exc}") from exc
+    expected = {
+        "model_type": "gawf",
+        "num_layers": 3,
+        "feedback_mode": "qvalues",
+        "lower_feedback_projected": True,
+        "frame_skip": 4,
+        "frame_stack": 4,
+        "flicker_prob": 0.0,
+        "action_space_mode": "minimal",
+        "num_actions": 4,
+    }
+    if expected_steps is not None:
+        expected["global_step"] = expected_steps
+    actual = {key: metrics.get(key) for key in expected}
+    if actual != expected:
+        raise SystemExit(
+            f"Protocol mismatch in {metrics_path}: expected={expected}, actual={actual}"
+        )
+    if not isinstance(metrics.get("feedback_dim"), int) or metrics["feedback_dim"] <= 0:
+        raise SystemExit(f"Missing positive feedback_dim in {metrics_path}")
+
+
+def _plot_extra_runs(ax: plt.Axes, args: argparse.Namespace) -> int:
+    """Overlay explicit projected-feedback ablations on a single-seed figure."""
+    styles = (("#e6550d", "--"), ("#a50f15", "-."))
+    plotted = 0
+    for index, (label, run_dir) in enumerate(args.extra_runs):
+        _validate_extra_run(run_dir, expected_steps=args.extra_expected_steps)
+        curve = _load_curve(run_dir / "metrics_history.jsonl", args.metric)
+        if curve is None:
+            raise SystemExit(f"No {args.metric} curve in {run_dir}/metrics_history.jsonl")
+        steps, values = curve
+        color, linestyle = styles[index % len(styles)]
+        ax.plot(
+            _steps_in_millions(steps),
+            _smooth(values, args.smooth),
+            label=label,
+            color=color,
+            linestyle=linestyle,
+            linewidth=2.0,
+        )
+        plotted += 1
+    return plotted
+
+
 def _plot_setting(ax, args, setting: str) -> int:
     plotted = 0
     for model in args.models:
@@ -292,6 +378,8 @@ def _plot_setting(ax, args, setting: str) -> int:
                 linewidth=0,
             )
         plotted += 1
+    if setting == "plain":
+        plotted += _plot_extra_runs(ax, args)
     ax.set_title(_protocol_title(args.prefix, setting))
     ax.set_xlabel("environment steps (×10⁶)")
     ax.set_ylabel(args.metric)
@@ -389,13 +477,18 @@ def _plot_direct_run(args: argparse.Namespace) -> str:
 
 def main() -> None:
     args = parse_args()
+    args.extra_runs = _parse_extra_runs(args.extra_run)
     if (args.y_min is None) != (args.y_max is None) or (
         args.y_min is not None and args.y_min >= args.y_max
     ):
         raise SystemExit("Provide --y-min and --y-max together, with y-min < y-max")
     if args.run_dir:
+        if args.extra_runs:
+            raise SystemExit("--extra-run cannot be combined with --run_dir")
         _plot_direct_run(args)
         return
+    if args.extra_runs and (args.seed is None or args.setting != "plain"):
+        raise SystemExit("--extra-run requires both --seed and --setting plain")
     settings = ("plain", "flicker") if args.setting == "both" else (args.setting,)
 
     fig, axes = plt.subplots(
