@@ -37,6 +37,23 @@ def _compute_gawf_transforms(
     )
 
 
+class _ReuseBf16Parameter(torch.autograd.Function):
+    """Reuse a detached BF16 forward value while retaining a per-use cast gradient edge."""
+
+    @staticmethod
+    def forward(ctx, parameter: torch.Tensor, cached: torch.Tensor) -> torch.Tensor:
+        """Return the shared BF16 storage and record the source parameter dtype."""
+
+        ctx.parameter_dtype = parameter.dtype
+        return cached
+
+    @staticmethod
+    def backward(ctx, grad_output: torch.Tensor) -> tuple[torch.Tensor, None]:
+        """Match ``Tensor.to(torch.bfloat16)`` backward for one individual use site."""
+
+        return grad_output.to(dtype=ctx.parameter_dtype), None
+
+
 def _gawf_layer_preactivation(
     x_t: torch.Tensor,
     h_prev: torch.Tensor,
@@ -317,9 +334,12 @@ class GaWFCore(GaWFDiagnosticsMixin, nn.Module):
             return parameter.to(dtype=torch.bfloat16)
         cached = self._bf16_parameter_cache.get(name)
         if cached is None:
-            cached = parameter.to(dtype=torch.bfloat16)
+            cached = parameter.detach().to(dtype=torch.bfloat16)
             self._bf16_parameter_cache[name] = cached
-        return cached
+        # A separate Function application for each GEMM preserves the eager
+        # graph's per-use gradient accumulation order even though the BF16
+        # forward value is cached for the sequence.
+        return _ReuseBf16Parameter.apply(parameter, cached)
 
     @staticmethod
     def _bf16_autocast_active(x_t: torch.Tensor) -> bool:
