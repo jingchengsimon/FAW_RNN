@@ -5,11 +5,21 @@ set -euo pipefail
 
 ROOT="${AIM3_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)}"
 DRY_RUN=0
-if [[ "${1:-}" == "--dry-run" ]]; then
-  DRY_RUN=1
-  shift
-fi
-(( $# == 0 )) || { echo "Usage: $0 [--dry-run]" >&2; exit 2; }
+AFTER_SMOKE_ID=""
+while (( $# )); do
+  case "$1" in
+    --dry-run) DRY_RUN=1; shift ;;
+    --after-smoke)
+      AFTER_SMOKE_ID="${2:-}"
+      shift 2
+      ;;
+    *) echo "Usage: $0 [--dry-run] [--after-smoke JOB_ID]" >&2; exit 2 ;;
+  esac
+done
+[[ -z "$AFTER_SMOKE_ID" || "$AFTER_SMOKE_ID" =~ ^[0-9]+$ ]] || {
+  echo "--after-smoke must be a Slurm job ID" >&2
+  exit 2
+}
 
 BASE_REL="data/rl/atari/5task_18action/per_task_buf1m/formal_10m_2mpertask"
 ARTIFACT_TAG="atari_5task_18action_formal_10m_2mpertask"
@@ -21,6 +31,7 @@ formal: 10M global steps (=2M/task); GRU L3/h458 + LSTM L3/h373; seeds=1,2,3
 acceleration: bfloat16 TF32 cudnn_benchmark fused_optimizer; torch.compile disabled
 smoke: 500 steps, controlled SIGUSR1 checkpoint/resume, then exact smoke-leaf cleanup
 formal dependency: afterok:<smoke_jobid>; array=0-5%1 (conservative: user quota unverified)
+reuse: --after-smoke JOB_ID attaches cleanup/formal to an already-submitted smoke without a rerun
 result root: \$AIM3_RESULTS_PATH/$BASE_REL
 formal suffix prefix: $FORMAL_PREFIX
 EOF
@@ -49,6 +60,7 @@ done
 [[ ! -e "$SMOKE_RESULT_DIR" ]] || { echo "smoke result leaf exists: $SMOKE_RESULT_DIR" >&2; exit 3; }
 
 while IFS= read -r job_id; do
+  [[ "$job_id" == "$AFTER_SMOKE_ID" ]] && continue
   scontrol show job "$job_id" 2>/dev/null | grep -Fq "$FORMAL_PREFIX" && {
     echo "active Slurm writer references formal suffix prefix: $job_id" >&2
     exit 3
@@ -64,10 +76,14 @@ mkdir -p "$ARTIFACT_ROOT/smoke" "$ARTIFACT_ROOT/formal" "$ARTIFACT_ROOT/cleanup"
 COMMON="AIM3_ROOT=$ROOT,AIM3_RESULTS_PATH=$AIM3_RESULTS_PATH,FORMAL_BASE=$FORMAL_BASE"
 COMMON="$COMMON,ARTIFACT_ROOT=$ARTIFACT_ROOT,AIM3_NUM_WORKERS=12,AIM3_PIN_MEMORY=1"
 SMOKE_EXPORTS="$COMMON,RUN_PHASE=smoke"
-SMOKE_RAW="$(sbatch --parsable --job-name=aim3-atari-5task-formal-smoke --time=02:00:00 \
-  --chdir="$ROOT" --output="$SMOKE_ARTIFACT_DIR/%j.out" --error="$SMOKE_ARTIFACT_DIR/%j.err" \
-  --export="ALL,$SMOKE_EXPORTS" "$RUNNER")"
-SMOKE_JOB_ID="${SMOKE_RAW%%;*}"
+if [[ -n "$AFTER_SMOKE_ID" ]]; then
+  SMOKE_JOB_ID="$AFTER_SMOKE_ID"
+else
+  SMOKE_RAW="$(sbatch --parsable --job-name=aim3-atari-5task-formal-smoke --time=02:00:00 \
+    --chdir="$ROOT" --output="$SMOKE_ARTIFACT_DIR/%j.out" --error="$SMOKE_ARTIFACT_DIR/%j.err" \
+    --export="ALL,$SMOKE_EXPORTS" "$RUNNER")"
+  SMOKE_JOB_ID="${SMOKE_RAW%%;*}"
+fi
 
 CLEANUP_EXPORTS="$COMMON,SMOKE_RESULT_DIR=$SMOKE_RESULT_DIR"
 CLEANUP_EXPORTS="$CLEANUP_EXPORTS,SMOKE_ARTIFACT_DIR=$SMOKE_ARTIFACT_DIR"

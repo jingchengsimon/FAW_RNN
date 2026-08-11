@@ -2,6 +2,7 @@
 #SBATCH --job-name=aim3-atari-5task-formal-smoke-cleanup
 #SBATCH --partition=gpu-redhat
 #SBATCH --account=general
+#SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=2G
 #SBATCH --time=00:10:00
