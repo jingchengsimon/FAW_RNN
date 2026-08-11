@@ -36,6 +36,14 @@ replay。Amarel 请求为单 GPU、16 CPUs、64G memory、30 小时 walltime，�
 `results/data/rl/atari/5task_18action/{parameter_match,smoke,pilot,figs}/`；此 protocol 的 pilot
 结果根为 `pilot/per_task_buf500k/`，不得写入或覆盖 `multitask_18action`。
 
+10M formal GRU/LSTM 扩展使用
+`amarel/submit_atari_5task_18action_formal_10m.sh`。它固定五个 task、full18、fs4/stack4、
+five 个独立 1M mmap partitions、10M global steps（每 task 2M）、GRU L3/h458 和当前验证的
+LSTM L3/h373，各三个 seeds。它先运行 500-step structural/recovery smoke：checkpoint 必须包含
+五个 replay partitions，受控 `SIGUSR1` 后自动 requeue/resume；仅 smoke 成功才通过
+`afterok` 释放 six-unit formal array。成功的 smoke result/artifact leaves 由独立 compute
+cleanup job 精确删除；正式 run 成功时只由训练入口删除本 unit 的 replay。
+
 ## SJC two-task L3 GRU comparison
 
 The SJC comparison launcher `experiments/remote/run_sjc_atari_multitask_l3_gru.sh` evaluates a

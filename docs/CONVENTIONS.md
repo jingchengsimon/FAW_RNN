@@ -99,8 +99,11 @@ metrics record `resume_count` and `resumed_at_steps` so interruptions stay visib
 result. A runner must never append to an existing history when no compatible checkpoint is
 present. The mmap backing costs roughly 27 GiB per fs4/stack4 shared-replay unit against a 1 TiB
 `/scratch` soft quota. The five-task full-18 `per_task` protocol with five 0.5M partitions costs
-roughly 65.8 GiB per unit, so its array must cap concurrency at five (`--array=0-14%5`) and check the
-quota before starting via `experiments/<task>/amarel/scratch_quota_guard.py`. Measure headroom on a
+roughly 65.8 GiB per unit. The formal five-task 1M-per-task protocol costs roughly 131.6 GiB per
+unit, so its guard reserves at least 140 GiB for replay, checkpoint, and logs; its throttle is at
+most `min(6, floor(available_writable_GiB / 140))`. When compute-node user quota cannot be parsed,
+use a conservative throttle rather than reusing `%5`. Check quota before starting via
+`experiments/<task>/amarel/scratch_quota_guard.py`. Measure headroom on a
 `gpuk###` node, not the login node: Amarel serves one `/scratch` namespace from two GPFS
 clusters whose fileset accounting disagrees for identical data (DSSP reports ~652 GiB free,
 DSSK ~284 GiB), and a task may be enforced by either.

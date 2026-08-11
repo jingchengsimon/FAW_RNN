@@ -9,7 +9,7 @@ import numpy as np
 
 from utils.training.atari.atari_envs import _EpisodeTaskScheduler
 from utils.training.atari.atari_replay import AtariReplayBuffer, PerTaskAtariReplayBuffer
-from utils.training.train_scripts.atari_dqn import _learning_ready
+from utils.training.train_scripts.atari_dqn import _json_safe, _learning_ready
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -120,6 +120,10 @@ def test_learning_waits_for_every_task_threshold() -> None:
     assert not _learning_ready(args, 100_000, counts)
     counts["task_4"] = 20_000
     assert _learning_ready(args, 100_000, counts)
+
+
+def test_unavailable_atari_metrics_are_json_null_not_nan() -> None:
+    assert _json_safe({"loss": float("nan"), "fps": 12.0}) == {"loss": None, "fps": 12.0}
 
 
 def test_per_task_pilot_completion_validator_only_checks_required_artifacts() -> None:

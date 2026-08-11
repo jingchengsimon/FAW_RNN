@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import os
 import shutil
 import signal
@@ -58,6 +59,17 @@ from utils.training.checkpointing import (
     rng_state,
     validate_resume_protocol,
 )
+
+
+def _json_safe(value: Any) -> Any:
+    """Replace unavailable non-finite metric scalars with JSON ``null``."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    return value
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -1245,7 +1257,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                 with open(history_path, "a", encoding="utf-8") as f:
                     f.write(
                         json.dumps(
-                            {
+                            _json_safe({
                                 "global_step": global_step,
                                 "episodic_return_100": rolling_return,
                                 "epsilon": epsilon,
@@ -1255,7 +1267,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                                 "wall_time_s": elapsed_before_resume
                                 + (time.time() - start_time),
                                 "per_env": per_env_history,
-                            }
+                            })
                         )
                         + "\n"
                     )
@@ -1411,7 +1423,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         ckpt_path = os.path.join(save_dir, ckpt_name)
         torch.save(model.state_dict(), ckpt_path)
         final_metrics["checkpoint"] = ckpt_path
-        save_json(os.path.join(save_dir, "metrics.json"), final_metrics)
+        save_json(os.path.join(save_dir, "metrics.json"), _json_safe(final_metrics))
         # The resumable checkpoint is scaffolding: once metrics.json and the
         # final model exist the run is complete, and leaving it behind would
         # both waste space and break the "exactly one .pth" result contract.
