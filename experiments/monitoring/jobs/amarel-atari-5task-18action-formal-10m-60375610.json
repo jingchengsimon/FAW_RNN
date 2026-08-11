@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "id": "amarel-atari-5task-18action-formal-10m-60375610",
+  "description": "Five-task full18 formal 10M array: GRU L3/h458 and LSTM L3/h373, three seeds each, five independent 1M mmap replay partitions.",
+  "host": "amarel",
+  "status": "queued",
+  "created_at": "2026-08-11T05:10:10Z",
+  "updated_at": "2026-08-11T05:11:25+00:00",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "60375404",
+      "60375609",
+      "60375610"
+    ],
+    "run_ids": [],
+    "tmux_session": null,
+    "process_patterns": [],
+    "collect_gpu": false
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_formal_10m_2mpertask/smoke/60375404.*",
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_formal_10m_2mpertask/cleanup/60375609.*",
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_formal_10m_2mpertask/formal/60375610_*.out"
+    ],
+    "status_dir": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_formal_10m_2mpertask/status",
+    "result_paths": [
+      "/scratch/js3269/results/data/rl/atari/5task_18action/per_task_buf1m/formal_10m_2mpertask/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_*"
+    ]
+  },
+  "tracking": {
+    "expected_units": 6,
+    "auto_complete": true,
+    "defaults": {
+      "metrics_file": "metrics.json",
+      "history_file": "metrics_history.jsonl",
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1,
+      "expected": {
+        "global_step": 10000000
+      }
+    },
+    "units": [
+      {
+        "id": "gru-seed1",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/per_task_buf1m/formal_10m_2mpertask/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_gru_seed1",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_formal_10m_2mpertask/status/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_gru_seed1.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_formal_10m_2mpertask/status/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_gru_seed1.fail",
+        "expected": {
+          "model_type": "gru",
+          "num_layers": 3,
+          "hidden_size": 458
+        }
+      },
+      {
+        "id": "gru-seed2",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/per_task_buf1m/formal_10m_2mpertask/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_gru_seed2",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_formal_10m_2mpertask/status/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_gru_seed2.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_formal_10m_2mpertask/status/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_gru_seed2.fail",
+        "expected": {
+          "model_type": "gru",
+          "num_layers": 3,
+          "hidden_size": 458
+        }
+      },
+      {
+        "id": "gru-seed3",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/per_task_buf1m/formal_10m_2mpertask/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_gru_seed3",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_formal_10m_2mpertask/status/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_gru_seed3.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_formal_10m_2mpertask/status/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_gru_seed3.fail",
+        "expected": {
+          "model_type": "gru",
+          "num_layers": 3,
+          "hidden_size": 458
+        }
+      },
+      {
+        "id": "lstm-seed1",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/per_task_buf1m/formal_10m_2mpertask/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_lstm_seed1",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_formal_10m_2mpertask/status/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_lstm_seed1.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_formal_10m_2mpertask/status/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_lstm_seed1.fail",
+        "expected": {
+          "model_type": "lstm",
+          "num_layers": 3,
+          "hidden_size": 373
+        }
+      },
+      {
+        "id": "lstm-seed2",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/per_task_buf1m/formal_10m_2mpertask/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_lstm_seed2",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_formal_10m_2mpertask/status/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_lstm_seed2.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_formal_10m_2mpertask/status/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_lstm_seed2.fail",
+        "expected": {
+          "model_type": "lstm",
+          "num_layers": 3,
+          "hidden_size": 373
+        }
+      },
+      {
+        "id": "lstm-seed3",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/per_task_buf1m/formal_10m_2mpertask/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_lstm_seed3",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_formal_10m_2mpertask/status/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_lstm_seed3.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_formal_10m_2mpertask/status/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_lstm_seed3.fail",
+        "expected": {
+          "model_type": "lstm",
+          "num_layers": 3,
+          "hidden_size": 373
+        }
+      }
+    ]
+  },
+  "notes": [
+    "Smoke 60375404 is a 500-step controlled-SIGUSR1 recovery gate; cleanup 60375609 and formal array 60375610 depend on afterok:60375404.",
+    "Formal array is 0-5%1 because compute-node user quota was not parsable at submission; 140 GiB per unit is reserved by the compute-node guard.",
+    "Successful formal units remove only their own mmap replay. Accepted smoke cleanup removes only the exact smoke result and artifact leaves."
+  ]
+}
