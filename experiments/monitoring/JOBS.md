@@ -6,7 +6,7 @@
 
 | Job | Status | Host | Scheduler / run IDs | Units | Remote root | Description |
 |---|---|---|---|---:|---|---|
-| `amarel-atari-5task-18action-formal-10m-60375610` | queued | `amarel` | 60375404, 60375609, 60375610 | 6 | `/cache/home/js3269/projects/aim3_gawf_rnn` | Five-task full18 formal 10M array: GRU L3/h458 and LSTM L3/h373, three seeds each, five independent 1M mmap replay partitions. |
+| `amarel-atari-5task-18action-formal-10m-60425754` | queued | `amarel` | 60425752, 60425753, 60425754 | 6 | `/cache/home/js3269/projects/aim3_gawf_rnn` | Five-task full18 formal 10M array: GRU L3/h458 and LSTM L3/h373, three seeds each, five independent 1M mmap replay partitions. |
 | `sjc-atari-5task-18action-l3-gru-lstm-60306102` | running | `sjc-remote` | sjc_5task_lstm_60306102, sjc_5task_gru_60306102, sjc_5task_lstm_60306102 | 6 | `/G/MIMOlab/Codes/aim3_gawf_rnn` | SJC replacement for the pending GRU/LSTM units of Amarel 60306102: GPU0 LSTM seeds 1-3 and GPU1 GRU seeds 1-3, sequential per GPU. |
 | `sjc-atari-multitask18-l3h458-controls-seed42-20260809` | completed | `sjc-remote` | sjc-mt18-controls-l3h458-s42 | 2 | `/G/MIMOlab/Codes/aim3_gawf_rnn` | GPU1 sequential control chain: Breakout-only full18 GRU L3 h458 seed42 2M, then Pong smoke and Pong-only 2M |
 | `sjc-atari-multitask18-l3h458-breakout-seed42-smoke-20260809` | completed | `sjc-remote` | sjc-mt18-breakout-l3h458-s42-smoke-accel-v2 | 1 | `/G/MIMOlab/Codes/aim3_gawf_rnn` | Breakout-only full18 GRU L3 h458 seed42 control smoke; shared 1M mmap replay and global-equivalent 1M LR decay |

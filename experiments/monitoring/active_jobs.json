@@ -8,14 +8,14 @@
   ],
   "jobs": [
     {
-      "id": "amarel-atari-5task-18action-formal-10m-60375610",
+      "id": "amarel-atari-5task-18action-formal-10m-60425754",
       "description": "Five-task full18 formal 10M array: GRU L3/h458 and LSTM L3/h373, three seeds each, five independent 1M mmap replay partitions.",
       "host": "amarel",
       "status": "queued",
       "job_ids": [
-        "60375404",
-        "60375609",
-        "60375610"
+        "60425752",
+        "60425753",
+        "60425754"
       ],
       "run_ids": [],
       "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
