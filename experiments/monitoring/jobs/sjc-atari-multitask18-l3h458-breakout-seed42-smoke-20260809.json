@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "id": "sjc-atari-multitask18-l3h458-breakout-seed42-smoke-20260809",
+  "description": "Breakout-only full18 GRU L3 h458 seed42 control smoke; shared 1M mmap replay and global-equivalent 1M LR decay",
+  "host": "sjc-remote",
+  "status": "completed",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": [],
+    "tmux_session": "sjc-mt18-breakout-l3h458-s42-smoke-accel-v2"
+  },
+  "paths": {
+    "log_globs": [
+      "results/run_20260809_171009.log"
+    ],
+    "status_dir": "experiments/remote/artifacts/fs4_stack4_l3_h458_gru_breakout_only_full18_per_task_buf1m_lrpertask1m_seed42_smoke_accel_v2/status",
+    "result_paths": [
+      "results/data/rl/atari/multitask_18action/fs4_stack4_l3_h458_gru_breakout_only_full18_per_task_buf1m_lrpertask1m_seed42_smoke_accel_v2"
+    ]
+  },
+  "tracking": {
+    "expected_units": 1,
+    "auto_complete": false,
+    "result_globs": [
+      "results/data/rl/atari/multitask_18action/fs4_stack4_l3_h458_gru_breakout_only_full18_per_task_buf1m_lrpertask1m_seed42_smoke_accel_v2"
+    ],
+    "done_glob": null,
+    "fail_glob": null,
+    "defaults": {
+      "expected": {
+        "global_step": 50000
+      },
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1
+    },
+    "units": []
+  },
+  "notes": [
+    "GPU 1; first smoke attempt was rejected because single-task per-task replay and warm-up gates are invalid. This retry uses shared replay and global-equivalent gates."
+  ],
+  "created_at": "2026-08-09T21:10:38+00:00",
+  "updated_at": "2026-08-09T21:23:08+00:00",
+  "completed_at": "2026-08-09T21:23:08+00:00"
+}

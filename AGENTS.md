@@ -79,6 +79,9 @@ is missing, copy `.agents/local.example.md` and fill it in. Do not guess remote 
   compatibility with historical `gawf_multi_` and `_do` filenames.
 - Do not delete experiment results, checkpoints, or pending-cleanup records without explicit
   human confirmation. Completion, failure, timeout, or staleness is not deletion permission.
+  An accepted smoke is the sole exception: its exact smoke result leaf and its exact smoke
+  artifact/log leaf are temporary validation outputs and must be deleted after acceptance under
+  the cleanup rules below. Failed, paused, or recovering smoke outputs remain protected.
 
 ### 全局 smoke 验收
 
@@ -92,6 +95,10 @@ is missing, copy `.agents/local.example.md` and fill it in. Do not guess remote 
   训练失败；真实非零训练退出、缺少协议关键产物、非有限数值或明确 quota/I/O 错误才是失败。
 - 每个具体 launcher 可以增加与其任务协议直接相关的验证，但不得收紧上述规则为依赖可选
   字段的 schema lock。
+- 通过验收的 smoke 只用于正式训练前的检验，不保留其文件。验收记录必要状态后，默认清理
+  该 smoke 的精确 result leaf（包括 metrics/history/checkpoint/replay）和精确 artifact/log
+  leaf；不得清理其父目录、正式训练 leaf 或其他 smoke。失败、paused、recovering smoke 的
+  结果和 checkpoint 必须保留，直到人类另行处置。
 
 ## Remote synchronization safety
 
@@ -103,6 +110,10 @@ is missing, copy `.agents/local.example.md` and fill it in. Do not guess remote 
   requires the exact command to pass `--dry-run --itemize-changes` inspection first.
 - Before `rm -rf`, `find -delete`, or equivalent cleanup, require non-empty variables, resolve the
   target, and assert it is the exact human-authorized leaf with a verified recovery copy.
+- For an accepted smoke cleanup, the smoke-acceptance rule above is standing human authorization
+  for its exact result and artifact leaves; no recovery copy is required. Still require non-empty
+  resolved paths, an exact-leaf assertion, and a pre-delete itemized listing. Never use this
+  exception for a formal result, a failed/paused/recovering smoke, or any parent directory.
 - After synchronization, verify the destination, expected file count, and protected siblings.
   Missing or unexpected paths are a stop condition, not permission for follow-up cleanup.
 

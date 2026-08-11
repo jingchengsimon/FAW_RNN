@@ -33,6 +33,11 @@ def parse_args() -> argparse.Namespace:
     """Parse plotting options."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", default="results/data/rl/atari/runs")
+    parser.add_argument(
+        "--run-template",
+        default="atari_dqn_breakout_fs4_stack4_l{layers}match_{model}_seed{seed}",
+        help="Result-directory template with {layers}, {model}, and {seed} placeholders.",
+    )
     parser.add_argument("--num-layers", type=int, required=True)
     parser.add_argument("--expected-steps", type=int, required=True)
     parser.add_argument("--seeds", type=int, nargs="+", required=True)
@@ -50,9 +55,13 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def run_dir(root: Path, layers: int, model: str, seed: int) -> Path:
+def run_dir(root: Path, layers: int, model: str, seed: int, template: str) -> Path:
     """Return the conventional plain Breakout result directory for one run."""
-    return root / f"atari_dqn_breakout_fs4_stack4_l{layers}match_{model}_seed{seed}"
+    try:
+        name = template.format(layers=layers, model=model, seed=seed)
+    except KeyError as exc:
+        raise ValueError(f"Unknown placeholder in --run-template: {exc}") from exc
+    return root / name
 
 
 def load_curve(history_path: Path) -> tuple[np.ndarray, np.ndarray]:
@@ -133,12 +142,17 @@ def parse_partial(tokens: list[str]) -> list[tuple[str, int]]:
 
 
 def completed_curves(
-    root: Path, layers: int, model: str, seeds: list[int], expected_steps: int
+    root: Path,
+    layers: int,
+    model: str,
+    seeds: list[int],
+    expected_steps: int,
+    run_template: str,
 ) -> dict[int, tuple[np.ndarray, np.ndarray]]:
     """Load every completed seed curve for one model."""
     curves: dict[int, tuple[np.ndarray, np.ndarray]] = {}
     for seed in seeds:
-        path = run_dir(root, layers, model, seed)
+        path = run_dir(root, layers, model, seed, run_template)
         if is_completed(path, model, layers, expected_steps):
             curves[seed] = load_curve(path / "metrics_history.jsonl")
     return curves
@@ -174,7 +188,10 @@ def save_seed_figure(
         curve = completed[model].get(seed)
         partial = (model, seed) in partials and curve is None
         if curve is None and partial:
-            history_path = run_dir(root, args.num_layers, model, seed) / "metrics_history.jsonl"
+            history_path = (
+                run_dir(root, args.num_layers, model, seed, args.run_template)
+                / "metrics_history.jsonl"
+            )
             if not history_path.is_file():
                 raise FileNotFoundError(f"Missing requested partial history: {history_path}")
             curve = load_curve(history_path)
@@ -255,7 +272,14 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     partials = set(parse_partial(args.partial))
     completed = {
-        model: completed_curves(root, args.num_layers, model, args.seeds, args.expected_steps)
+        model: completed_curves(
+            root,
+            args.num_layers,
+            model,
+            args.seeds,
+            args.expected_steps,
+            args.run_template,
+        )
         for model in MODELS
     }
     for seed in args.seeds:

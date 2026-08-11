@@ -35,3 +35,13 @@ replay。Amarel 请求为单 GPU、16 CPUs、64G memory、30 小时 walltime，�
 以提高 backfill 机会。structured results 和后续 figures 分别写入
 `results/data/rl/atari/5task_18action/{parameter_match,smoke,pilot,figs}/`；此 protocol 的 pilot
 结果根为 `pilot/per_task_buf500k/`，不得写入或覆盖 `multitask_18action`。
+
+## SJC two-task L3 GRU comparison
+
+The SJC comparison launcher `experiments/remote/run_sjc_atari_multitask_l3_gru.sh` evaluates a
+GRU L3 h458, seed 42 protocol using Pong plus Breakout (4M global steps) or a corresponding
+single-task control (2M steps). All use full18, `fs4/stack4`, per-task 1M mmap replay and a
+per-task 1M LR decay; the two-task run additionally uses `transition_balanced` collection and
+`task_balanced` replay. Its smoke is fixed at 25k steps and writes to a separate `_smoke` result
+leaf. These results belong under `results/data/rl/atari/multitask_18action/`, never the fixed
+five-task namespace.

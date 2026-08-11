@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "id": "sjc-atari-multitask18-l3h458-controls-seed42-20260809",
+  "description": "GPU1 sequential control chain: Breakout-only full18 GRU L3 h458 seed42 2M, then Pong smoke and Pong-only 2M",
+  "host": "sjc-remote",
+  "status": "completed",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": [],
+    "tmux_session": "sjc-mt18-controls-l3h458-s42"
+  },
+  "paths": {
+    "log_globs": [
+      "results/run_20260809_182033.log"
+    ],
+    "status_dir": "experiments/remote/artifacts",
+    "result_paths": [
+      "results/data/rl/atari/multitask_18action/fs4_stack4_l3_h458_gru_breakout_only_full18_per_task_buf1m_lrpertask1m_seed42_formal",
+      "results/data/rl/atari/multitask_18action/fs4_stack4_l3_h458_gru_pong_only_full18_per_task_buf1m_lrpertask1m_seed42_formal"
+    ]
+  },
+  "tracking": {
+    "expected_units": 2,
+    "auto_complete": false,
+    "result_globs": [
+      "results/data/rl/atari/multitask_18action/fs4_stack4_l3_h458_gru_breakout_only_full18_per_task_buf1m_lrpertask1m_seed42_formal",
+      "results/data/rl/atari/multitask_18action/fs4_stack4_l3_h458_gru_pong_only_full18_per_task_buf1m_lrpertask1m_seed42_formal"
+    ],
+    "done_glob": null,
+    "fail_glob": null,
+    "defaults": {
+      "expected": {},
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1
+    },
+    "units": []
+  },
+  "notes": [
+    "GPU1 chain advances only after the preceding launcher succeeds. Pong smoke is deleted after acceptance before Pong formal begins."
+  ],
+  "created_at": "2026-08-09T22:21:07+00:00",
+  "updated_at": "2026-08-10T12:32:12+00:00",
+  "completed_at": "2026-08-10T12:32:12+00:00"
+}

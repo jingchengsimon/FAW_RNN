@@ -3,7 +3,7 @@
   "id": "sjc-atari-breakout-l3-gru7-gru9-repair-20260808",
   "description": "Direct two-GPU repair of strict Breakout L3 1M-replay LR-decay GRU seeds 7 and 9, reproducing Amarel 60236131 protocol",
   "host": "sjc-remote",
-  "status": "running",
+  "status": "completed",
   "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
   "environment": {
     "name": "aim3_rnn",
@@ -12,7 +12,10 @@
   "scheduler": {
     "type": "tmux",
     "job_ids": [],
-    "run_ids": ["3436453", "3436454"],
+    "run_ids": [
+      "3436453",
+      "3436454"
+    ],
     "tmux_session": "sjc-breakout-l3-gru7-9-repair"
   },
   "paths": {
@@ -54,5 +57,6 @@
     "Results are isolated from Amarel partial histories and must be validated before merging for the 10-seed visualisation."
   ],
   "created_at": "2026-08-08T10:19:27-04:00",
-  "updated_at": "2026-08-08T10:19:27-04:00"
+  "updated_at": "2026-08-10T15:10:30+00:00",
+  "completed_at": "2026-08-10T15:10:30+00:00"
 }

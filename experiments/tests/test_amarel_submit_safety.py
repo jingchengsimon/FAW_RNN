@@ -105,3 +105,21 @@ def test_agent_constraints_require_the_amarel_safety_gate() -> None:
     assert command in agents
     assert "Login-node safety boundary" in runbook
     assert command in runbook
+
+
+def test_per_task_pilot_submitter_supports_normalized_sparse_array_tasks() -> None:
+    """Recovery submissions accept only unique task indices within the pilot array."""
+
+    submitter = (
+        ROOT
+        / "experiments/rl/atari/amarel/"
+        "submit_atari_5task_18action_l3_lrpertask_pilot.sh"
+    ).read_text(encoding="utf-8")
+
+    assert 'ARRAY_TASK_SPEC="0-14"' in submitter
+    assert "--array-tasks requires TASK_SPEC" in submitter
+    assert "Invalid --array-tasks specification" in submitter
+    assert "--array-tasks indices must be within 0-14" in submitter
+    assert "Duplicate --array-tasks index" in submitter
+    assert 'echo "array: ${NORMALIZED_ARRAY_TASKS}%5"' in submitter
+    assert '--array="${NORMALIZED_ARRAY_TASKS}%5"' in submitter

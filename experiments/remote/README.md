@@ -37,6 +37,28 @@ Run a long command in remote tmux:
   bash experiments/<task>/amarel/run_hparam_full_grid_2gpu.sh --scale 4
 ```
 
+## SJC Atari L3 GRU comparison
+
+`run_sjc_atari_multitask_l3_gru.sh` is run through `run.sh`, which supplies the remote
+environment activation. It keeps the two-task Pong/Breakout run and the single-task comparisons
+under `results/data/rl/atari/multitask_18action/`, with a distinct result leaf for each phase.
+Run the isolated 25k smoke first, then use the same mode without `--smoke` for the formal run:
+
+```bash
+./experiments/remote/run.sh --push --detach sjc_breakout_l3_smoke -- \
+  bash experiments/remote/run_sjc_atari_multitask_l3_gru.sh \
+  --mode breakout --cuda-device 1 --smoke
+
+./experiments/remote/run.sh --push --detach sjc_breakout_l3_formal -- \
+  bash experiments/remote/run_sjc_atari_multitask_l3_gru.sh \
+  --mode breakout --cuda-device 1
+```
+
+The launcher uses GRU L3 h458, seed 42, `fs4/stack4`, full18 actions, independent 1M mmap
+replay per task, 50k-step checkpoints, and per-task 1M LR decay. It resumes only from
+`checkpoint.pth`; an existing history without that checkpoint is rejected to prevent a spliced
+trajectory. Use `--dry-run` to inspect the resolved command and result leaf without training.
+
 After a detached launch succeeds, record its run ID, tmux session, remote root, exact logs,
 results, and validity conditions with the project-local registry in
 `experiments/monitoring/README.md`. This makes the same run discoverable from Mac and Mac mini

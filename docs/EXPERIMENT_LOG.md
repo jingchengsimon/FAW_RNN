@@ -347,3 +347,16 @@
   的 `B=8,T=16` update 段从 582.21 s 变为 586.76 s（`0.992×`，`−0.78%`），无实际加速，
   因而不用于正式训练。该开关保持 default-off，仅作为未来 data-transfer optimization 的
   对照基线。
+
+## 2026-08-10 — SJC Atari multi-task 每卡多 job contention variance
+
+- **改动（Change）：** 在 sjc-remote 两张 RTX A6000 上，以相同的 120,028-step warm-up
+  checkpoint 与 seed 9101，完成三轮 50k-step continuation；比较每卡 `1/2/4/8 job`，其中每个
+  job 固定为五任务 GaWF L3、`per_task` 500k mmap replay、task-balanced sampling。
+- **证据（Evidence）：** 三轮共 90/90 unit 完成。汇总 `per_gpu1`（n=6）与 `per_gpu8`
+  （n=48）：final `loss` 的均值差为 −0.00150（−0.09 baseline SD），`q_values_mean` 为
+  +0.03096（+0.38 SD），`episodic_return_100` 为 −125.69（−0.94 SD）；`per_gpu8` 的各项
+  离散度与 baseline 接近。
+- **结论（Conclusion）：** 每卡 8 job 未显示超出 baseline envelope 的系统性数值偏移，作为
+  GPU-contention 下的 execution variance 可接受。该检验固定 warm-up checkpoint/seed，只证明
+  并发配置的数值可比性，不替代跨 seed 的训练泛化评估。

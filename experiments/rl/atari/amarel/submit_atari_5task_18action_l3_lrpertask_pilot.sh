@@ -4,12 +4,81 @@
 set -euo pipefail
 ROOT="${AIM3_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)}"
 DRY_RUN=0
+ARRAY_TASK_SPEC="0-14"
+
+normalize_array_tasks() {
+  local spec="$1"
+  local item start end index range_start=-1 range_end=-1
+  local -a items selected
+  local IFS=,
+
+  [[ -n "$spec" ]] || { echo "--array-tasks must not be empty" >&2; return 2; }
+  [[ "$spec" != *[[:space:]]* ]] || {
+    echo "--array-tasks must not contain whitespace: $spec" >&2
+    return 2
+  }
+  [[ "$spec" =~ ^[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$ ]] || {
+    echo "Invalid --array-tasks specification: $spec" >&2
+    return 2
+  }
+  read -r -a items <<< "$spec"
+  selected=(0 0 0 0 0 0 0 0 0 0 0 0 0 0 0)
+  for item in "${items[@]}"; do
+    [[ "$item" =~ ^([0-9]+)(-([0-9]+))?$ ]] || {
+      echo "Invalid --array-tasks item: $item" >&2
+      return 2
+    }
+    start=$((10#${BASH_REMATCH[1]}))
+    end="$start"
+    if [[ -n "${BASH_REMATCH[3]:-}" ]]; then
+      end=$((10#${BASH_REMATCH[3]}))
+    fi
+    (( start <= end && end <= 14 )) || {
+      echo "--array-tasks indices must be within 0-14: $item" >&2
+      return 2
+    }
+    for (( index=start; index<=end; index++ )); do
+      (( selected[index] == 0 )) || {
+        echo "Duplicate --array-tasks index: $index" >&2
+        return 2
+      }
+      selected[index]=1
+    done
+  done
+
+  NORMALIZED_ARRAY_TASKS=""
+  for (( index=0; index<=14; index++ )); do
+    if (( selected[index] )); then
+      if (( range_start < 0 )); then
+        range_start="$index"
+      fi
+      range_end="$index"
+    elif (( range_start >= 0 )); then
+      [[ -z "$NORMALIZED_ARRAY_TASKS" ]] || NORMALIZED_ARRAY_TASKS+=","
+      NORMALIZED_ARRAY_TASKS+="$range_start"
+      (( range_start == range_end )) || NORMALIZED_ARRAY_TASKS+="-$range_end"
+      range_start=-1
+    fi
+  done
+  if (( range_start >= 0 )); then
+    [[ -z "$NORMALIZED_ARRAY_TASKS" ]] || NORMALIZED_ARRAY_TASKS+=","
+    NORMALIZED_ARRAY_TASKS+="$range_start"
+    (( range_start == range_end )) || NORMALIZED_ARRAY_TASKS+="-$range_end"
+  fi
+}
+
 while (( $# )); do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
+    --array-tasks)
+      (( $# >= 2 )) || { echo "--array-tasks requires TASK_SPEC" >&2; exit 2; }
+      ARRAY_TASK_SPEC="$2"
+      shift 2
+      ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+normalize_array_tasks "$ARRAY_TASK_SPEC"
 : "${AIM3_RESULTS_PATH:?Export AIM3_RESULTS_PATH, normally /scratch/js3269/results}"
 [[ "$AIM3_RESULTS_PATH" == /* ]] || { echo "AIM3_RESULTS_PATH must be absolute" >&2; exit 2; }
 
@@ -21,6 +90,7 @@ if (( DRY_RUN )); then
   echo "protocol: five-task full18 L3; 5M global (=about 1M/task); per-task replay=500k"
   echo "LR: decay when min_task_steps reaches 1M"
   echo "GaWF: array ordinals 0-2 map to GaWF seeds; max concurrency 5; no smoke gate"
+  echo "array: ${NORMALIZED_ARRAY_TASKS}%5"
   echo "results: $BASE"
   exit 0
 fi
@@ -35,7 +105,8 @@ PILOT_EXPORTS="$PILOT_EXPORTS,LEARNING_STARTS_PER_TASK=20000,REQUIRED_GIB=66"
 PILOT_EXPORTS="$PILOT_EXPORTS,GAWF_FIRST_SCHEDULING=1"
 # Array ordinals 0-2 deterministically map to the three GaWF seeds; with a
 # five-task throttle, the first active wave is GaWF x3 plus two non-GaWF units.
-PILOT_RAW="$(sbatch --parsable --job-name=aim3-atari-5task-per-task-replay --array=0-14%5 \
+PILOT_RAW="$(sbatch --parsable --job-name=aim3-atari-5task-per-task-replay \
+  --array="${NORMALIZED_ARRAY_TASKS}%5" \
   --time=30:00:00 --chdir="$ROOT" --output="$ARTIFACT_ROOT/pilot/%A_%a.out" \
   --error="$ARTIFACT_ROOT/pilot/%A_%a.err" \
   --export="ALL,$PILOT_EXPORTS" "$RUNNER")"
