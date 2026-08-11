@@ -43,6 +43,8 @@ LSTM L3/h373，各三个 seeds。它先运行 500-step structural/recovery smoke
 五个 replay partitions，受控 `SIGUSR1` 后自动 requeue/resume；仅 smoke 成功才通过
 `afterok` 释放 six-unit formal array。成功的 smoke result/artifact leaves 由独立 compute
 cleanup job 精确删除；正式 run 成功时只由训练入口删除本 unit 的 replay。
+失败 smoke leaf 必须保留；重提时使用唯一的 `--smoke-attempt <tag>`，仅隔离 smoke 路径，
+不改变六个 formal result suffix。
 
 ## SJC two-task L3 GRU comparison
 

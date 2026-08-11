@@ -24,6 +24,7 @@ def test_formal_submitter_dry_run_locks_gate_mapping_and_conservative_throttle()
     assert "array=0-5%1" in output
     assert "torch.compile disabled" in output
     assert "--after-smoke JOB_ID" in output
+    assert "retry: --smoke-attempt TAG" in output
 
 
 def test_formal_runner_locks_the_requested_replay_and_optimizer_protocol() -> None:
@@ -53,3 +54,9 @@ def test_submitter_can_reuse_an_already_submitted_smoke() -> None:
     text = SUBMITTER.read_text(encoding="utf-8")
     assert "--after-smoke" in text
     assert 'SMOKE_JOB_ID="$AFTER_SMOKE_ID"' in text
+
+
+def test_submitter_can_use_a_distinct_retry_smoke_leaf() -> None:
+    text = SUBMITTER.read_text(encoding="utf-8")
+    assert "--smoke-attempt" in text
+    assert 'SMOKE_SUFFIX+="_$SMOKE_ATTEMPT"' in text
