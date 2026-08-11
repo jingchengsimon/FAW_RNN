@@ -42,8 +42,10 @@ def test_formal_runner_locks_the_requested_replay_and_optimizer_protocol() -> No
         "--amp_dtype bfloat16 --allow_tf32 --cudnn_benchmark --fused_optimizer",
         "--required_gib 140",
         "kill -USR1 \"$TRAIN_PID\"",
+        'os.path.join(task_dir, "meta.json")',
     ):
         assert required in text
+    assert "replay_meta.json" not in text
     assert "compile_model" not in text
 
 

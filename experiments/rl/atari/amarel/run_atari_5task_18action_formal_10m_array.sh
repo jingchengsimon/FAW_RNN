@@ -161,7 +161,7 @@ if len(replay.get("task_states", [])) != 5:
     raise RuntimeError("checkpoint is missing one or more replay partitions")
 for task_id in range(5):
     task_dir = os.path.join(replay_dir, f"task_{task_id}")
-    if not os.path.isfile(os.path.join(task_dir, "replay_meta.json")):
+    if not os.path.isfile(os.path.join(task_dir, "meta.json")):
         raise RuntimeError(f"missing mmap partition metadata: {task_dir}")
 PY
     printf 'checkpoint=%s replay_layout=per_task partitions=5\n' "$CHECKPOINT" \
