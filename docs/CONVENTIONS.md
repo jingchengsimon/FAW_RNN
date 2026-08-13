@@ -80,6 +80,10 @@ Atari DQN additionally uses `--frame_skip`, `--frame_stack`, `--task_schedule`,
 `--learning_rate_decay_per_task_steps`, `--amp_dtype`, `--allow_tf32`, `--compile_model`, and
 `--feedback_mode`. Multi-task `--replay_layout per_task` creates one independent replay partition
 per task; `--buffer_size` is the capacity of each partition, rather than a global shared capacity.
+Atari DQN epsilon linearly decays over fixed `--exploration_steps` global steps (default
+`500000`), independent of `--total_timesteps`. Historical `--exploration_fraction` remains
+available only as an explicit compatibility option and cannot be combined with
+`--exploration_steps`; new launchers and result protocols must record/use the fixed step count.
 `--record_timing` is benchmark-only: it records host-wall environment/replay I/O and optimizer
 timing in final metrics without changing the training protocol.
 

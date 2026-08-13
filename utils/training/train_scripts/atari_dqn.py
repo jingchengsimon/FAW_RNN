@@ -187,7 +187,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--start_epsilon", type=float, default=1.0)
     parser.add_argument("--end_epsilon", type=float, default=0.01)
-    parser.add_argument("--exploration_fraction", type=float, default=0.10)
+    parser.add_argument(
+        "--exploration_steps",
+        type=int,
+        default=None,
+        help="Fixed global steps for linear epsilon decay; defaults to 500000.",
+    )
+    parser.add_argument(
+        "--exploration_fraction",
+        type=float,
+        default=None,
+        help="Legacy alternative to --exploration_steps; only use for historical reproduction.",
+    )
     parser.add_argument("--train_frequency", type=int, default=4)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--seq_len", type=int, default=16)
@@ -312,6 +323,7 @@ RESUME_ARG_KEYS = (
     "learning_starts_per_task",
     "start_epsilon",
     "end_epsilon",
+    "exploration_steps",
     "exploration_fraction",
     "train_frequency",
     "batch_size",
@@ -495,8 +507,27 @@ def _extract_step_env_ids(infos: Any, num_envs: int) -> list[str | None]:
     return result
 
 
+def _resolve_exploration_steps(args: argparse.Namespace) -> None:
+    """Resolve the fixed default or explicit legacy fraction to one epsilon-decay duration."""
+
+    if args.exploration_steps is not None and args.exploration_fraction is not None:
+        raise ValueError("--exploration_steps and --exploration_fraction are mutually exclusive")
+    if args.exploration_fraction is not None:
+        if not 0 < args.exploration_fraction <= 1:
+            raise ValueError("--exploration_fraction must be in (0, 1]")
+        args.exploration_steps = int(args.exploration_fraction * args.total_timesteps)
+    elif args.exploration_steps is None:
+        args.exploration_steps = 500_000
+    if args.exploration_steps <= 0:
+        raise ValueError("--exploration_steps must be positive")
+
+
 def _linear_epsilon(args: argparse.Namespace, global_step: int) -> float:
-    decay_steps = max(1.0, args.exploration_fraction * args.total_timesteps)
+    exploration_steps = getattr(args, "exploration_steps", None)
+    if exploration_steps is None:
+        # MiniGrid reuses this helper and retains its own fraction-based CLI.
+        exploration_steps = float(args.exploration_fraction) * args.total_timesteps
+    decay_steps = max(1.0, float(exploration_steps))
     slope = (args.end_epsilon - args.start_epsilon) / decay_steps
     return max(args.end_epsilon, args.start_epsilon + slope * global_step)
 
@@ -762,6 +793,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
     logger = logging.getLogger("train_atari_dqn")
     args.feedback_mode = _resolve_feedback_mode(args)
+    _resolve_exploration_steps(args)
     env_ids, action_space_mode = _resolve_task_config(args)
     if args.num_layers < 1:
         raise ValueError(f"num_layers must be >= 1, got {args.num_layers}")
@@ -816,6 +848,13 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         if isinstance(saved_args, dict):
             # Checkpoints created before the per-task gate retain historical semantics.
             saved_args.setdefault("learning_starts_per_task", 0)
+            # Historical checkpoints parameterized epsilon decay as a fraction.
+            if "exploration_steps" not in saved_args:
+                fraction = saved_args.get("exploration_fraction")
+                if fraction is not None:
+                    saved_args["exploration_steps"] = int(
+                        float(fraction) * int(saved_args["total_timesteps"])
+                    )
         validate_resume_protocol(
             resume_checkpoint,
             args,
@@ -1370,6 +1409,8 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "effective_learning_rate": float(optimizer.param_groups[0]["lr"]),
             "learning_starts": args.learning_starts,
             "learning_starts_per_task": args.learning_starts_per_task,
+            "exploration_steps": args.exploration_steps,
+            "exploration_fraction": args.exploration_fraction,
             "learning_started_at_step": learning_started_at_step,
             "task_scheduler_state_restored": scheduler_state_restored,
             "task_scheduler_states": (

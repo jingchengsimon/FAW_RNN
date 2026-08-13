@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT="${AIM3_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)}"
 DRY_RUN=0
 AFTER_SMOKE_ID=""
-SMOKE_ATTEMPT=""
+RUN_TAG=""
 while (( $# )); do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
@@ -14,24 +14,25 @@ while (( $# )); do
       AFTER_SMOKE_ID="${2:-}"
       shift 2
       ;;
-    --smoke-attempt)
-      SMOKE_ATTEMPT="${2:-}"
+    --run-tag)
+      RUN_TAG="${2:-}"
       shift 2
       ;;
-    *) echo "Usage: $0 [--dry-run] [--after-smoke JOB_ID] [--smoke-attempt TAG]" >&2; exit 2 ;;
+    *) echo "Usage: $0 [--dry-run] [--after-smoke JOB_ID] [--run-tag TAG]" >&2; exit 2 ;;
   esac
 done
 [[ -z "$AFTER_SMOKE_ID" || "$AFTER_SMOKE_ID" =~ ^[0-9]+$ ]] || {
   echo "--after-smoke must be a Slurm job ID" >&2
   exit 2
 }
-[[ -z "$SMOKE_ATTEMPT" || "$SMOKE_ATTEMPT" =~ ^[A-Za-z0-9_-]+$ ]] || {
-  echo "--smoke-attempt must contain only letters, digits, underscores, or hyphens" >&2
+[[ -z "$RUN_TAG" || "$RUN_TAG" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || {
+  echo "--run-tag must use lowercase letters, digits, '_' or '-'" >&2
   exit 2
 }
 
-BASE_REL="data/rl/atari/5task_18action/per_task_buf1m/formal_10m_2mpertask"
-ARTIFACT_TAG="atari_5task_18action_formal_10m_2mpertask"
+RUN_SUFFIX="${RUN_TAG:+_$RUN_TAG}"
+BASE_REL="data/rl/atari/5task_18action/per_task_buf1m/formal_10m_2mpertask${RUN_SUFFIX}"
+ARTIFACT_TAG="atari_5task_18action_formal_10m_2mpertask${RUN_SUFFIX}"
 FORMAL_PREFIX="atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_"
 if (( DRY_RUN )); then
   cat <<EOF
@@ -41,8 +42,9 @@ acceleration: bfloat16 TF32 cudnn_benchmark fused_optimizer; torch.compile disab
 smoke: 500 steps, controlled SIGUSR1 checkpoint/resume, then exact smoke-leaf cleanup
 formal dependency: afterok:<smoke_jobid>; array=0-5%1 (conservative: user quota unverified)
 reuse: --after-smoke JOB_ID attaches cleanup/formal to an already-submitted smoke without a rerun
-retry: --smoke-attempt TAG uses a distinct smoke leaf while preserving formal suffixes
+retry isolation: --run-tag TAG creates distinct result and artifact leaves
 result root: \$AIM3_RESULTS_PATH/$BASE_REL
+artifact root: $ROOT/experiments/rl/atari/amarel/artifacts/$ARTIFACT_TAG
 formal suffix prefix: $FORMAL_PREFIX
 EOF
   exit 0
@@ -55,7 +57,6 @@ ARTIFACT_ROOT="$ROOT/experiments/rl/atari/amarel/artifacts/$ARTIFACT_TAG"
 RUNNER="$ROOT/experiments/rl/atari/amarel/run_atari_5task_18action_formal_10m_array.sh"
 CLEANUP_RUNNER="$ROOT/experiments/rl/atari/amarel/run_atari_5task_18action_formal_10m_smoke_cleanup.sh"
 SMOKE_SUFFIX="${FORMAL_PREFIX}gru_seed1_smoke"
-[[ -z "$SMOKE_ATTEMPT" ]] || SMOKE_SUFFIX+="_$SMOKE_ATTEMPT"
 SMOKE_RESULT_DIR="$FORMAL_BASE/smoke/$SMOKE_SUFFIX"
 SMOKE_ARTIFACT_DIR="$ARTIFACT_ROOT/smoke"
 SMOKE_PASS_FILE="$ARTIFACT_ROOT/status/${SMOKE_SUFFIX}.smoke_pass"
@@ -69,6 +70,7 @@ for model in gru lstm; do
   done
 done
 [[ ! -e "$SMOKE_RESULT_DIR" ]] || { echo "smoke result leaf exists: $SMOKE_RESULT_DIR" >&2; exit 3; }
+[[ ! -e "$ARTIFACT_ROOT" ]] || { echo "artifact root exists: $ARTIFACT_ROOT" >&2; exit 3; }
 
 while IFS= read -r job_id; do
   [[ "$job_id" == "$AFTER_SMOKE_ID" ]] && continue

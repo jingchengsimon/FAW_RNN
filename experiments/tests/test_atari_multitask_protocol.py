@@ -6,10 +6,16 @@ from argparse import Namespace
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from utils.training.atari.atari_envs import _EpisodeTaskScheduler
 from utils.training.atari.atari_replay import AtariReplayBuffer, PerTaskAtariReplayBuffer
-from utils.training.train_scripts.atari_dqn import _json_safe, _learning_ready
+from utils.training.train_scripts.atari_dqn import (
+    _json_safe,
+    _learning_ready,
+    _linear_epsilon,
+    _resolve_exploration_steps,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -120,6 +126,46 @@ def test_learning_waits_for_every_task_threshold() -> None:
     assert not _learning_ready(args, 100_000, counts)
     counts["task_4"] = 20_000
     assert _learning_ready(args, 100_000, counts)
+
+
+def test_atari_default_epsilon_decay_uses_fixed_global_steps() -> None:
+    args = Namespace(
+        total_timesteps=10_000_000,
+        exploration_steps=None,
+        exploration_fraction=None,
+        start_epsilon=1.0,
+        end_epsilon=0.01,
+    )
+
+    _resolve_exploration_steps(args)
+
+    assert args.exploration_steps == 500_000
+    assert _linear_epsilon(args, 500_000) == 0.01
+
+
+def test_atari_legacy_epsilon_fraction_requires_explicit_opt_in() -> None:
+    args = Namespace(
+        total_timesteps=5_000_000,
+        exploration_steps=None,
+        exploration_fraction=0.10,
+        start_epsilon=1.0,
+        end_epsilon=0.01,
+    )
+
+    _resolve_exploration_steps(args)
+
+    assert args.exploration_steps == 500_000
+
+
+def test_atari_rejects_ambiguous_epsilon_schedule() -> None:
+    args = Namespace(
+        total_timesteps=5_000_000,
+        exploration_steps=500_000,
+        exploration_fraction=0.10,
+    )
+
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        _resolve_exploration_steps(args)
 
 
 def test_unavailable_atari_metrics_are_json_null_not_nan() -> None:

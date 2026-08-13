@@ -207,6 +207,8 @@ def make_atari_env(
             full_action_space=full_action_space,
             render_mode=render_mode or ("rgb_array" if capture_video else None),
         )
+        if full_action_space:
+            env = _canonical_18_action_space(env, gym)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         if capture_video and idx == 0:
             if video_dir is None:

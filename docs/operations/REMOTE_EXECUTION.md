@@ -39,6 +39,11 @@ and training must use the same resolved root.
 
 - Prefer the SSH aliases recorded in `.agents/local.md`; do not embed usernames or addresses in
   tracked documentation.
+- Configure `sjc-remote` and `amarel` in `~/.ssh/config` with a shared `ControlPath`,
+  `ControlMaster auto`, and `ControlPersist`. Before a remote status query, run
+  `ssh -O check <alias>`; a successful check confirms that the query can reuse the existing
+  socket rather than creating a normal SSH connection. If the check fails, stop and report the
+  original error; do not fall back to a normal SSH connection for that status-only request.
 - Combine related scheduler, log, metrics, and filesystem checks into one foreground SSH call.
 - Never start background SSH sessions. Allow up to 120 seconds for a consolidated diagnostic.
 - If a reused connection is stale, clean up the matching local SSH process before one retry.
@@ -108,9 +113,24 @@ than the first-development path: repeat safety work only when the launcher or pr
 
 #### Status-only request
 
-Use one consolidated scheduler/log/metrics query and report the answer. Do not modify scripts,
-synchronize files, submit a probe, or create a monitoring job unless the user also asks for an
-operation.
+The persistent fact source is `experiments/monitoring/jobs/<experiment-id>.json`. At submission,
+create exactly one manifest with a host-neutral concise experiment ID, the host, Slurm/tmux
+execution IDs, precise result directories, logs, and expected units. The
+format is `<domain>-<protocol>-<variant>-<budget>-<models>-<seeds>`; do not include the host or
+Slurm/tmux ID. Store the host in `host`, Amarel job IDs in `scheduler.job_ids`, and SJC tmux/run
+IDs in `scheduler.run_ids`. Then run `python -m experiments.monitoring.job_registry rebuild` to
+generate the human-searchable `JOBS.md` and lightweight `active_jobs.json` indexes. The indexes
+do not replace the per-experiment manifest.
+
+For status-only `progress`, pass `--no-update` and a complete experiment ID. It reads only the
+matching manifest and never accepts natural language, aliases, scheduler IDs, or name fragments;
+there is no fallback that scans historical manifests. When the user supplies only a prose
+description, search `JOBS.md` or `active_jobs.json` to identify one complete ID before invoking
+the checker. `progress` performs
+`ssh -O check <alias>` itself and reports its raw failure without opening a new connection; after
+success, it uses one consolidated scheduler/log/metrics SSH query and always emits either a
+progress report or an explicit local/socket/remote error. Do not modify scripts, synchronize
+files, submit a probe, or create a monitoring job unless the user also asks for an operation.
 
 For every template, stop after the specified verification step. Escalate to the fuller
 first-development workflow only when a safety gate fails, a target is ambiguous, a recovery

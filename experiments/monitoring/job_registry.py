@@ -13,7 +13,7 @@ import re
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 
 MONITORING_DIR = Path(__file__).resolve().parent
@@ -79,6 +79,8 @@ def validate_manifest(manifest: dict[str, Any]) -> None:
         raise RegistryError(
             f"Invalid status {manifest['status']!r}; choose from {sorted(VALID_STATUSES)}."
         )
+    if "query_keys" in manifest:
+        raise RegistryError("query_keys are unsupported; use the complete experiment ID.")
     environment = manifest["environment"]
     if not isinstance(environment, dict) or not environment.get("name"):
         raise RegistryError("environment.name is required.")
@@ -147,6 +149,28 @@ def load_jobs(base_dir: Path | None = None) -> list[dict[str, Any]]:
     return sorted(jobs, key=lambda job: (job.get("created_at", ""), job["id"]), reverse=True)
 
 
+def load_job(job_id: str, base_dir: Path | None = None) -> dict[str, Any]:
+    """Load and validate one manifest by its complete stable ID without scanning history."""
+
+    jobs_dir, _, _ = _registry_paths(base_dir)
+    normalized_id = slugify(job_id)
+    path = jobs_dir / f"{normalized_id}.json"
+    if not path.is_file():
+        raise RegistryError(f"No retained job has exact ID {normalized_id!r}.")
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        validate_manifest(manifest)
+    except (json.JSONDecodeError, OSError, RegistryError) as exc:
+        raise RegistryError(f"Cannot load {path}: {exc}") from exc
+    if manifest["id"] != normalized_id:
+        raise RegistryError(
+            f"Manifest ID mismatch in {path}: expected {normalized_id!r}, "
+            f"found {manifest['id']!r}."
+        )
+    manifest["_manifest_path"] = str(path)
+    return manifest
+
+
 def save_job(
     manifest: dict[str, Any],
     *,
@@ -166,41 +190,6 @@ def save_job(
     _atomic_write(path, json.dumps(normalized, indent=2, ensure_ascii=False) + "\n")
     rebuild_indexes(base_dir=base_dir)
     return path
-
-
-def _flatten_identifiers(job: dict[str, Any]) -> set[str]:
-    scheduler = job.get("scheduler", {})
-    values: set[str] = {str(job["id"]).lower()}
-    for field in ("job_ids", "run_ids"):
-        values.update(str(value).lower() for value in scheduler.get(field, []))
-    if scheduler.get("tmux_session"):
-        values.add(str(scheduler["tmux_session"]).lower())
-    for value in job.get("paths", {}).get("result_paths", []):
-        values.add(str(value).lower())
-    return values
-
-
-def find_job(selector: str, jobs: Iterable[dict[str, Any]] | None = None) -> dict[str, Any]:
-    """Resolve an ID, scheduler ID, run ID, tmux name, result path, or description fragment."""
-
-    candidates = list(jobs) if jobs is not None else load_jobs()
-    needle = selector.strip().lower()
-    exact = [job for job in candidates if needle in _flatten_identifiers(job)]
-    if len(exact) == 1:
-        return exact[0]
-    partial = [
-        job
-        for job in candidates
-        if needle in job["id"].lower()
-        or needle in str(job.get("description", "")).lower()
-        or any(needle in value for value in _flatten_identifiers(job))
-    ]
-    if len(partial) == 1:
-        return partial[0]
-    if not partial:
-        raise RegistryError(f"No retained job matches {selector!r}.")
-    matches = ", ".join(job["id"] for job in partial[:10])
-    raise RegistryError(f"Selector {selector!r} is ambiguous; matches: {matches}")
 
 
 def _markdown_escape(value: Any) -> str:
@@ -224,6 +213,7 @@ def rebuild_indexes(base_dir: Path | None = None) -> None:
                 "status": job["status"],
                 "job_ids": job.get("scheduler", {}).get("job_ids", []),
                 "run_ids": job.get("scheduler", {}).get("run_ids", []),
+                "tmux_session": job.get("scheduler", {}).get("tmux_session"),
                 "remote_root": job["remote_root"],
                 "updated_at": job.get("updated_at"),
             }
@@ -236,10 +226,10 @@ def rebuild_indexes(base_dir: Path | None = None) -> None:
         "# Remote Experiment Job History",
         "",
         "该文档由 `python -m experiments.monitoring.job_registry rebuild` 从 `jobs/*.json`",
-        "生成。记录默认永久保留；只有人类明确确认后才能删除。它只服务于实验定位和",
-        "检测，不是实验协议或项目方法定义。",
+        "生成。记录默认永久保留；只有人类明确确认后才能删除。",
+        "它只服务于实验定位和检测，不是实验协议或项目方法定义。",
         "",
-        "| Job | Status | Host | Scheduler / run IDs | Units | Remote root | "
+        "| Experiment ID | Status | Host | Scheduler / run IDs | Units | Remote root | "
         "Description |",
         "|---|---|---|---|---:|---|---|",
     ]
@@ -271,7 +261,7 @@ def rebuild_indexes(base_dir: Path | None = None) -> None:
 
 
 def update_status(
-    selector: str,
+    job_id: str,
     status: str,
     *,
     base_dir: Path | None = None,
@@ -281,7 +271,7 @@ def update_status(
 
     if status not in VALID_STATUSES:
         raise RegistryError(f"Invalid status {status!r}.")
-    job = find_job(selector, load_jobs(base_dir))
+    job = load_job(job_id, base_dir)
     job.pop("_manifest_path", None)
     job["status"] = status
     if status == "completed":
@@ -289,12 +279,12 @@ def update_status(
     return save_job(job, overwrite=True, base_dir=base_dir)
 
 
-def remove_job(selector: str, *, human_confirmed: bool, base_dir: Path | None = None) -> None:
+def remove_job(job_id: str, *, human_confirmed: bool, base_dir: Path | None = None) -> None:
     """Remove one record only after explicit human confirmation."""
 
     if not human_confirmed:
         raise RegistryError("Deletion requires --human-confirmed.")
-    job = find_job(selector, load_jobs(base_dir))
+    job = load_job(job_id, base_dir)
     path = Path(job["_manifest_path"])
     path.unlink()
     rebuild_indexes(base_dir=base_dir)
@@ -380,19 +370,19 @@ def parse_args() -> argparse.Namespace:
     new.add_argument("--note", action="append", default=[])
 
     show = subparsers.add_parser("show", help="Print one retained manifest.")
-    show.add_argument("selector")
+    show.add_argument("id")
 
     listing = subparsers.add_parser("list", help="List retained jobs.")
     listing.add_argument("--active", action="store_true")
 
     status = subparsers.add_parser("set-status", help="Update status without deleting history.")
-    status.add_argument("selector")
+    status.add_argument("id")
     status.add_argument("status", choices=sorted(VALID_STATUSES))
 
     subparsers.add_parser("rebuild", help="Rebuild JOBS.md and active_jobs.json.")
 
     remove = subparsers.add_parser("remove", help="Delete only with explicit human confirmation.")
-    remove.add_argument("selector")
+    remove.add_argument("id")
     remove.add_argument("--human-confirmed", action="store_true")
     return parser.parse_args()
 
@@ -410,7 +400,7 @@ def main() -> None:
             path = save_job(_new_manifest_from_args(args))
             print(f"registered {path}")
         elif args.command == "show":
-            job = find_job(args.selector)
+            job = load_job(args.id)
             job.pop("_manifest_path", None)
             print(json.dumps(job, indent=2, ensure_ascii=False))
         elif args.command == "list":
@@ -422,13 +412,13 @@ def main() -> None:
                 ids = [*scheduler.get("job_ids", []), *scheduler.get("run_ids", [])]
                 print(f"{job['id']}\t{job['status']}\t{job['host']}\t{','.join(map(str, ids))}")
         elif args.command == "set-status":
-            print(f"updated {update_status(args.selector, args.status)}")
+            print(f"updated {update_status(args.id, args.status)}")
         elif args.command == "rebuild":
             rebuild_indexes()
             print(f"rebuilt {HISTORY_PATH} and {ACTIVE_INDEX_PATH}")
         elif args.command == "remove":
-            remove_job(args.selector, human_confirmed=args.human_confirmed)
-            print(f"removed {args.selector}")
+            remove_job(args.id, human_confirmed=args.human_confirmed)
+            print(f"removed {args.id}")
     except (RegistryError, OSError, json.JSONDecodeError) as exc:
         raise SystemExit(str(exc)) from exc
 

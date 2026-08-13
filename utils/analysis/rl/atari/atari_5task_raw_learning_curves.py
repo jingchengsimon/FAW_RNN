@@ -16,6 +16,7 @@ import datetime as dt
 import json
 import re
 import subprocess
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -64,6 +65,11 @@ def parse_args() -> argparse.Namespace:
         help="Five-task result directory; repeat once for each run to plot.",
     )
     parser.add_argument(
+        "--label",
+        action="append",
+        help="Optional display label; repeat once per --run-dir in the same order.",
+    )
+    parser.add_argument(
         "--output-dir", type=Path, required=True, help="Destination for PNGs and inputs."
     )
     parser.add_argument(
@@ -78,7 +84,10 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Aggregate each model's available seed curves as mean plus sample-SD.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.label is not None and len(args.label) != len(args.run_dir):
+        parser.error("--label must be supplied once for every --run-dir.")
+    return args
 
 
 def _safe_label(directory: Path, index: int) -> str:
@@ -97,7 +106,9 @@ def _display_label(directory: Path, index: int) -> str:
     return f"{MODEL_LABELS[match.group(1)]} seed {match.group(2)}"
 
 
-def load_run_histories(run_dirs: list[Path]) -> list[RunHistory]:
+def load_run_histories(
+    run_dirs: list[Path], display_labels: list[str] | None = None
+) -> list[RunHistory]:
     """Read histories from the user-selected directories without requiring final metrics."""
 
     runs: list[RunHistory] = []
@@ -125,7 +136,11 @@ def load_run_histories(run_dirs: list[Path]) -> list[RunHistory]:
             RunHistory(
                 directory=resolved,
                 label=_safe_label(resolved, index),
-                display_label=_display_label(resolved, index),
+                display_label=(
+                    display_labels[index - 1]
+                    if display_labels is not None
+                    else _display_label(resolved, index)
+                ),
                 history=history,
                 has_metrics=(resolved / "metrics.json").is_file(),
             )
@@ -206,6 +221,9 @@ def render_learning_curves(
         raise ValueError(f"Unsupported x-axis key: {x_key}")
     figure, axes = plt.subplots(1, len(TASKS), figsize=(18, 3.8))
     x_label = "global steps (M)" if x_key == "global_step" else "task environment steps (M)"
+    model_seed_counts = Counter(_model_seed(run.directory) for run in runs)
+    duplicate_indices: defaultdict[tuple[str, int], int] = defaultdict(int)
+    line_styles = ("-", "--", ":", "-.")
     for axis, task in zip(axes, TASKS):
         has_data = False
         if model_mean_std:
@@ -238,16 +256,25 @@ def render_learning_curves(
                     )
                 has_data = True
         else:
+            duplicate_indices.clear()
             for run in runs:
                 x_values, y_values = curve_for_task(run, task, x_key)
                 if not x_values.size:
                     continue
                 model, seed = _model_seed(run.directory)
+                key = (model, seed)
+                duplicate_index = duplicate_indices[key]
+                duplicate_indices[key] += 1
+                line_style = (
+                    line_styles[duplicate_index % len(line_styles)]
+                    if model_seed_counts[key] > 1
+                    else ("-" if seed % 2 else "--")
+                )
                 axis.plot(
                     x_values / 1_000_000.0,
                     y_values,
                     color=MODEL_COLORS.get(model, None),
-                    linestyle="-" if seed % 2 else "--",
+                    linestyle=line_style,
                     linewidth=1.35,
                     label=run.display_label,
                 )
@@ -331,7 +358,7 @@ def main() -> None:
 
     args = parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    runs = load_run_histories(args.run_dir)
+    runs = load_run_histories(args.run_dir, args.label)
     x_axes = args.x_axes or ["environment_steps", "global_step"]
     figures = [
         render_learning_curves(runs, args.output_dir, x_key, args.model_mean_std)

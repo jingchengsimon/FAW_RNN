@@ -170,6 +170,22 @@ is missing, copy `.agents/local.example.md` and fill it in. Do not guess remote 
   `AIM3_NUM_WORKERS=2`; both use `AIM3_PIN_MEMORY=1` on CUDA compute nodes.
 - After submission, report the job/run ID, remote root, result location, requested resources, and
   the status/check command, then register it in `experiments/monitoring/`.
+- For remote progress, `experiments/monitoring/jobs/<experiment-id>.json` is the only fact source.
+  Every new manifest uses a host-neutral concise ID in the form
+  `<domain>-<protocol>-<variant>-<budget>-<models>-<seeds>`.
+  Host and execution IDs remain separate (`host`, Slurm `job_ids`, SJC `run_ids`/tmux). Run
+  `job_registry rebuild`; `JOBS.md` is the human/agent search summary and `active_jobs.json` is a
+  lightweight active index, neither replaces the manifest. For a status-only check, pass exactly
+  one complete ID to `progress --no-update`; no alias, execution-ID, fuzzy-name, or historical-
+  manifest lookup is permitted. `progress`
+  performs `ssh -O check <alias>` and reports any local/socket/remote error explicitly; after a
+  successful check it makes one combined foreground SSH query. A local manifest error is not
+  evidence of an SSH or remote failure.
+- When a user describes a registered active run in prose (for example an `exploration_fraction`,
+  budget, and model pair), inspect only `JOBS.md` or `active_jobs.json`, map it to one displayed
+  complete experiment ID, and run the check in the same turn if the mapping is unique. Do not ask
+  for confirmation or pass natural language to the checker. If no unique row matches, report that
+  condition and request the complete ID; never guess a different budget, model set, host, or run.
 - Before resubmitting an existing experiment unit, query all active scheduler jobs and process
   commands for the exact result suffix across historical job IDs/worktrees. Final-result absence
   alone is not evidence that no older writer is still active.

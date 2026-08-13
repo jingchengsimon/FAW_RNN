@@ -14,11 +14,16 @@ set -euo pipefail
 : "${SMOKE_ARTIFACT_DIR:?SMOKE_ARTIFACT_DIR is required}"
 : "${SMOKE_PASS_FILE:?SMOKE_PASS_FILE is required}"
 : "${FORMAL_BASE:?FORMAL_BASE is required}"
+: "${ARTIFACT_ROOT:?ARTIFACT_ROOT is required}"
 
 [[ -f "$SMOKE_PASS_FILE" ]] || { echo "smoke pass record is missing" >&2; exit 2; }
 EXPECTED_RESULT="$FORMAL_BASE/smoke/atari_dqn_5task_fs4_stack4_l3_buf1m_lrdecay1m_10m_gru_seed1_smoke"
 [[ "$SMOKE_RESULT_DIR" == "$EXPECTED_RESULT" ]] || { echo "unexpected smoke result path" >&2; exit 2; }
-[[ "$SMOKE_ARTIFACT_DIR" == */atari_5task_18action_formal_10m_2mpertask/smoke ]] || {
+[[ "$ARTIFACT_ROOT" =~ /experiments/rl/atari/amarel/artifacts/atari_5task_18action_formal_10m_2mpertask(_[a-z0-9][a-z0-9_-]*)?$ ]] || {
+  echo "unexpected formal artifact root" >&2
+  exit 2
+}
+[[ "$SMOKE_ARTIFACT_DIR" == "$ARTIFACT_ROOT/smoke" ]] || {
   echo "unexpected smoke artifact path" >&2
   exit 2
 }

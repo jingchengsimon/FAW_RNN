@@ -3,6 +3,7 @@
 #SBATCH --partition=gpu-redhat
 #SBATCH --account=general
 #SBATCH --gres=gpu:1
+#SBATCH --constraint=adalovelace
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64G
 #SBATCH --time=30:00:00
@@ -85,6 +86,43 @@ elif [[ -f "$HISTORY" || -f "$METRICS" ]]; then
   exit 3
 fi
 
+# A prior allocation may have checkpointed and been requeued before this
+# marker was persisted. Validate that checkpoint before any resumed training.
+if [[ "$RUN_PHASE" == "smoke" && -f "$SMOKE_INTERRUPTED" && ! -f "$SMOKE_CHECKPOINT_OK" ]]; then
+  [[ -f "$CHECKPOINT" ]] || {
+    echo "controlled smoke interruption is missing its resumable checkpoint" >&2
+    exit 4
+  }
+  python - "$CHECKPOINT" "$RESULT_DIR/replay" <<'PY'
+import os
+import sys
+
+import torch
+
+checkpoint_path, replay_dir = sys.argv[1:]
+payload = torch.load(checkpoint_path, map_location="cpu")
+replay = payload["replay"]
+expected = {
+    "replay_layout": "per_task",
+    "buffer_size_per_task": 1_000_000,
+    "num_envs": 1,
+    "num_tasks": 5,
+    "sampling_mode": "task_balanced",
+}
+for key, value in expected.items():
+    if replay.get(key) != value:
+        raise RuntimeError(f"checkpoint replay {key}={replay.get(key)!r}, expected {value!r}")
+if len(replay.get("task_states", [])) != 5:
+    raise RuntimeError("checkpoint is missing one or more replay partitions")
+for task_id in range(5):
+    task_dir = os.path.join(replay_dir, f"task_{task_id}")
+    if not os.path.isfile(os.path.join(task_dir, "meta.json")):
+        raise RuntimeError(f"missing mmap partition metadata: {task_dir}")
+PY
+  printf 'checkpoint=%s replay_layout=per_task partitions=5\n' "$CHECKPOINT" \
+    > "$SMOKE_CHECKPOINT_OK"
+fi
+
 TRAIN_ARGS=(
   --env_ids "${ENV_IDS[@]}" --action_space_mode full18 --model_type "$MODEL"
   --num_layers 3 --hidden_size "$HIDDEN_SIZE" --frame_skip 4 --frame_stack 4
@@ -94,7 +132,7 @@ TRAIN_ARGS=(
   --batch_size 32 --seq_len 16 --sequences_per_batch 8 --learning_rate 1e-4
   --learning_rate_decay_step 0 --learning_rate_decay_per_task_steps 1000000
   --learning_rate_decay_scale 0.1 --start_epsilon 1.0 --end_epsilon 0.01
-  --exploration_fraction 0.1 --seed "$SEED" --device cuda --result_suffix "$RESULT_LABEL"
+  --exploration_steps 500000 --seed "$SEED" --device cuda --result_suffix "$RESULT_LABEL"
   --save_dir "$RESULT_DIR" --replay_backing mmap --checkpoint_interval_steps "$CHECKPOINT_INTERVAL"
   --amp_dtype bfloat16 --allow_tf32 --cudnn_benchmark --fused_optimizer
 )
@@ -137,36 +175,6 @@ if (( TRAIN_RC != 0 )); then
 fi
 
 if [[ ! -f "$METRICS" ]]; then
-  if [[ "$RUN_PHASE" == "smoke" && -f "$SMOKE_INTERRUPTED" && ! -f "$SMOKE_CHECKPOINT_OK" ]]; then
-    python - "$CHECKPOINT" "$RESULT_DIR/replay" <<'PY'
-import os
-import sys
-
-import torch
-
-checkpoint_path, replay_dir = sys.argv[1:]
-payload = torch.load(checkpoint_path, map_location="cpu")
-replay = payload["replay"]
-expected = {
-    "replay_layout": "per_task",
-    "buffer_size_per_task": 1_000_000,
-    "num_envs": 1,
-    "num_tasks": 5,
-    "sampling_mode": "task_balanced",
-}
-for key, value in expected.items():
-    if replay.get(key) != value:
-        raise RuntimeError(f"checkpoint replay {key}={replay.get(key)!r}, expected {value!r}")
-if len(replay.get("task_states", [])) != 5:
-    raise RuntimeError("checkpoint is missing one or more replay partitions")
-for task_id in range(5):
-    task_dir = os.path.join(replay_dir, f"task_{task_id}")
-    if not os.path.isfile(os.path.join(task_dir, "meta.json")):
-        raise RuntimeError(f"missing mmap partition metadata: {task_dir}")
-PY
-    printf 'checkpoint=%s replay_layout=per_task partitions=5\n' "$CHECKPOINT" \
-      > "$SMOKE_CHECKPOINT_OK"
-  fi
   printf 'status=paused checkpoint=%s timestamp=%s\n' "$CHECKPOINT" "$(date -Is)" \
     > "$STATUS_DIR/${RESULT_LABEL}.paused"
   scontrol requeue "$SLURM_JOB_ID"

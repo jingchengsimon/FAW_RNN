@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "id": "short-stable-job-id",
+  "id": "atari5-l3-eps010-formal10m-lstm-gru-s1-3",
   "description": "Human-readable experiment description",
   "host": "amarel",
   "status": "queued",

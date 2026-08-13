@@ -1,9 +1,10 @@
-"""Render greedy Atari DQN evaluation episodes and retain the best video.
+"""Evaluate and render greedy Atari DQN episodes from completed checkpoints.
 
 Inputs are a final training ``metrics.json`` and its checkpoint. The evaluator
 reconstructs the exact saved network and strict Atari observation protocol,
-records several deterministic greedy-policy episodes, and copies the
-highest-return episode to the requested MP4 path. A companion JSON records the
+records deterministic greedy-policy episodes, and optionally copies a selected
+episode to the requested MP4 path. It supports the strict single-task protocol
+and task-blind full-18 multi-task checkpoints. A companion JSON records the
 source checkpoint, training/evaluation seeds, all episode returns, selected
 episode, protocol fields, and output path.
 """
@@ -28,9 +29,13 @@ import numpy as np
 import torch
 import cv2
 
-from utils.training.atari.atari_dqn_models import AtariQNetwork
+from utils.training.atari.atari_dqn_models import AtariQNetwork, normalize_atari_dqn_model_type
 from utils.training.atari.atari_envs import make_atari_env
-from utils.training.atari.atari_train_utils import select_device, set_atari_seed, to_channel_first_obs
+from utils.training.atari.atari_train_utils import (
+    select_device,
+    set_atari_seed,
+    to_channel_first_obs,
+)
 from utils.analysis.anal_paths import output_dir
 
 
@@ -49,22 +54,36 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional label rendered into every output-video frame.",
     )
+    parser.add_argument(
+        "--task_env_id",
+        default=None,
+        help="Task to evaluate for a full-18 multi-task checkpoint, e.g. ALE/Breakout-v5.",
+    )
+    parser.add_argument(
+        "--episode_selection",
+        choices=["first", "best_return"],
+        default="best_return",
+        help="Episode copied to MP4 when recording is enabled.",
+    )
+    parser.add_argument(
+        "--selection_only",
+        action="store_true",
+        help="Evaluate and write metadata without encoding episode videos.",
+    )
     parser.add_argument("--device", choices=["cuda", "mps", "cpu"], default="cuda")
     parser.add_argument("--amp_dtype", choices=["none", "bfloat16", "float16"], default="bfloat16")
     return parser.parse_args()
 
 
-def load_metrics(path: Path) -> dict[str, Any]:
-    """Load and validate the strict single-task Atari metadata contract."""
+def load_metrics(path: Path, task_env_id: str | None) -> tuple[dict[str, Any], str]:
+    """Load metrics and resolve a valid single-task or full-18 evaluation task."""
     metrics = json.loads(path.read_text(encoding="utf-8"))
-    expected = {
-        "multitask": False,
-        "action_space_mode": "minimal",
-        "model_type": "gawf",
-        "frame_skip": 4,
-        "frame_stack": 4,
-        "flicker_prob": 0.0,
-    }
+    is_multitask = bool(metrics.get("multitask"))
+    expected = {"frame_skip": 4, "frame_stack": 4, "flicker_prob": 0.0}
+    if is_multitask:
+        expected.update({"action_space_mode": "full18", "num_actions": 18})
+    else:
+        expected.update({"action_space_mode": "minimal"})
     mismatches = {
         key: (metrics.get(key), value)
         for key, value in expected.items()
@@ -72,20 +91,32 @@ def load_metrics(path: Path) -> dict[str, Any]:
     }
     if mismatches:
         raise ValueError(f"Unsupported or mismatched Atari video protocol: {mismatches}")
-    expected_actions = {"ALE/Pong-v5": 6, "ALE/Breakout-v5": 4}
-    env_id = str(metrics.get("env_id"))
-    if env_id not in expected_actions:
-        raise ValueError(f"Unsupported Atari video environment: {env_id}")
-    if int(metrics.get("num_actions", -1)) != expected_actions[env_id]:
-        raise ValueError(
-            f"Unexpected action count for {env_id}: {metrics.get('num_actions')} "
-            f"(expected {expected_actions[env_id]})"
-        )
+    if is_multitask:
+        env_ids = [str(env_id) for env_id in metrics.get("env_ids", [])]
+        if task_env_id is None:
+            raise ValueError("--task_env_id is required for a multi-task checkpoint")
+        if task_env_id not in env_ids:
+            raise ValueError(f"Task {task_env_id} is absent from checkpoint tasks: {env_ids}")
+        selected_env_id = task_env_id
+    else:
+        expected_actions = {"ALE/Pong-v5": 6, "ALE/Breakout-v5": 4}
+        selected_env_id = str(metrics.get("env_id"))
+        if selected_env_id not in expected_actions:
+            raise ValueError(f"Unsupported Atari video environment: {selected_env_id}")
+        if int(metrics.get("num_actions", -1)) != expected_actions[selected_env_id]:
+            raise ValueError(
+                f"Unexpected action count for {selected_env_id}: {metrics.get('num_actions')} "
+                f"(expected {expected_actions[selected_env_id]})"
+            )
+        if task_env_id is not None and task_env_id != selected_env_id:
+            raise ValueError(f"Single-task checkpoint is for {selected_env_id}, not {task_env_id}")
     if int(metrics.get("num_layers", 0)) < 1:
-        raise ValueError(f"Expected at least one GaWF layer, got {metrics.get('num_layers')}")
+        raise ValueError(
+            f"Expected at least one recurrent/readout layer, got {metrics.get('num_layers')}"
+        )
     if int(metrics.get("global_step", 0)) < 1:
         raise ValueError("metrics.json does not describe a completed training run")
-    return metrics
+    return metrics, selected_env_id
 
 
 def build_model(metrics: dict[str, Any], device: torch.device) -> AtariQNetwork:
@@ -93,7 +124,7 @@ def build_model(metrics: dict[str, Any], device: torch.device) -> AtariQNetwork:
     return AtariQNetwork(
         num_actions=int(metrics["num_actions"]),
         input_channels=int(metrics["frame_stack"]),
-        model_type="gawf",
+        model_type=normalize_atari_dqn_model_type(str(metrics["model_type"])),
         hidden_size=int(metrics["hidden_size"]),
         encoder_feature_dim=int(metrics.get("encoder_feature_dim", 512)),
         feedback_mode=str(metrics["feedback_mode"]),
@@ -169,12 +200,13 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     if args.fps <= 0:
         raise ValueError("--fps must be positive")
     metrics_path = Path(args.metrics_path).resolve()
-    metrics = load_metrics(metrics_path)
+    metrics, task_env_id = load_metrics(metrics_path, args.task_env_id)
     checkpoint = Path(args.checkpoint or metrics["checkpoint"]).resolve()
     training_seed = int(metrics_path.parent.name.rsplit("seed", 1)[-1])
     env_slug = "".join(
-        character.lower() if character.isalnum() else "_" for character in metrics["env_id"]
-    ).strip("_")
+        character.lower() if character.isalnum() else "_" for character in task_env_id
+    )
+    env_slug = env_slug.strip("_")
     output_path = (
         Path(args.output_path).resolve()
         if args.output_path
@@ -187,14 +219,17 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         else output_dir("G_behaviour", "evaluate_atari_dqn_video", "data")
         / f"{env_slug}_seed{training_seed}.json"
     )
-    if f"seed{training_seed}" not in output_path.name:
+    if not args.selection_only and f"seed{training_seed}" not in output_path.name:
         raise ValueError("Output filename must include the selected training seed")
-    if output_path.exists() or metadata_path.exists():
+    if (not args.selection_only and output_path.exists()) or metadata_path.exists():
         raise FileExistsError("Refusing to overwrite an existing final Atari video artifact")
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    raw_video_dir = output_path.parent / f"raw_episodes_eval{args.eval_seed}_{os.getpid()}"
-    raw_video_dir.mkdir(parents=True, exist_ok=False)
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_video_dir: Path | None = None
+    if not args.selection_only:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        raw_video_dir = output_path.parent / f"raw_episodes_eval{args.eval_seed}_{os.getpid()}"
+        raw_video_dir.mkdir(parents=True, exist_ok=False)
 
     set_atari_seed(args.eval_seed)
     device = select_device(args.device)
@@ -203,14 +238,14 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     model.eval()
 
     env = make_atari_env(
-        env_id=str(metrics["env_id"]),
+        env_id=task_env_id,
         seed=args.eval_seed,
         idx=0,
         frame_stack=int(metrics["frame_stack"]),
         frame_skip=int(metrics["frame_skip"]),
         flicker_prob=float(metrics["flicker_prob"]),
         capture_video=False,
-        full_action_space=False,
+        full_action_space=str(metrics["action_space_mode"]) == "full18",
         render_mode="rgb_array",
     )()
     returns: list[float] = []
@@ -225,7 +260,11 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
             )
         for episode in range(args.num_episodes):
             obs, _info = env.reset(seed=args.eval_seed + episode)
-            episode_video = raw_video_dir / f"{output_path.stem}-episode-{episode}.mp4"
+            episode_video = (
+                raw_video_dir / f"{output_path.stem}-episode-{episode}.mp4"
+                if raw_video_dir is not None
+                else None
+            )
             writer: cv2.VideoWriter | None = None
             state = None
             prev_done = torch.ones(1, device=device)
@@ -240,20 +279,26 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
                         q_values, state = model.step(obs_tensor, prev_done, state)
                     action = int(q_values.argmax(dim=-1).item())
                     obs, reward, terminated, truncated, _info = env.step(action)
-                    frame = np.asarray(env.render(), dtype=np.uint8)
-                    if writer is None:
-                        writer = open_video_writer(episode_video, frame, args.fps)
-                    bgr_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-                    writer.write(annotate_frame(bgr_frame, args.video_title))
+                    if episode_video is not None:
+                        frame = np.asarray(env.render(), dtype=np.uint8)
+                        if writer is None:
+                            writer = open_video_writer(episode_video, frame, args.fps)
+                        bgr_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                        writer.write(annotate_frame(bgr_frame, args.video_title))
                     prev_done = torch.zeros(1, device=device)
                     episode_return += float(reward)
                     episode_length += 1
             finally:
                 if writer is not None:
                     writer.release()
-            if writer is None or not episode_video.is_file() or episode_video.stat().st_size <= 0:
-                raise RuntimeError(f"Episode did not produce a valid MP4: {episode_video}")
-            videos.append(episode_video)
+            if episode_video is not None:
+                if (
+                    writer is None
+                    or not episode_video.is_file()
+                    or episode_video.stat().st_size <= 0
+                ):
+                    raise RuntimeError(f"Episode did not produce a valid MP4: {episode_video}")
+                videos.append(episode_video)
             returns.append(episode_return)
             episode_lengths.append(episode_length)
             episode_terminated.append(bool(terminated))
@@ -265,18 +310,24 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     finally:
         env.close()
 
-    if len(videos) != args.num_episodes:
+    if not args.selection_only and len(videos) != args.num_episodes:
         raise RuntimeError(
             f"Expected {args.num_episodes} recorded videos, found {len(videos)} in {raw_video_dir}"
         )
-    best_episode = int(np.argmax(np.asarray(returns, dtype=np.float64)))
-    source_video = videos[best_episode]
-    shutil.copy2(source_video, output_path)
-    if output_path.stat().st_size <= 0:
-        raise RuntimeError(f"Generated empty video: {output_path}")
+    selected_episode = (
+        0
+        if args.episode_selection == "first"
+        else int(np.argmax(np.asarray(returns, dtype=np.float64)))
+    )
+    source_video: Path | None = None
+    if not args.selection_only:
+        source_video = videos[selected_episode]
+        shutil.copy2(source_video, output_path)
+        if output_path.stat().st_size <= 0:
+            raise RuntimeError(f"Generated empty video: {output_path}")
 
     metadata = {
-        "env_id": metrics["env_id"],
+        "env_id": task_env_id,
         "model_type": metrics["model_type"],
         "feedback_mode": metrics["feedback_mode"],
         "num_layers": int(metrics["num_layers"]),
@@ -293,12 +344,13 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         "episode_lengths": episode_lengths,
         "episode_terminated": episode_terminated,
         "episode_truncated": episode_truncated,
-        "best_episode": best_episode,
-        "best_return": returns[best_episode],
+        "episode_selection": args.episode_selection,
+        "selected_episode": selected_episode,
+        "selected_return": returns[selected_episode],
         "source_metrics": str(metrics_path),
         "source_checkpoint": str(checkpoint),
-        "source_video": str(source_video),
-        "output_video": str(output_path),
+        "source_video": str(source_video) if source_video is not None else None,
+        "output_video": str(output_path) if not args.selection_only else None,
     }
     metadata_path.write_text(
         json.dumps(metadata, indent=2, ensure_ascii=False) + "\n",

@@ -6,13 +6,16 @@ Python 标准库，可在 Mac 和 Mac mini 的同一项目版本中使用。
 
 ## 三个组件
 
-1. `jobs/<id>.json`：每个实验一个持久 manifest，保存 job/run ID、remote root、日志、
-   结果路径、有效完成条件和备注。单 job 单文件可以减少多端同时登记时的合并冲突。
-2. `active_jobs.json` 与 `JOBS.md`：前者是当前活跃实验的机器索引，后者是默认不清空的
-   人类可搜索历史。两者均可从 manifests 重建。
-3. `progress.py`：根据 ID、名称或结果路径解析 manifest，并按 host 合并为一次 SSH，读取
-   scheduler/tmux、GPU、精确日志、`.done/.fail`、`metrics.json`、
-   `metrics_history.jsonl` 和 checkpoint 证据。
+1. `jobs/<id>.json`：每个实验一个持久 manifest，保存跨端统一的简短 experiment ID、
+   Slurm/tmux execution ID、remote root、日志、结果路径、有效完成条件和备注。
+   `id` 不包含 host 或执行器 ID；host 位于 `host`，Amarel 的 Slurm ID 位于 `job_ids`，SJC
+   tmux/run ID 位于 `run_ids`。单 job 单文件可以减少多端同时登记时的合并冲突。
+2. `active_jobs.json` 与 `JOBS.md`：前者是当前活跃实验的轻量机器索引，后者是默认不清空的
+   人类和 agent 可搜索历史。两者均可从 manifests 重建，且都不取代 manifest 的事实来源地位。
+3. `progress.py`：只接受完整 experiment ID，并只读取对应 manifest。随后按 host 合并为
+   一次 SSH，读取
+   scheduler/tmux、GPU、精确日志、`.done/.fail`、`metrics.json`、`metrics_history.jsonl`
+   和 checkpoint 证据。
 
 ## 提交后立即登记
 
@@ -54,22 +57,18 @@ unit 中设置 `"validation_mode": "strict"`。
 ## 快速搜索进度
 
 ```bash
-# 无参数：检查全部 active jobs；如果没有 active job，则检查最新历史记录
-python -m experiments.monitoring.progress
-
-# 任何稳定标识均可搜索
-python -m experiments.monitoring.progress 58145944
-python -m experiments.monitoring.progress fscompare1m
-python -m experiments.monitoring.progress sjc-pong-fscompare1m-c219996
-
-# 一次检查某 host 的所有 active jobs
-python -m experiments.monitoring.progress --active --host amarel
+# 只使用完整 experiment ID：不会读取或校验无关历史 manifest
+python -m experiments.monitoring.progress sjc-pong-fscompare1m-c219996 --no-update
 
 # 机器可读结果
-python -m experiments.monitoring.progress fscompare1m --json
+python -m experiments.monitoring.progress sjc-pong-fscompare1m-c219996 --json
 ```
 
 检查器不会递归搜索远端 home。它只访问 manifest 中记录的 remote root、日志和结果路径。
+完整 ID 的本地解析不会遍历 `jobs/`，因此无关旧 JSON 的本地读取/校验错误不会阻断该查询；
+自然语言只用于人工或 agent 在 `JOBS.md` / `active_jobs.json` 中确定唯一完整 ID，不能作为
+checker 参数。单任务查询没有扫描完整历史的入口。每次
+`progress` 会先执行 `ssh -O check <alias>`；失败会原样报告 socket 错误且不新建 SSH。成功后，
 同一 host/Conda 配置的多个 job 会合并到一个前台 SSH 会话。只有 manifest 明确设置
 `tracking.auto_complete=true` 且全部 expected units 都具有有效结果 artifacts 时，检查器
 才会把非终态记录自动更新为 `completed`；其他状态不会被猜测。简单 CLI 登记默认关闭自动完成。
@@ -77,7 +76,8 @@ python -m experiments.monitoring.progress fscompare1m --json
 如果某台 Mac 使用不同 SSH alias，可临时覆盖：
 
 ```bash
-python -m experiments.monitoring.progress --active --ssh-alias sjc-remote=my-sjc-alias
+python -m experiments.monitoring.progress <完整实验ID> \
+  --ssh-alias sjc-remote=my-sjc-alias --no-update
 ```
 
 ## 状态、同步与保留

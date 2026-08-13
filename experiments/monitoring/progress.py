@@ -1,8 +1,8 @@
 """Resolve retained jobs and inspect their exact remote scheduler, log, and result paths.
 
-With no selector, active jobs are checked; if there are no active records, the newest retained
-job is checked. Jobs sharing a host and Conda environment are combined into one foreground SSH
-session. Output is a concise Chinese progress summary or JSON for downstream automation.
+A complete experiment ID reads only its matching manifest. The manifest supplies the host and
+exact remote paths for one consolidated foreground SSH session. Output is a concise Chinese
+progress summary or JSON for downstream automation.
 """
 from __future__ import annotations
 
@@ -17,10 +17,8 @@ from typing import Any, Iterable
 
 from experiments.monitoring import remote_probe
 from experiments.monitoring.job_registry import (
-    ACTIVE_STATUSES,
     RegistryError,
-    find_job,
-    load_jobs,
+    load_job,
     update_status,
 )
 
@@ -35,28 +33,10 @@ def _ssh_alias_map(values: Iterable[str]) -> dict[str, str]:
     return aliases
 
 
-def select_jobs(
-    selectors: list[str],
-    *,
-    active: bool = False,
-    all_jobs: bool = False,
-    host: str | None = None,
-) -> list[dict[str, Any]]:
-    """Resolve CLI selectors, defaulting to active jobs and then the newest retained job."""
+def select_job(experiment_id: str, *, base_dir: Path | None = None) -> dict[str, Any]:
+    """Load one manifest by its complete experiment ID."""
 
-    jobs = load_jobs()
-    if host:
-        jobs = [job for job in jobs if job["host"] == host]
-    if selectors:
-        selected = [find_job(selector, jobs) for selector in selectors]
-    elif all_jobs:
-        selected = jobs
-    else:
-        selected = [job for job in jobs if job["status"] in ACTIVE_STATUSES]
-        if not selected and jobs and not active:
-            selected = jobs[:1]
-    unique: dict[str, dict[str, Any]] = {job["id"]: job for job in selected}
-    return list(unique.values())
+    return load_job(experiment_id, base_dir)
 
 
 def _probe_source(manifests: list[dict[str, Any]]) -> str:
@@ -91,6 +71,37 @@ def collect_remote_jobs(
     reports: list[dict[str, Any]] = []
     for (host, environment_name, conda_init), group in groups.items():
         alias = alias_overrides.get(host, host)
+        try:
+            socket_check = subprocess.run(
+                ["ssh", "-O", "check", alias],
+                text=True,
+                capture_output=True,
+                timeout=min(timeout, 15),
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            reports.extend(
+                {
+                    "id": job["id"],
+                    "host": host,
+                    "probe_error": f"SSH socket check failed: {exc}",
+                }
+                for job in group
+            )
+            continue
+        if socket_check.returncode != 0:
+            error = socket_check.stderr.strip() or socket_check.stdout.strip()
+            if not error:
+                error = f"ssh -O check {alias} failed with exit code {socket_check.returncode}."
+            reports.extend(
+                {
+                    "id": job["id"],
+                    "host": host,
+                    "probe_error": f"SSH socket unavailable: {error}",
+                }
+                for job in group
+            )
+            continue
         activation = (
             f"source {shlex.quote(conda_init)} && "
             f"conda activate {shlex.quote(environment_name)} && python -"
@@ -130,7 +141,8 @@ def collect_remote_jobs(
         try:
             values = json.loads(completed.stdout)
         except json.JSONDecodeError:
-            error = f"Remote probe returned invalid JSON: {completed.stdout[-1000:]}"
+            output = completed.stdout[-1000:] or "<empty stdout>"
+            error = f"Remote probe returned invalid JSON: {output}"
             reports.extend(
                 {"id": job["id"], "host": host, "probe_error": error} for job in group
             )
@@ -231,10 +243,10 @@ def parse_args() -> argparse.Namespace:
     """Parse the progress command line."""
 
     parser = argparse.ArgumentParser(description="Check retained remote jobs by exact paths.")
-    parser.add_argument("selectors", nargs="*", help="Job ID, Slurm ID, run ID, or name fragment.")
-    parser.add_argument("--active", action="store_true", help="Check active records only.")
-    parser.add_argument("--all", action="store_true", help="Check all retained records.")
-    parser.add_argument("--host", help="Restrict to one logical host name.")
+    parser.add_argument(
+        "experiment_id",
+        help="Complete experiment ID from JOBS.md.",
+    )
     parser.add_argument(
         "--ssh-alias",
         action="append",
@@ -255,14 +267,7 @@ def main() -> None:
 
     args = parse_args()
     try:
-        jobs = select_jobs(
-            args.selectors,
-            active=args.active,
-            all_jobs=args.all,
-            host=args.host,
-        )
-        if not jobs:
-            raise RegistryError("No retained jobs match the requested scope.")
+        jobs = [select_job(args.experiment_id)]
         reports = collect_remote_jobs(
             jobs,
             alias_overrides=_ssh_alias_map(args.ssh_alias),
@@ -277,7 +282,8 @@ def main() -> None:
             formatted = (format_report(report, jobs_by_id[report["id"]]) for report in reports)
             print("\n\n".join(formatted))
     except RegistryError as exc:
-        raise SystemExit(str(exc)) from exc
+        print(f"progress_error: {exc}")
+        raise SystemExit(2) from exc
 
 
 if __name__ == "__main__":
