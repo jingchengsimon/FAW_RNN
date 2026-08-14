@@ -60,8 +60,8 @@ cleanup job 精确删除；正式 run 成功时只由训练入口删除本 unit 
 per-task 1M LR decay 和固定 500K global-step epsilon decay。追加 GRU/LSTM/GaWF 的 seed 3/4/5
 时，使用 `amarel/submit_atari_5task_18action_l3_formal_20m_seeds3_5.sh`；它以
 `6-14%2` 数组映射 nine units，保持每个 job 为单 Ada Lovelace GPU、16 CPUs、64G、72 小时及
-可恢复 requeue。runner 的可选 `SEEDS_CSV` 仅改变显式 seed 映射，未设置时仍保持连续 `1..SEED_COUNT`
-的既有行为。
+可恢复 requeue。runner 的可选 `SEED_OFFSET` 为连续 seed 添加偏移；未设置时仍保持连续
+`1..SEED_COUNT` 的既有行为。
 
 ## SJC two-task L3 GRU comparison
 

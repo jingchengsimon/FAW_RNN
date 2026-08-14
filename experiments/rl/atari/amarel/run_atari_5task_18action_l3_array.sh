@@ -24,24 +24,16 @@ cd "$ROOT"
 [[ -f "$MATCH_JSON" ]] || { echo "Missing L3/full18 match table: $MATCH_JSON" >&2; exit 2; }
 (( SEED_COUNT >= 1 && SEED_COUNT <= 3 )) || { echo "SEED_COUNT must be 1..3" >&2; exit 2; }
 
-if [[ -n "${SEEDS_CSV:-}" ]]; then
-  IFS=',' read -r -a SEEDS <<< "$SEEDS_CSV"
-  (( ${#SEEDS[@]} == SEED_COUNT )) || {
-    echo "SEEDS_CSV must contain exactly SEED_COUNT entries" >&2
-    exit 2
-  }
-  for seed in "${SEEDS[@]}"; do
-    [[ "$seed" =~ ^[1-9][0-9]*$ ]] || {
-      echo "SEEDS_CSV contains an invalid seed: $seed" >&2
-      exit 2
-    }
-  done
-else
-  SEEDS=()
-  for (( seed=1; seed<=SEED_COUNT; seed++ )); do
-    SEEDS+=("$seed")
-  done
-fi
+SEED_OFFSET="${SEED_OFFSET:-0}"
+[[ "$SEED_OFFSET" =~ ^(0|[1-9][0-9]*)$ ]] || {
+  echo "SEED_OFFSET must be a non-negative integer" >&2
+  exit 2
+}
+SEED_OFFSET_DECIMAL=$((10#$SEED_OFFSET))
+SEEDS=()
+for (( seed=1; seed<=SEED_COUNT; seed++ )); do
+  SEEDS+=("$((seed + SEED_OFFSET_DECIMAL))")
+done
 
 MODELS=(ann rnn gru lstm gawf)
 ENV_IDS=(ALE/Pong-v5 ALE/Breakout-v5 ALE/Assault-v5 ALE/Seaquest-v5 ALE/Skiing-v5)
