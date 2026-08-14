@@ -24,10 +24,30 @@ cd "$ROOT"
 [[ -f "$MATCH_JSON" ]] || { echo "Missing L3/full18 match table: $MATCH_JSON" >&2; exit 2; }
 (( SEED_COUNT >= 1 && SEED_COUNT <= 3 )) || { echo "SEED_COUNT must be 1..3" >&2; exit 2; }
 
+if [[ -n "${SEEDS_CSV:-}" ]]; then
+  IFS=',' read -r -a SEEDS <<< "$SEEDS_CSV"
+  (( ${#SEEDS[@]} == SEED_COUNT )) || {
+    echo "SEEDS_CSV must contain exactly SEED_COUNT entries" >&2
+    exit 2
+  }
+  for seed in "${SEEDS[@]}"; do
+    [[ "$seed" =~ ^[1-9][0-9]*$ ]] || {
+      echo "SEEDS_CSV contains an invalid seed: $seed" >&2
+      exit 2
+    }
+  done
+else
+  SEEDS=()
+  for (( seed=1; seed<=SEED_COUNT; seed++ )); do
+    SEEDS+=("$seed")
+  done
+fi
+
 MODELS=(ann rnn gru lstm gawf)
 ENV_IDS=(ALE/Pong-v5 ALE/Breakout-v5 ALE/Assault-v5 ALE/Seaquest-v5 ALE/Skiing-v5)
 TASK_ID="${SLURM_ARRAY_TASK_ID:?SLURM_ARRAY_TASK_ID is required}"
-N_TASKS=$((${#MODELS[@]} * SEED_COUNT))
+N_SEEDS=${#SEEDS[@]}
+N_TASKS=$((${#MODELS[@]} * N_SEEDS))
 if (( TASK_ID < 0 || TASK_ID >= N_TASKS )); then
   echo "task $TASK_ID outside valid range 0..$((N_TASKS - 1))" >&2
   exit 2
@@ -44,8 +64,8 @@ if [[ "${GAWF_FIRST_SCHEDULING:-0}" == "1" ]]; then
   GAWF_FIRST_ORDER=(12 13 14 0 1 2 3 4 5 6 7 8 9 10 11)
   CANONICAL_TASK_ID="${GAWF_FIRST_ORDER[$TASK_ID]}"
 fi
-MODEL="${MODELS[$((CANONICAL_TASK_ID / SEED_COUNT))]}"
-SEED=$((CANONICAL_TASK_ID % SEED_COUNT + 1))
+MODEL="${MODELS[$((CANONICAL_TASK_ID / N_SEEDS))]}"
+SEED="${SEEDS[$((CANONICAL_TASK_ID % N_SEEDS))]}"
 TOTAL_TIMESTEPS="${TOTAL_TIMESTEPS:?TOTAL_TIMESTEPS is required}"
 CHECKPOINT_INTERVAL_STEPS="${CHECKPOINT_INTERVAL_STEPS:-50000}"
 LR_DECAY_STEP="${LR_DECAY_STEP:-1000000}"
