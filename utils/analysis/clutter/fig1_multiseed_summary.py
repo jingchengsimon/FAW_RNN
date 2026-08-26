@@ -7,11 +7,13 @@ readout, with the baseline taken from the same multiseed test CSV as column 0. T
 panels share one y-axis. All four columns are equal width and 30% narrower than the 2x3 columns.
 
 The original 2x3 summary and the standalone shuffle figure are left untouched; this writes a new
-``best6_multiseed_shuffle_2x4.png`` alongside them. PNG only for now.
+``best6_multiseed_shuffle_2x4`` PNG/PDF pair alongside them.
 """
+
 from __future__ import annotations
 
 import argparse
+import csv
 import glob
 import json
 import os
@@ -26,7 +28,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -34,13 +36,13 @@ from utils.analysis.clutter.clutter_multiseed_summary import (  # noqa: E402
     MODEL_COLORS,
     MODEL_LABELS,
     MODEL_ORDER,
-    _mean_sd,
     _plot_recovery_axis,
     _plot_test_axis,
     _style_axis,
     load_recovery_curves,
     load_test_metrics,
 )
+from utils.analysis.clutter.multiseed_plotting import add_seed_points  # noqa: E402
 
 # Digit/sector bar colours align with core_objects_aggregate_2x2 (digit #E76F51, sector #264653).
 DIGIT_COLOR = "#E76F51"
@@ -57,13 +59,19 @@ TRAIN_DATA_DIR = (
 )
 
 
+def _mean_sem(values: np.ndarray) -> tuple[float, float]:
+    """Return the seed-level mean and SEM for one plotted bar."""
+
+    array = np.asarray(values, dtype=np.float64)
+    return float(array.mean()), float(array.std(ddof=1) / np.sqrt(array.size))
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--test_csv",
         type=Path,
-        default=SAVE_DATA_ROOT / "fig1" / "test_accuracy_summary"
-        / "best_acc_test_mean_std.csv",
+        default=SAVE_DATA_ROOT / "fig1" / "test_accuracy_summary" / "best_acc_test_mean_std.csv",
     )
     parser.add_argument("--loss_png", type=Path, default=FIG_DIR / "loss_mean_std.png")
     parser.add_argument(
@@ -81,6 +89,12 @@ def parse_args() -> argparse.Namespace:
         "--ablation_dir", type=Path, default=SAVE_DATA_ROOT / "fig2" / "gawf_shuffle_ablation"
     )
     parser.add_argument(
+        "--shuffle_anova_long_csv",
+        type=Path,
+        default=None,
+        help="Use reset-excluded Figure 4 shuffle accuracies for the ablation column.",
+    )
+    parser.add_argument(
         "--ablation_baseline_source",
         choices=("canonical_test", "ablation"),
         default="canonical_test",
@@ -90,6 +104,12 @@ def parse_args() -> argparse.Namespace:
         "--output_png", type=Path, default=FIG_DIR / "best6_multiseed_shuffle_2x4.png"
     )
     parser.add_argument("--output_pdf", type=Path, default=None)
+    parser.add_argument(
+        "--show-seed-points",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Overlay one neutral-gray point per training seed on each 10-seed bar.",
+    )
     return parser.parse_args()
 
 
@@ -100,8 +120,10 @@ def _conditions_from_ablation(
     """Return selected per-seed condition arrays for both readouts."""
 
     files = sorted(glob.glob(str(ablation_dir / "gawf-seed*" / "ablation_metrics.json")))
-    if not files:
-        raise FileNotFoundError(f"No gawf-seed*/ablation_metrics.json under {ablation_dir}")
+    if len(files) != 10:
+        raise FileNotFoundError(
+            f"Expected ten gawf-seed*/ablation_metrics.json under {ablation_dir}, found {len(files)}."
+        )
     collected: dict[str, dict[str, list[float]]] = {}
     for path in files:
         conditions = json.load(open(path))["conditions"]
@@ -110,6 +132,27 @@ def _conditions_from_ablation(
             for key in ("char_acc", "sector_acc"):
                 collected[cond][key].append(float(conditions[cond][key]))
     return {c: {k: np.asarray(v) for k, v in d.items()} for c, d in collected.items()}
+
+
+def _conditions_from_shuffle_anova(path: Path) -> dict[str, dict[str, np.ndarray]]:
+    """Read the three Figure 4 reset-excluded shuffle accuracy vectors."""
+
+    collected: dict[str, dict[str, list[float]]] = {}
+    with path.open(newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            if row["object"] != "hidden_activation":
+                continue
+            collected.setdefault(row["condition"], {"char_acc": [], "sector_acc": []})
+            collected[row["condition"]]["char_acc"].append(float(row["digit_acc"]))
+            collected[row["condition"]]["sector_acc"].append(float(row["sector_acc"]))
+    if set(collected) != {"baseline", "shuffle_digit", "shuffle_sector"} or any(
+        len(metrics["char_acc"]) != 10 for metrics in collected.values()
+    ):
+        raise ValueError(f"Expected ten Figure 4 rows per condition in {path}")
+    return {
+        condition: {key: np.asarray(values) for key, values in metrics.items()}
+        for condition, metrics in collected.items()
+    }
 
 
 def _plot_shuffle_axis(
@@ -122,6 +165,8 @@ def _plot_shuffle_axis(
     y_min: float,
     y_max: float,
     y_step: float,
+    *,
+    show_seed_points: bool = True,
 ) -> None:
     """Plot one readout's GaWF shuffle-ablation bars (Baseline, Shuffle digit, Shuffle sector)."""
 
@@ -133,26 +178,24 @@ def _plot_shuffle_axis(
     positions = np.arange(len(conds), dtype=np.float64)
     rng = np.random.default_rng(0)
     for index, (_label, values) in enumerate(conds):
-        mean, sd = _mean_sd(values)
+        mean, sem = _mean_sem(values)
         axis.bar(
             positions[index],
             mean,
             width=0.72,
-            yerr=sd,
+            yerr=sem,
             color=color,
             edgecolor="none",
             capsize=2.5,
             error_kw={"elinewidth": 1.0, "capthick": 1.0, "ecolor": "#333333"},
         )
-        jitter = rng.uniform(-0.16, 0.16, size=values.size)
-        axis.scatter(
-            np.full(values.size, positions[index]) + jitter,
-            values,
-            s=10,
-            color="#333333",
-            alpha=0.52,
-            linewidths=0,
-            zorder=3,
+        add_seed_points(
+            axis,
+            np.asarray([positions[index]]),
+            values[:, None],
+            bar_width=0.72,
+            show=show_seed_points,
+            rng=rng,
         )
     axis.set_xticks(positions, [label for label, _ in conds])
     if not show_xticks:
@@ -177,13 +220,18 @@ def _load_validation_losses(
                 payload = pickle.load(handle)
             if key in payload:
                 arrays.append(np.asarray(payload[key], dtype=np.float64))
-        if not arrays:
-            raise FileNotFoundError(f"No {key} arrays found for {model} under {train_data_dir}")
+        if len(arrays) != 10:
+            raise FileNotFoundError(
+                f"Expected ten {key} arrays for {model} under {train_data_dir}, found {len(arrays)}."
+            )
         lengths = {array.size for array in arrays}
         if len(lengths) != 1:
             raise ValueError(f"Inconsistent {key} lengths for {model}: {sorted(lengths)}")
         stacked = np.stack(arrays, axis=0)
-        result[model] = (np.mean(stacked, axis=0), np.std(stacked, axis=0, ddof=1))
+        result[model] = (
+            np.mean(stacked, axis=0),
+            np.std(stacked, axis=0, ddof=1) / np.sqrt(stacked.shape[0]),
+        )
     return result
 
 
@@ -198,14 +246,14 @@ def _plot_validation_loss_axis(
 
     epochs = np.arange(1, 151, dtype=np.float64)
     for model in MODEL_ORDER:
-        mean, sd = losses[model]
+        mean, sem = losses[model]
         axis.plot(epochs, mean, color=MODEL_COLORS[model], linewidth=1.8, zorder=2)
         axis.fill_between(
             epochs,
-            mean - sd,
-            mean + sd,
+            mean - sem,
+            mean + sem,
             color=MODEL_COLORS[model],
-            alpha=0.14,
+            alpha=0.55,
             linewidth=0,
             zorder=1,
         )
@@ -232,9 +280,12 @@ def main() -> None:
         "char": _load_validation_losses(args.train_data_dir, "char"),
         "sector": _load_validation_losses(args.train_data_dir, "sector"),
     }
-    ablation = _conditions_from_ablation(
-        args.ablation_dir,
-        ("baseline", "shuffle_digit", "shuffle_sector"),
+    ablation = (
+        _conditions_from_shuffle_anova(args.shuffle_anova_long_csv)
+        if args.shuffle_anova_long_csv is not None
+        else _conditions_from_ablation(
+            args.ablation_dir, ("baseline", "shuffle_digit", "shuffle_sector")
+        )
     )
     if "gawf" not in test_metrics:
         raise RuntimeError("Multiseed test metrics must include gawf for the shuffle baseline.")
@@ -250,8 +301,20 @@ def main() -> None:
         # 3-column 2x3 was figsize (13.2, 6.9); four columns each 30% narrower keeps the same
         # per-column ratio: width = 13.2 * (4 * 0.7) / 3 = 12.32.
         fig, axes = plt.subplots(2, 4, figsize=(12.32, 6.9))
-        _plot_test_axis(axes[0, 0], test_metrics, "char", show_xticks=False)
-        _plot_test_axis(axes[1, 0], test_metrics, "sector", show_xticks=True)
+        _plot_test_axis(
+            axes[0, 0],
+            test_metrics,
+            "char",
+            show_xticks=False,
+            show_seed_points=args.show_seed_points,
+        )
+        _plot_test_axis(
+            axes[1, 0],
+            test_metrics,
+            "sector",
+            show_xticks=True,
+            show_seed_points=args.show_seed_points,
+        )
         # Override the shared helper's default ylim/ticks for this merged figure only. Bounds
         # track the tick range with a 1-point margin where real seeds sit just outside it (digit
         # char_acc spans 73.2-86.6 across models; sector spans 87.9-93.2).
@@ -266,26 +329,29 @@ def main() -> None:
             axes[1, 1], validation_losses["sector"], "sector", show_xlabel=True, show_xticks=True
         )
         _plot_recovery_axis(
-            axes[0, 2], recovery_offsets, recovery_curves, "char", show_xlabel=False,
+            axes[0, 2],
+            recovery_offsets,
+            recovery_curves,
+            "char",
+            show_xlabel=False,
             show_xticks=False,
         )
         _plot_recovery_axis(
-            axes[1, 2], recovery_offsets, recovery_curves, "sector", show_xlabel=True,
+            axes[1, 2],
+            recovery_offsets,
+            recovery_curves,
+            "sector",
+            show_xlabel=True,
             show_xticks=True,
         )
         axes[0, 2].set_yticks((0, 20, 40, 60, 80, 100))
         axes[1, 2].set_yticks((0, 20, 40, 60, 80, 100))
-        ablation_baseline = (
-            test_metrics["gawf"]
-            if args.ablation_baseline_source == "canonical_test"
-            else ablation["baseline"]
+        use_shuffle_baseline = (
+            args.shuffle_anova_long_csv is not None or args.ablation_baseline_source == "ablation"
         )
-        baseline_char_key = (
-            "char" if args.ablation_baseline_source == "canonical_test" else "char_acc"
-        )
-        baseline_sector_key = (
-            "sector" if args.ablation_baseline_source == "canonical_test" else "sector_acc"
-        )
+        ablation_baseline = ablation["baseline"] if use_shuffle_baseline else test_metrics["gawf"]
+        baseline_char_key = "char_acc" if use_shuffle_baseline else "char"
+        baseline_sector_key = "sector_acc" if use_shuffle_baseline else "sector"
         _plot_shuffle_axis(
             axes[0, 3],
             ablation_baseline[baseline_char_key],
@@ -296,6 +362,7 @@ def main() -> None:
             y_min=70.0,
             y_max=90.0,
             y_step=4.0,
+            show_seed_points=args.show_seed_points,
         )
         _plot_shuffle_axis(
             axes[1, 3],
@@ -307,6 +374,7 @@ def main() -> None:
             y_min=75.0,
             y_max=95.0,
             y_step=4.0,
+            show_seed_points=args.show_seed_points,
         )
         # The requested readout-specific ranges: digit on the first row, sector on the second.
         axes[0, 3].set_ylim(50.0, 92.0)
@@ -328,8 +396,7 @@ def main() -> None:
         column_centers = [
             np.mean(
                 [
-                    axes[row, column].get_position().x0
-                    + axes[row, column].get_position().width / 2
+                    axes[row, column].get_position().x0 + axes[row, column].get_position().width / 2
                     for row in range(2)
                 ]
             )
@@ -338,7 +405,12 @@ def main() -> None:
         title_y = max(axes[0, column].get_position().y1 for column in range(4)) + 0.05
         for x, title in zip(
             column_centers,
-            ("Test accuracy", "Validation loss", "Target switch recovery", "GaWF shuffle ablation"),
+            (
+                "Test accuracy",
+                "Validation loss",
+                "Target switch recovery\n(mean ± SEM)",
+                "GaWF shuffle ablation",
+            ),
         ):
             fig.text(x, title_y, title, ha="center", va="bottom", fontsize=15)
         row_centers = [

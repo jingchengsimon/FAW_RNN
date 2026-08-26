@@ -51,7 +51,17 @@ CHECKPOINT_INTERVAL_STEPS="${CHECKPOINT_INTERVAL_STEPS:-50000}"
 LR_DECAY_STEP="${LR_DECAY_STEP:-1000000}"
 LR_DECAY_PER_TASK_STEPS="${LR_DECAY_PER_TASK_STEPS:-0}"
 LEARNING_STARTS_PER_TASK="${LEARNING_STARTS_PER_TASK:-20000}"
+EXPLORATION_STEPS="${EXPLORATION_STEPS:-500000}"
 ARTIFACT_TAG="${ARTIFACT_TAG:-atari_5task_18action_l3_per_task_buf500k_${RUN_PHASE}}"
+RESULT_TAG="${RESULT_TAG:-atari_dqn_5task_fs4_stack4_l3_buf0p5m_lrdecay1m_${RUN_PHASE}}"
+[[ "$RESULT_TAG" =~ ^[A-Za-z0-9._-]+$ ]] || {
+  echo "RESULT_TAG contains unsafe characters: $RESULT_TAG" >&2
+  exit 2
+}
+[[ "$EXPLORATION_STEPS" =~ ^[1-9][0-9]*$ ]] || {
+  echo "EXPLORATION_STEPS must be a positive integer: $EXPLORATION_STEPS" >&2
+  exit 2
+}
 
 CONDA_SH="${AIM3_CONDA_SH:-/home/js3269/enter/etc/profile.d/conda.sh}"
 set +u
@@ -66,7 +76,7 @@ export AIM3_PIN_MEMORY="${AIM3_PIN_MEMORY:-1}"
 ART_ROOT="$ROOT/experiments/rl/atari/amarel/artifacts/$ARTIFACT_TAG"
 STATUS_DIR="$ART_ROOT/status"
 mkdir -p "$STATUS_DIR" "$RESULT_PARENT"
-SUFFIX="atari_dqn_5task_fs4_stack4_l3_buf0p5m_lrdecay1m_${RUN_PHASE}_${MODEL}_seed${SEED}"
+SUFFIX="${RESULT_TAG}_${MODEL}_seed${SEED}"
 RESULT_DIR="$RESULT_PARENT/$SUFFIX"
 CHECKPOINT="$RESULT_DIR/checkpoint.pth"
 DONE_FILE="$STATUS_DIR/${SUFFIX}.done"
@@ -124,6 +134,7 @@ DISABLE_TQDM=1 python run_task.py atari-dqn \
   --task_schedule transition_balanced --replay_sampling task_balanced \
   --learning_starts 20000 --learning_starts_per_task "$LEARNING_STARTS_PER_TASK" \
   --batch_size 32 --seq_len 16 --sequences_per_batch 8 \
+  --exploration_steps "$EXPLORATION_STEPS" \
   --seed "$SEED" --device cuda --result_suffix "$SUFFIX" --save_dir "$RESULT_DIR" \
   --replay_backing mmap --replay_layout per_task --buffer_size 500000 \
   --checkpoint_interval_steps "$CHECKPOINT_INTERVAL_STEPS" \
@@ -142,7 +153,9 @@ fi
 if [[ ! -f "$RESULT_DIR/metrics.json" ]]; then
   echo "status=paused task_id=$TASK_ID checkpoint=$CHECKPOINT" \
     > "$STATUS_DIR/${SUFFIX}.paused"
-  scontrol requeue "$SLURM_JOB_ID"
+  if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+    scontrol requeue "$SLURM_JOB_ID"
+  fi
   exit 0
 fi
 

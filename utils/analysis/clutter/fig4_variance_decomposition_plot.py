@@ -23,7 +23,7 @@ from utils.analysis.variance_decomposition import CM_FACTORS, RepeatedDecomposit
 
 OBJECTS = ("input_gate", "recurrent_gate", "encoder_activation", "hidden_state")
 SAVE_DATA_DIR = (
-    Path(__file__).resolve().parents[2]
+    Path(__file__).resolve().parents[3]
     / "results"
     / "save_data"
     / "fig4"
@@ -50,11 +50,27 @@ def parse_args() -> argparse.Namespace:
             "Cross-seed mode: one per-seed unified data dir each holding the four "
             "{object}_per_unit_distributions.npz. When given, each seed contributes one point "
             "estimate (its within-seed aggregate mean) and the figure draws cross-seed mean +/- "
-            "sd, matching the best-model-accuracy figure. Overrides --data_dir."
+            "SEM. Overrides --data_dir."
+        ),
+    )
+    parser.add_argument(
+        "--shuffle_seed_dirs",
+        type=Path,
+        nargs="+",
+        default=None,
+        help=(
+            "Reset-excluded Figure 4 shuffle-analysis seed directories.  The baseline condition "
+            "is collapsed to one mean per training seed before plotting mean +/- SEM."
         ),
     )
     parser.add_argument("--figure_dir", type=Path, default=None)
     parser.add_argument("--publication_fig_dir", type=Path, default=None)
+    parser.add_argument(
+        "--show-seed-points",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Overlay one neutral-gray point per training seed on each 10-seed bar.",
+    )
     return parser.parse_args()
 
 
@@ -86,8 +102,7 @@ def load_multiseed_results(seed_dirs: list[Path]) -> dict[str, RepeatedDecomposi
 
     For every seed we take the within-seed aggregate mean of ``aggregate_cm[factor]`` (the same
     scalar the single-seed bar height uses), then stack those across seeds so ``aggregate_cm`` maps
-    each factor to a length-``n_seeds`` array. Passing ``error_mode="sd"`` to the plotters turns
-    that into cross-seed mean +/- sd, the same spread convention as the best-model-accuracy figure.
+    each factor to a length-``n_seeds`` array. The plotters render cross-seed mean +/- SEM.
     """
 
     per_seed = [load_saved_results(seed_dir) for seed_dir in seed_dirs]
@@ -112,23 +127,55 @@ def load_multiseed_results(seed_dirs: list[Path]) -> dict[str, RepeatedDecomposi
     return results
 
 
+def load_shuffle_multiseed_results(seed_dirs: list[Path]) -> dict[str, RepeatedDecomposition]:
+    """Read reset-excluded shuffle baseline summaries as ten independent seed estimates."""
+
+    shuffle_names = {"hidden_state": "hidden_activation"}
+    results: dict[str, RepeatedDecomposition] = {}
+    for object_name in OBJECTS:
+        aggregate_cm = {}
+        for factor in CM_FACTORS:
+            values = []
+            key = f"baseline__{shuffle_names.get(object_name, object_name)}__{factor}"
+            for directory in seed_dirs:
+                with np.load(directory / "shuffle_activation_anova.npz", allow_pickle=False) as data:
+                    values.append(float(np.asarray(data[key], dtype=np.float64).mean()) / 100.0)
+            aggregate_cm[factor] = np.asarray(values, dtype=np.float64)
+        results[object_name] = RepeatedDecomposition(
+            aggregate_cm=aggregate_cm,
+            aggregate_trial={},
+            per_unit_cm={},
+            per_unit_trial={},
+            unweighted_per_unit_mean_cm={},
+            unweighted_per_unit_mean_trial={},
+            consistency={},
+        )
+    return results
+
+
 def main() -> None:
     """Load the saved summaries and regenerate the official compact aggregate figure."""
 
     args = parse_args()
     if args.figure_dir is None:
         args.figure_dir = output_dir("D_variance_decomposition", "unified", "figs")
-    # Cross-seed mode (--seed_dirs) draws mean +/- sd across seeds; otherwise the single-model
-    # within-subsample quantile band.
-    if args.seed_dirs is not None:
+    # All delivery outputs use cross-seed mean +/- SEM.
+    if args.shuffle_seed_dirs is not None:
+        saved_results = load_shuffle_multiseed_results(args.shuffle_seed_dirs)
+        error_mode = "sem"
+        print(
+            f"Reset-excluded shuffle-baseline mode: {len(args.shuffle_seed_dirs)} seeds -> "
+            "mean +/- SEM error bars"
+        )
+    elif args.seed_dirs is not None:
         saved_results = load_multiseed_results(args.seed_dirs)
-        error_mode = "sd"
-        print(f"Cross-seed mode: {len(args.seed_dirs)} seeds -> mean +/- sd error bars")
+        error_mode = "sem"
+        print(f"Cross-seed mode: {len(args.seed_dirs)} seeds -> mean +/- SEM error bars")
     else:
         if args.data_dir is None:
             args.data_dir = SAVE_DATA_DIR
         saved_results = load_saved_results(args.data_dir)
-        error_mode = "ci"
+        error_mode = "sem"
     # Workflow policy: the PDF sits next to the PNG in the local results tree. The
     # ``--publication_fig_dir`` copy is an opt-in extra only (no automatic 6-Writing sync).
     publication_dir = (
@@ -137,7 +184,11 @@ def main() -> None:
         else None
     )
     destination = _plot_compact_aggregate(
-        args.figure_dir, saved_results, publication_dir, error_mode=error_mode
+        args.figure_dir,
+        saved_results,
+        publication_dir,
+        error_mode=error_mode,
+        show_seed_points=args.show_seed_points,
     )
     print(f"Saved {destination}")
     print(f"Saved {destination.with_suffix('.pdf')}")
@@ -145,7 +196,11 @@ def main() -> None:
         print(f"Saved {publication_dir / 'core_objects_aggregate_2x2.pdf'}")
 
     destination_1x4 = _plot_compact_aggregate_1x4(
-        args.figure_dir, saved_results, publication_dir, error_mode=error_mode
+        args.figure_dir,
+        saved_results,
+        publication_dir,
+        error_mode=error_mode,
+        show_seed_points=args.show_seed_points,
     )
     print(f"Saved {destination_1x4}")
     print(f"Saved {destination_1x4.with_suffix('.pdf')}")

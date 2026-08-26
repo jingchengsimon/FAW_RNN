@@ -25,6 +25,7 @@ from utils.analysis.clutter.fig3_gate_distribution import (
     _group_mean_delta,
     _hist,
     _sparsity,
+    exclude_zero_feedback_reset_frames,
     iter_gate_chunks,
 )
 
@@ -61,8 +62,9 @@ def aggregate_by_digit(
 ) -> tuple[dict[str, np.ndarray], dict[str, object]]:
     """Stream all gates into ten digit-conditioned histograms and average-gate summaries."""
 
-    feedback = trajectory["feedback"].astype(np.float32, copy=False)
-    labels = trajectory["labels"].astype(np.int64, copy=False)
+    feedback, labels, reset_frames = exclude_zero_feedback_reset_frames(
+        trajectory["feedback"], trajectory["labels"]
+    )
     u = trajectory["U"].astype(np.float32, copy=False)
     v = trajectory["V"].astype(np.float32, copy=False)
     weight_ih = trajectory["weight_ih"].astype(np.float32, copy=False)
@@ -160,6 +162,7 @@ def aggregate_by_digit(
         "sparsity": sparsity,
         "gate_tau": gate_tau,
         "n_frames": int(digits.size),
+        "reset_frames_excluded": reset_frames,
         "input_gate_shape_per_frame": list(weight_ih.shape),
         "recurrent_gate_shape_per_frame": list(weight_hh.shape),
         "histogram_bins": hist_bins,

@@ -40,7 +40,7 @@ import numpy as np
 from matplotlib.lines import Line2D
 import pandas as pd
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -58,8 +58,8 @@ MIN_GROUP_SIGN_N = 30
 OVERLAP_WARN_FRAC = 0.10  # overlap width < 10% of the combined |W| range -> WARN
 MAX_SCATTER_PER_SIGN = 8000  # figure only; regressions always use the full pooled data
 DPI = 150
-POS_COLOR = "#1d4ed8"
-NEG_COLOR = "#dc2626"
+POS_COLOR = "#c53030"
+NEG_COLOR = "#2b6cb0"
 GROUP_NAMES = ("TT", "TR", "RT", "RR")
 RNG_SEED = 0
 
@@ -321,17 +321,15 @@ def binned_mean_curve(
 # Regression: y_col ~ signpos + absW + C(context)  (y_col is "of" by default, or "delta_of")
 # --------------------------------------------------------------------------------------------
 def run_ols(df: pd.DataFrame, label: str, y_col: str = "of") -> dict | None:
-    """Fit the optional sign/magnitude regression when statsmodels is installed."""
+    """Fit the sign/magnitude OLS regression with clustered or SciPy covariance estimates."""
 
     if df["signpos"].nunique() < 2:
         print(f"  [{label}] skipped: only one sign present, signpos coefficient is undefined")
         return None
     try:
         import statsmodels.formula.api as smf
-    except ModuleNotFoundError as exc:
-        raise RuntimeError(
-            "statsmodels is required for the optional Fig7 sign/magnitude regression"
-        ) from exc
+    except ModuleNotFoundError:
+        return _run_ols_scipy_fallback(df, label, y_col)
     formula = f"{y_col} ~ signpos + absW" + (" + C(context)" if df["context"].nunique() > 1 else "")
     model = smf.ols(formula, data=df).fit()
     ci = model.conf_int().loc["signpos"]
@@ -357,6 +355,62 @@ def run_ols(df: pd.DataFrame, label: str, y_col: str = "of") -> dict | None:
         })
     except Exception as exc:  # degenerate clustering (e.g. too few distinct connections)
         print(f"    conn-clustered robust SE failed: {exc}")
+    return result
+
+
+def _run_ols_scipy_fallback(df: pd.DataFrame, label: str, y_col: str) -> dict:
+    """Fit the documented OLS with connection-clustered covariance without statsmodels."""
+
+    from scipy.stats import norm, t
+
+    y = df[y_col].to_numpy(dtype=np.float64)
+    columns = [np.ones(len(df)), df["signpos"].to_numpy(dtype=np.float64), df["absW"].to_numpy()]
+    contexts = np.sort(df["context"].unique())
+    columns.extend((df["context"].to_numpy() == value).astype(np.float64) for value in contexts[1:])
+    design = np.column_stack(columns)
+    beta, _residuals, _rank, _singular = np.linalg.lstsq(design, y, rcond=None)
+    residual = y - design @ beta
+    n_obs, n_params = design.shape
+    inverse_xtx = np.linalg.pinv(design.T @ design)
+    sigma2 = float(np.square(residual).sum() / max(n_obs - n_params, 1))
+    standard_error = float(np.sqrt(sigma2 * inverse_xtx[1, 1]))
+    ordinary_p = float(2.0 * t.sf(abs(beta[1] / standard_error), max(n_obs - n_params, 1)))
+    ordinary_ci = 1.96 * standard_error
+    result = {
+        "n": int(n_obs),
+        "coef": float(beta[1]),
+        "ci_low": float(beta[1] - ordinary_ci),
+        "ci_high": float(beta[1] + ordinary_ci),
+        "p": ordinary_p,
+        "r2": float(1.0 - np.square(residual).sum() / np.square(y - y.mean()).sum()),
+    }
+    group_codes, unique_groups = pd.factorize(df["conn"], sort=False)
+    if unique_groups.size > 1:
+        scores = np.column_stack(
+            [
+                np.bincount(
+                    group_codes,
+                    weights=design[:, column] * residual,
+                    minlength=unique_groups.size,
+                )
+                for column in range(n_params)
+            ]
+        )
+        meat = scores.T @ scores
+        correction = unique_groups.size / (unique_groups.size - 1)
+        correction *= (n_obs - 1) / max(n_obs - n_params, 1)
+        clustered_covariance = correction * inverse_xtx @ meat @ inverse_xtx
+        clustered_se = float(np.sqrt(clustered_covariance[1, 1]))
+        clustered_ci = 1.96 * clustered_se
+        result.update(
+            {
+                "coef_cluster": float(beta[1]),
+                "ci_low_cluster": float(beta[1] - clustered_ci),
+                "ci_high_cluster": float(beta[1] + clustered_ci),
+                "p_cluster": float(2.0 * norm.sf(abs(beta[1] / clustered_se))),
+            }
+        )
+    print(f"  [{label}] SciPy OLS fallback: sign coef={result['coef']:.4f} p={result['p']:.3e}")
     return result
 
 

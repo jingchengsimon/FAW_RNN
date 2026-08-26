@@ -34,9 +34,10 @@ from utils.analysis.clutter.fg_switch_offset_acc import (
     _model_key,
     select_key_recovery_ticks,
 )
+from utils.analysis.clutter.multiseed_plotting import add_seed_points
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_RESULT_DIR = (
     PROJECT_ROOT / "results" / "train_figs" / "clutter" / "clutter_best6_multiseed_40h_ep150"
 )
@@ -81,6 +82,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--output_pdf", type=Path, default=None)
     parser.add_argument(
+        "--show-seed-points",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Overlay one neutral-gray point per training seed on each 10-seed bar.",
+    )
+    parser.add_argument(
         "--publication_fig_dir",
         type=Path,
         default=None,
@@ -92,10 +99,11 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _mean_sd(values: np.ndarray) -> tuple[float, float]:
-    """Return mean and sample standard deviation, treating a singleton as zero spread."""
+def _mean_sem(values: np.ndarray) -> tuple[float, float]:
+    """Return mean and cross-seed SEM, treating a singleton as zero spread."""
 
-    return float(np.mean(values)), float(np.std(values, ddof=1)) if values.size > 1 else 0.0
+    sem = float(np.std(values, ddof=1) / np.sqrt(values.size)) if values.size > 1 else 0.0
+    return float(np.mean(values)), sem
 
 
 def load_test_metrics(path: Path) -> dict[str, dict[str, np.ndarray]]:
@@ -111,6 +119,13 @@ def load_test_metrics(path: Path) -> dict[str, dict[str, np.ndarray]]:
             grouped[model]["sector"].append(float(row["sector_acc"]))
     if not grouped:
         raise RuntimeError(f"No recognized multi-seed test metrics found in {path}")
+    counts = {
+        f"{model}/{metric}": len(values)
+        for model, metrics in grouped.items()
+        for metric, values in metrics.items()
+    }
+    if any(count != 10 for count in counts.values()):
+        raise RuntimeError(f"Expected exactly ten test seeds per model/readout, got {counts}.")
     return {
         model: {metric: np.asarray(values, dtype=np.float64) for metric, values in metrics.items()}
         for model, metrics in grouped.items()
@@ -118,33 +133,48 @@ def load_test_metrics(path: Path) -> dict[str, dict[str, np.ndarray]]:
 
 
 def load_recovery_curves(path: Path) -> tuple[np.ndarray, dict[str, dict[str, np.ndarray]]]:
-    """Load one aligned foreground-switch character/sector curve per model."""
+    """Load aligned ten-seed foreground-switch curves grouped by model."""
 
-    paths = sorted(glob.glob(str(path / "fg_switch_offset_acc_*.npz")))
+    paths = sorted(glob.glob(str(path / "**" / "fg_switch_offset_acc_*.npz"), recursive=True))
     if not paths:
         raise RuntimeError(f"No foreground switch exports found in {path}")
     offsets: np.ndarray | None = None
-    curves: dict[str, dict[str, np.ndarray]] = {}
+    grouped: dict[str, dict[str, list[np.ndarray]]] = defaultdict(
+        lambda: {"char": [], "sector": []}
+    )
     for filename in paths:
         _, tag = _kind_and_tag(filename)
         model = _model_key(tag)
         if model not in MODEL_ORDER:
             continue
-        if model in curves:
-            raise RuntimeError(f"Multiple recovery exports map to model {model!r}")
         with np.load(filename) as payload:
             current_offsets = payload["offset_order"].astype(np.int64)
             if offsets is None:
                 offsets = current_offsets
             elif not np.array_equal(offsets, current_offsets):
                 raise RuntimeError(f"Mismatched recovery offsets in {filename}")
-            curves[model] = {
-                "char": payload["char_acc"].astype(np.float64),
-                "sector": payload["sector_acc"].astype(np.float64),
-            }
-    if offsets is None or not curves:
+            grouped[model]["char"].append(payload["char_acc"].astype(np.float64))
+            grouped[model]["sector"].append(payload["sector_acc"].astype(np.float64))
+    if offsets is None or not grouped:
         raise RuntimeError(f"No recognized recovery curves found in {path}")
+    curves = {
+        model: {metric: np.stack(values) for metric, values in metrics.items()}
+        for model, metrics in grouped.items()
+    }
+    seed_counts = {model: values["char"].shape[0] for model, values in curves.items()}
+    if any(count != 10 for count in seed_counts.values()) or len(set(seed_counts.values())) != 1:
+        raise RuntimeError(f"Expected exactly ten recovery seeds per model, got {seed_counts}.")
     return offsets, curves
+
+
+def _recovery_mean_sem(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Return offset-wise mean and cross-seed SEM for exactly ten seeds."""
+
+    values = np.asarray(values, dtype=np.float64)
+    if values.ndim != 2 or values.shape[0] != 10:
+        raise ValueError(f"Expected recovery curves shaped (10, offsets), got {values.shape}.")
+    mean = values.mean(axis=0)
+    return mean, values.std(axis=0, ddof=1) / np.sqrt(values.shape[0])
 
 
 def _plot_test_axis(
@@ -152,6 +182,8 @@ def _plot_test_axis(
     metrics: dict[str, dict[str, np.ndarray]],
     metric: str,
     show_xticks: bool,
+    *,
+    show_seed_points: bool = True,
 ) -> None:
     """Plot one character or sector validation-selected test bar panel."""
 
@@ -160,26 +192,24 @@ def _plot_test_axis(
     rng = np.random.default_rng(0)
     for index, model in enumerate(models):
         values = metrics[model][metric]
-        mean, sd = _mean_sd(values)
+        mean, sem = _mean_sem(values)
         axis.bar(
             positions[index],
             mean,
             width=0.72,
-            yerr=sd,
+            yerr=sem,
             color=MODEL_COLORS[model],
             edgecolor="none",
             capsize=2.5,
             error_kw={"elinewidth": 1.0, "capthick": 1.0, "ecolor": "#333333"},
         )
-        jitter = rng.uniform(-0.16, 0.16, size=values.size)
-        axis.scatter(
-            np.full(values.size, positions[index]) + jitter,
-            values,
-            s=10,
-            color="#333333",
-            alpha=0.52,
-            linewidths=0,
-            zorder=3,
+        add_seed_points(
+            axis,
+            np.asarray([positions[index]]),
+            values[:, None],
+            bar_width=0.72,
+            show=show_seed_points,
+            rng=rng,
         )
     axis.set_xticks(positions, [MODEL_LABELS[model] for model in models], rotation=40, ha="right")
     if not show_xticks:
@@ -200,7 +230,10 @@ def _loss_crop(path: Path, metric: str) -> tuple[np.ndarray, tuple[float, float]
 
     image = np.asarray(Image.open(path).convert("RGB"))
     if image.shape[:2] != (610, 1861):
-        raise ValueError(f"Expected the canonical 1861x610 loss source, got {image.shape[1]}x{image.shape[0]}")
+        raise ValueError(
+            f"Expected the canonical 1861x610 loss source, "
+            f"got {image.shape[1]}x{image.shape[0]}"
+        )
     if metric == "char":
         # Use the complete source data rectangle. Cropping only its lower half and remapping it
         # to the full range introduces a vertical numerical shift in compact summary panels.
@@ -218,7 +251,7 @@ def _plot_loss_axis(
     show_xlabel: bool,
     show_xticks: bool,
 ) -> None:
-    """Place the validated mean-plus-SD loss render in a compact summary panel."""
+    """Place the validated loss render in a compact summary panel."""
 
     crop, limits = _loss_crop(loss_png, metric)
     displayed_bottom = 0.3 if metric == "char" else 0.15
@@ -269,19 +302,25 @@ def _plot_recovery_axis(
     for model in MODEL_ORDER:
         if model not in curves:
             continue
+        mean, sem = _recovery_mean_sem(curves[model][metric])
         axis.plot(
             x,
-            curves[model][metric],
+            mean,
             color=MODEL_COLORS[model],
             linewidth=1.8,
             marker=MODEL_MARKERS[model],
             markevery=selected_indices.tolist(),
             markersize=3.8,
         )
-    chance = 10.0 if metric == "char" else 100.0 / 9.0
-    axis.axhline(chance, color="0.35", linewidth=0.9, linestyle=(0, (4, 3)), zorder=0)
-    switch_index = selected_indices[selected_labels.index("switch")]
-    axis.axvline(switch_index, color="0.35", linewidth=0.9, linestyle="--", zorder=0)
+        if np.any(sem):
+            axis.fill_between(
+                x,
+                mean - sem,
+                mean + sem,
+                color=MODEL_COLORS[model],
+                alpha=0.55,
+                linewidth=0,
+            )
     axis.set_xticks(selected_indices, selected_labels)
     tick_labels = axis.get_xticklabels()
     tick_labels[1].set_ha("right")
@@ -295,12 +334,11 @@ def _plot_recovery_axis(
 
 
 def _style_axis(axis: plt.Axes) -> None:
-    """Apply the shared borderless, y-grid style to all six panels."""
+    """Apply the shared borderless style to all six panels."""
 
     axis.spines["top"].set_visible(False)
     axis.spines["right"].set_visible(False)
-    axis.grid(axis="y", alpha=0.25, linewidth=0.7)
-    axis.set_axisbelow(True)
+    axis.grid(False)
 
 
 def plot_summary(
@@ -322,8 +360,14 @@ def plot_summary(
         }
     ):
         fig, axes = plt.subplots(2, 3, figsize=(13.2, 6.9))
-        _plot_test_axis(axes[0, 0], test_metrics, "char", show_xticks=False)
-        _plot_test_axis(axes[1, 0], test_metrics, "sector", show_xticks=True)
+        _plot_test_axis(
+            axes[0, 0], test_metrics, "char", show_xticks=False,
+            show_seed_points=args.show_seed_points,
+        )
+        _plot_test_axis(
+            axes[1, 0], test_metrics, "sector", show_xticks=True,
+            show_seed_points=args.show_seed_points,
+        )
         _plot_loss_axis(
             axes[0, 1], loss_png, "char", show_xlabel=False, show_xticks=False
         )

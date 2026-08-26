@@ -3,7 +3,7 @@
 Collapses the connection-level TT/TR/RT/RR x sign(W) analysis (see
 gawf_recurrent_gate_sign_vs_magnitude_disinhibition.py / ..._sector.py in utils.analysis) into one
 grouped-bar figure: for each group, restricted to that group's own |W| overlap band (so + and -
-are |W|-matched), mean open fraction +/- SEM for W>0 (blue) vs W<0 (red), digit and sector shown
+are |W|-matched), mean open fraction +/- SEM for W>0 (red) vs W<0 (blue), digit and sector shown
 as two side-by-side subplots. TT is highlighted (bold border + shaded background, other groups
 dimmed) because it is the group where the sign gap is largest and most robust to the |W| +
 context control; putting digit and sector side by side is meant to make "digit's TT gap is
@@ -17,6 +17,7 @@ the expensive torch forward pass.
 from __future__ import annotations
 
 import argparse
+from itertools import product
 import json
 import sys
 from pathlib import Path
@@ -29,11 +30,12 @@ import numpy as np
 import pandas as pd
 from matplotlib.lines import Line2D
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils.analysis.anal_paths import output_dir
+from utils.analysis.clutter.multiseed_plotting import add_seed_points
 from utils.analysis.clutter.fig7_recurrent_gate_sign_magnitude import (
     DIGITS,
     GROUP_NAMES,
@@ -119,6 +121,8 @@ POSTER_RC = {
     "xtick.labelsize": 13,
     "ytick.labelsize": 13,
     "legend.fontsize": 13,
+    "pdf.fonttype": 42,
+    "ps.fonttype": 42,
 }
 
 # Vertical layout only: every font bumped to 16 (separate from POSTER_RC so the horizontal
@@ -130,12 +134,19 @@ POSTER_RC_VERTICAL = {
     "xtick.labelsize": 16,
     "ytick.labelsize": 16,
     "legend.fontsize": 16,
+    "pdf.fonttype": 42,
+    "ps.fonttype": 42,
 }
 
 
 def _draw_poster_panel(
-    ax: plt.Axes, stats: dict[str, dict], title: str, *,
-    show_xlabel: bool = True, show_ylabel: bool = True,
+    ax: plt.Axes,
+    stats: dict[str, dict],
+    title: str,
+    *,
+    show_xlabel: bool = True,
+    show_ylabel: bool = True,
+    show_seed_points: bool = True,
 ) -> None:
     """Draw one Digit/Sector bar panel (shared by the horizontal and vertical layouts)."""
 
@@ -154,6 +165,19 @@ def _draw_poster_panel(
                color=POS_COLOR, alpha=alpha, edgecolor=edge_color, linewidth=edge_lw, zorder=3)
         ax.bar(x[gi] + width / 2, neg["mean"], width, yerr=neg["sem"], capsize=3,
                color=NEG_COLOR, alpha=alpha, edgecolor=edge_color, linewidth=edge_lw, zorder=3)
+        for x_pos, values in (
+            (x[gi] - width / 2, pos.get("values")),
+            (x[gi] + width / 2, neg.get("values")),
+        ):
+            if values is not None:
+                add_seed_points(
+                    ax,
+                    np.asarray([x_pos]),
+                    np.asarray(values, dtype=np.float64)[:, None],
+                    bar_width=width,
+                    show=show_seed_points,
+                    rng=np.random.default_rng(gi),
+                )
 
     ax.set_xticks(x)
     ax.set_xticklabels([GROUP_TICK_LABELS[g] for g in GROUP_NAMES])
@@ -191,6 +215,8 @@ def _save_png_and_pdf(fig: plt.Figure, fig_path: Path, dpi: int) -> None:
 def render_poster(
     stats_by_variable: dict[str, dict[str, dict]],
     fig_path: Path, dpi: int = DPI,
+    *,
+    show_seed_points: bool = True,
 ) -> None:
     """Horizontal layout: Digit and Sector side by side, sharing the y-axis."""
 
@@ -200,6 +226,7 @@ def render_poster(
             _draw_poster_panel(
                 ax, stats_by_variable[variable], variable.capitalize(),
                 show_ylabel=(ax is axes[0]),
+                show_seed_points=show_seed_points,
             )
         fig.legend(handles=_legend_handles(), loc="upper center", ncol=2, frameon=False,
                    bbox_to_anchor=(0.5, 0.98))
@@ -243,25 +270,57 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cache_dirs", nargs="+", type=Path, default=None)
     parser.add_argument("--fig_dir", type=Path, default=None)
     parser.add_argument("--output_stem", default="recurrent_gate_disinhibition_poster")
+    parser.add_argument(
+        "--show-seed-points",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Overlay one neutral-gray point per training seed on each 10-seed bar.",
+    )
     return parser.parse_args()
 
 
 def _cross_seed_stats(records: list[dict[str, dict]]) -> dict[str, dict]:
-    """Collapse per-seed overlap-band means to cross-seed mean +/- SD."""
+    """Collapse per-seed overlap-band means to cross-seed mean ± SEM."""
 
     result: dict[str, dict] = {}
     for group in GROUP_NAMES:
         result[group] = {}
         for sign in ("+", "-"):
-            values = np.asarray([record[group][sign]["mean"] for record in records], dtype=np.float64)
+            values = np.asarray(
+                [record[group][sign]["mean"] for record in records], dtype=np.float64
+            )
             if not np.all(np.isfinite(values)):
                 raise RuntimeError(f"Non-finite per-seed Fig7 statistic for {group}/{sign}")
             result[group][sign] = {
                 "mean": float(values.mean()),
-                "sem": float(values.std(ddof=1)) if values.size > 1 else 0.0,
+                "sem": float(values.std(ddof=1) / np.sqrt(values.size)) if values.size > 1 else 0.0,
                 "n": int(values.size),
+                "values": values.tolist(),
             }
     return result
+
+
+def exact_sign_flip_p(values: np.ndarray) -> float:
+    """Return the exact two-sided sign-flip p-value for paired seed-level values."""
+
+    values = np.asarray(values, dtype=np.float64)
+    if values.ndim != 1 or values.size < 2 or not np.all(np.isfinite(values)):
+        raise ValueError("Sign-flip values must be a finite one-dimensional array of size >= 2.")
+    observed = abs(float(values.mean()))
+    null_abs_means = np.asarray(
+        [abs(float(np.mean(values * signs))) for signs in product((-1.0, 1.0), repeat=len(values))]
+    )
+    return float(np.mean(null_abs_means >= observed - np.finfo(np.float64).eps))
+
+
+def seed_level_gap_p(records: list[dict[str, dict]], group: str) -> float:
+    """Return the exact two-sided sign-flip p-value for paired per-seed sign gaps."""
+
+    gaps = np.asarray(
+        [record[group]["+"]["mean"] - record[group]["-"]["mean"] for record in records],
+        dtype=np.float64,
+    )
+    return exact_sign_flip_p(gaps)
 
 
 # --------------------------------------------------------------------------------------------
@@ -285,6 +344,7 @@ def main() -> None:
             print_overlap_bands(kind, overlap_stats)
             stats = overlap_band_sign_stats(pooled, overlap_stats)
             stats_by_variable[kind] = stats
+            p_by_variable[kind] = {g: float("nan") for g in GROUP_NAMES}
         else:
             per_seed_stats: list[dict[str, dict]] = []
             for cache_dir in args.cache_dirs:
@@ -294,13 +354,18 @@ def main() -> None:
                 per_seed_stats.append(overlap_band_sign_stats(pooled, overlap_stats))
             stats = _cross_seed_stats(per_seed_stats)
             stats_by_variable[kind] = stats
+            p_by_variable[kind] = {
+                g: seed_level_gap_p(per_seed_stats, g) for g in GROUP_NAMES
+            }
         gap_by_variable[kind] = {
             g: stats[g]["+"]["mean"] - stats[g]["-"]["mean"] for g in GROUP_NAMES
         }
-        p_by_variable[kind] = {g: float("nan") for g in GROUP_NAMES}
 
     print("\n=== summary (|W|-matched overlap band, controlling for |W| + context) ===")
-    header = f"{'kind':>7} {'group':>6} {'n_+':>8} {'n_-':>8} {'of+':>8} {'of-':>8} {'gap':>8} {'p (clean, sign coef)':>22}"
+    header = (
+        f"{'kind':>7} {'group':>6} {'n_+':>8} {'n_-':>8} {'of+':>8} {'of-':>8} "
+        f"{'gap':>8} {'p (paired seeds)':>22}"
+    )
     print(header)
     for kind in VARIABLES:
         stats = stats_by_variable[kind]
@@ -310,9 +375,19 @@ def main() -> None:
                   f"{neg['mean']:>8.4f} {gap_by_variable[kind][g]:>8.4f} "
                   f"{p_by_variable[kind][g]:>22.3e}")
 
-    fig_dir = args.fig_dir if args.fig_dir is not None else output_dir(CATEGORY, SCRIPT_NAME, "figs")
+    fig_dir = (
+        args.fig_dir
+        if args.fig_dir is not None
+        else output_dir(CATEGORY, SCRIPT_NAME, "figs")
+    )
     fig_dir.mkdir(parents=True, exist_ok=True)
-    render_poster(stats_by_variable, fig_dir / f"{args.output_stem}.png")
+    render_poster(
+        stats_by_variable,
+        fig_dir / f"{args.output_stem}.png",
+        show_seed_points=args.show_seed_points,
+    )
+    if args.cache_dirs is None:
+        render_poster_vertical(stats_by_variable, fig_dir / f"{args.output_stem}_vertical.png")
     if args.cache_dirs is not None:
         summary_path = fig_dir / f"{args.output_stem}_metadata.json"
         summary_path.write_text(
@@ -320,7 +395,9 @@ def main() -> None:
                 {
                     "n_seeds": len(args.cache_dirs),
                     "cache_dirs": [str(path.resolve()) for path in args.cache_dirs],
-                    "aggregation": "per-seed overlap-band means; bars show cross-seed mean +/- SD",
+                    "aggregation": "per-seed overlap-band means; bars show cross-seed mean +/- SEM",
+                    "test": "exact two-sided sign-flip test of paired per-seed (+ minus -) gaps",
+                    "seed_level_gap_p": p_by_variable,
                     "seed42_included": False,
                 },
                 indent=2,

@@ -4,7 +4,7 @@ Input: ``unit_gate_context_variance.json`` from the matching analysis module, or
 ``unit_gate_context_variance_multiseed.json`` from the multi-seed driver.  Output: one
 Figure-03-style PNG for every available GaWF/LSTM/GRU report, plus a compact poster-oriented PNG
 containing their condition-mean marginalization panels.  When the report stores per-seed fraction
-arrays, the 1-by-3 panel draws cross-seed mean +/- sample sd instead of single-seed point
+arrays, the 1-by-3 panel draws cross-seed mean +/- SEM instead of single-seed point
 estimates.  Its official PDF is written to the configured publication-figure directory.
 """
 
@@ -13,11 +13,14 @@ from __future__ import annotations
 import os as _anal_os
 import sys as _anal_sys
 
-_ANAL_PROJECT_ROOT = _anal_os.path.dirname(_anal_os.path.dirname(_anal_os.path.dirname(_anal_os.path.abspath(__file__))))
+_ANAL_PROJECT_ROOT = _anal_os.path.abspath(
+    _anal_os.path.join(_anal_os.path.dirname(__file__), "..", "..", "..")
+)
 if _ANAL_PROJECT_ROOT not in _anal_sys.path:
     _anal_sys.path.insert(0, _ANAL_PROJECT_ROOT)
 
 from utils.analysis.anal_paths import output_dir
+from utils.analysis.clutter.multiseed_plotting import add_seed_points
 
 import argparse
 import json
@@ -91,6 +94,17 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--dpi", type=int, default=150)
     parser.add_argument(
+        "--show-seed-points",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Overlay one neutral-gray point per training seed on each cross-seed bar.",
+    )
+    parser.add_argument(
+        "--with-residual",
+        action="store_true",
+        help="Add the trial-level residual bar to an extra marginalization rendering.",
+    )
+    parser.add_argument(
         "--publication_fig_dir",
         type=Path,
         default=None,
@@ -113,11 +127,11 @@ def _annotate_bars(ax: plt.Axes) -> None:
         ax.bar_label(container, labels=labels, padding=2, fontsize=9, rotation=0)
 
 
-def _fraction_mean_sd(value: object) -> tuple[float, float | None]:
-    """Reduce one fraction entry to ``(mean, sample sd)``.
+def _fraction_mean_sem(value: object) -> tuple[float, float | None]:
+    """Reduce one fraction entry to ``(mean, SEM)``.
 
     A scalar (single-seed report) yields no spread; an array (cross-seed report) yields the mean
-    and the sample sd (ddof=1), the same convention as the best-model-accuracy figure.
+    and the cross-seed SEM (ddof=1).
     """
 
     array = np.asarray(value, dtype=np.float64)
@@ -125,7 +139,7 @@ def _fraction_mean_sd(value: object) -> tuple[float, float | None]:
         return float(array), None
     if array.size <= 1:
         return float(array.mean()), None
-    return float(array.mean()), float(np.std(array, ddof=1))
+    return float(array.mean()), float(np.std(array, ddof=1) / np.sqrt(array.size))
 
 
 def _is_multiseed_report(report: dict) -> bool:
@@ -207,6 +221,9 @@ def plot_marginalization_summary(
     fig_dir: str,
     dpi: int,
     publication_fig_dir: Path | None,
+    *,
+    show_seed_points: bool = True,
+    with_residual: bool = False,
 ) -> tuple[str, str | None]:
     """Write the poster-oriented 1-by-3 condition-mean gate marginalization figure."""
 
@@ -214,7 +231,11 @@ def plot_marginalization_summary(
     if missing:
         raise KeyError(f"Marginalization summary requires all models; missing {missing}")
 
-    factors = ("sector", "digit", "interaction")
+    factors = ("sector", "digit", "interaction", "residual") if with_residual else (
+        "sector",
+        "digit",
+        "interaction",
+    )
     with plt.rc_context(
         {
             "font.size": 13,
@@ -232,17 +253,37 @@ def plot_marginalization_summary(
             gate_names = tuple(GATE_LABELS[model_type])
             width = 0.78 / len(gate_names)
             for gate_index, gate_name in enumerate(gate_names):
-                fractions = report["models"][model_type]["gates"][gate_name][
-                    "equal_cell_condition_mean"
-                ]["fractions"]
+                gate = report["models"][model_type]["gates"][gate_name]
+                fractions = {
+                    **gate["equal_cell_condition_mean"]["fractions"],
+                    **gate.get("equal_cell_trial_total", {}).get("fractions", {}),
+                }
+                if with_residual and "residual" not in fractions:
+                    raise KeyError(
+                        "Residual rendering requires equal_cell_trial_total.fractions.residual"
+                    )
+                if with_residual:
+                    residual = np.asarray(fractions["residual"], dtype=np.float64)
+                    component_values = {
+                        factor: (
+                            residual
+                            if factor == "residual"
+                            else np.asarray(fractions[factor], dtype=np.float64) * (1.0 - residual)
+                        )
+                        for factor in factors
+                    }
+                else:
+                    component_values = {
+                        factor: np.asarray(fractions[factor], dtype=np.float64) for factor in factors
+                    }
                 offset = (gate_index - (len(gate_names) - 1) / 2) * width
-                stats = [_fraction_mean_sd(fractions[factor]) for factor in factors]
-                heights = [100.0 * mean for mean, _sd in stats]
-                sds = [sd for _mean, sd in stats]
+                stats = [_fraction_mean_sem(component_values[factor]) for factor in factors]
+                heights = [100.0 * mean for mean, _sem in stats]
+                sems = [sem for _mean, sem in stats]
                 bar_kwargs: dict = {}
-                if any(sd is not None for sd in sds):
+                if any(sem is not None for sem in sems):
                     bar_kwargs.update(
-                        yerr=[100.0 * (sd if sd is not None else 0.0) for sd in sds],
+                        yerr=[100.0 * (sem if sem is not None else 0.0) for sem in sems],
                         capsize=2.6,
                         ecolor="#252525",
                         error_kw={"linewidth": 1.0, "capthick": 1.0},
@@ -256,13 +297,35 @@ def plot_marginalization_summary(
                     label=GATE_LABELS[model_type][gate_name],
                     **bar_kwargs,
                 )
+                if _is_multiseed_report(report):
+                    seed_values = 100.0 * np.asarray(
+                        [component_values[factor] for factor in factors], dtype=np.float64
+                    ).T
+                    add_seed_points(
+                        axis,
+                        x + offset,
+                        seed_values,
+                        bar_width=width,
+                        show=show_seed_points,
+                        rng=np.random.default_rng(gate_index),
+                    )
 
-            axis.set_xticks(x, [factor.title() for factor in factors])
+            axis.set_xticks(
+                x,
+                [
+                    "Residual"
+                    if factor == "residual"
+                    else "Inter-\naction"
+                    if with_residual and factor == "interaction"
+                    else factor.title()
+                    for factor in factors
+                ],
+                fontsize=10 if with_residual else None,
+            )
             axis.set_ylim(0.0, 105.0)
             axis.set_yticks(np.arange(0.0, 100.1, 20.0))
+            axis.grid(False)
             axis.set_title(MODEL_TITLES[model_type], pad=47)
-            axis.grid(axis="y", alpha=0.25, linewidth=0.7)
-            axis.set_axisbelow(True)
             axis.spines["top"].set_visible(False)
             axis.spines["right"].set_visible(False)
             handles = [
@@ -285,40 +348,28 @@ def plot_marginalization_summary(
                 borderaxespad=0.0,
             )
 
-        fig.subplots_adjust(left=0.085, right=0.995, bottom=0.14, top=0.72, wspace=0.20)
+        fig.subplots_adjust(
+            left=0.085,
+            right=0.995,
+            bottom=0.14,
+            top=0.72,
+            wspace=0.20,
+        )
         row_center = np.mean(
             [axis.get_position().y0 + axis.get_position().height / 2 for axis in axes]
         )
         fig.text(
             0.024,
             row_center,
-            "Explained variance (%)",
+            "Variance component (%)" if with_residual else "Explained variance (%)",
             rotation=90,
             ha="center",
             va="center",
             fontsize=16,
         )
-        if _is_multiseed_report(report):
-            seed_counts = {
-                model: len(block.get("seeds", []))
-                for model, block in report["models"].items()
-            }
-            counts = sorted(set(seed_counts.values()))
-            seed_note = (
-                f"{counts[0]} seeds" if len(counts) == 1 else f"{counts[0]}-{counts[-1]} seeds"
-            )
-            fig.text(
-                0.54,
-                0.012,
-                f"Bars: cross-seed mean; error bars: \u00b1 sample SD ({seed_note} per model)",
-                ha="center",
-                va="bottom",
-                fontsize=11.5,
-                color="#404040",
-            )
-
         os.makedirs(fig_dir, exist_ok=True)
-        base_path = os.path.join(fig_dir, "03_unit_gate_marginalization_1x3")
+        suffix = "_with_residual" if with_residual else ""
+        base_path = os.path.join(fig_dir, f"03_unit_gate_marginalization_1x3{suffix}")
         png_path = f"{base_path}.png"
         fig.savefig(png_path, dpi=max(dpi, 180), bbox_inches="tight", pad_inches=0.04)
         # Workflow policy: the PDF always sits next to the PNG in the local results tree.
@@ -327,7 +378,9 @@ def plot_marginalization_summary(
         # ``publication_fig_dir`` is an opt-in extra copy only (no automatic 6-Writing sync).
         publication_pdf = None
         if publication_fig_dir is not None:
-            publication_pdf = str(publication_fig_dir / "03_unit_gate_marginalization_1x3.pdf")
+            publication_pdf = str(
+                publication_fig_dir / f"03_unit_gate_marginalization_1x3{suffix}.pdf"
+            )
             fig.savefig(publication_pdf, bbox_inches="tight", pad_inches=0.04)
         plt.close(fig)
     print(f"Saved {png_path}")
@@ -350,12 +403,19 @@ def main() -> None:
     with open(args.report, "r", encoding="utf-8") as file_obj:
         report = json.load(file_obj)
     # A cross-seed report stores per-seed fraction arrays and carries no trial-total ANOVA, so
-    # only the 1-by-3 marginalization summary (drawn as mean +/- sd) is produced from it.
+    # only the 1-by-3 marginalization summary (drawn as mean +/- SEM) is produced from it.
     if not _is_multiseed_report(report):
         for model_type in MODEL_ORDER:
             if model_type in report["models"]:
                 plot_model(report, model_type, args.fig_dir, args.dpi)
-    plot_marginalization_summary(report, args.fig_dir, args.dpi, publication_dir)
+    plot_marginalization_summary(
+        report,
+        args.fig_dir,
+        args.dpi,
+        publication_dir,
+        show_seed_points=args.show_seed_points,
+        with_residual=args.with_residual,
+    )
 
 
 if __name__ == "__main__":

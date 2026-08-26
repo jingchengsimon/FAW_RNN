@@ -5,7 +5,7 @@ balanced 9-sector x 10-digit condition-mean variance fractions of that model's u
 reusing the single-seed code path from ``rnn_unit_gate_context_specificity``. GaWF afferent gates
 are reconstructed from a freshly collected reset-feedback trajectory plus that seed's U/V/W;
 LSTM/GRU gates are extracted by manual recurrence. The per-seed fractions are pooled into one
-compact JSON so the visualization can draw cross-seed mean +/- sample sd, the same spread
+compact JSON so the visualization can draw cross-seed mean +/- SEM, the shared spread
 convention as the best-model-accuracy figure.
 
 Inputs: a campaign checkpoint root laid out as ``{model}-seedNN/*_model.pth`` and the Clutter test
@@ -27,7 +27,9 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
@@ -256,8 +258,14 @@ def main() -> None:
 
     dataset, num_pos = build_test_dataset(args)
     reference_labels = _collect_reference_labels(dataset, args.rnn_batch_size)
-    digits, sectors = reference_labels[:, 0], reference_labels[:, 1]
-    _marginal_masks, equal_joint_mask = _balanced_masks(digits, sectors, args.balance_seed)
+    sequence_length = reference_labels.shape[0] // len(dataset)
+    frame_in_sequence = np.arange(reference_labels.shape[0]) % sequence_length
+    valid_frame_mask = frame_in_sequence != 0
+    valid_labels = reference_labels[valid_frame_mask]
+    digits, sectors = valid_labels[:, 0], valid_labels[:, 1]
+    _marginal_masks, valid_equal_joint_mask = _balanced_masks(digits, sectors, args.balance_seed)
+    equal_joint_mask = np.zeros(reference_labels.shape[0], dtype=bool)
+    equal_joint_mask[valid_frame_mask] = valid_equal_joint_mask
     equal_n = int(np.count_nonzero(equal_joint_mask)) // 90
     print(
         f"Reference labels: n_frames={reference_labels.shape[0]} | "
@@ -271,12 +279,12 @@ def main() -> None:
         ),
         "dataset": args.data_suffix,
         "n_frames": int(reference_labels.shape[0]),
+        "reset_frames_excluded": int(np.count_nonzero(~valid_frame_mask)),
+        "analysis_n_frames": int(np.count_nonzero(valid_frame_mask)),
         "balance_seed": int(args.balance_seed),
         "equal_joint_cell_n": equal_n,
         "labels": {"digit_levels": 10, "sector_levels": 9},
-        "spread_convention": (
-            "cross-seed mean +/- sample sd (ddof=1), matching the best-model-accuracy figure"
-        ),
+        "spread_convention": "cross-seed mean +/- SEM (ddof=1)",
         "checkpoint_root": str(Path(args.checkpoint_root).resolve()),
         "data_dir": str(Path(args.data_dir).resolve()),
         "gate_convention": {

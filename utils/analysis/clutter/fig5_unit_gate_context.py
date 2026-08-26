@@ -679,14 +679,20 @@ def main() -> None:
     dataset, num_pos = build_test_dataset(args)
     with np.load(args.trajectory) as loaded:
         label_tensor = loaded["labels"].astype(np.int64, copy=False)
+        feedback_tensor = loaded["feedback"].astype(np.float32, copy=False)
     if label_tensor.shape[:1] != (len(dataset),) or label_tensor.shape[-1] != 2:
         raise RuntimeError(
             f"Reference labels have shape {label_tensor.shape}; expected "
             f"({len(dataset)}, sequence_length, 2)."
         )
     reference_labels = label_tensor.reshape(-1, 2)
-    digits, sectors = reference_labels[:, 0], reference_labels[:, 1]
-    _marginal_masks, equal_joint_mask = _balanced_masks(digits, sectors, args.seed)
+    flattened_feedback = feedback_tensor.reshape(reference_labels.shape[0], -1)
+    valid_frame_mask = ~np.all(flattened_feedback == 0.0, axis=1)
+    valid_labels = reference_labels[valid_frame_mask]
+    digits, sectors = valid_labels[:, 0], valid_labels[:, 1]
+    _marginal_masks, valid_equal_joint_mask = _balanced_masks(digits, sectors, args.seed)
+    equal_joint_mask = np.zeros(reference_labels.shape[0], dtype=bool)
+    equal_joint_mask[valid_frame_mask] = valid_equal_joint_mask
     equal_n = int(np.count_nonzero(equal_joint_mask)) // 90
 
     json_path = Path(args.save_dir) / "unit_gate_context_variance.json"
@@ -737,6 +743,8 @@ def main() -> None:
         "n_sequences": int(len(dataset)),
         "sequence_length": int(reference_labels.shape[0] // len(dataset)),
         "n_frames": int(reference_labels.shape[0]),
+        "reset_frames_excluded": int(np.count_nonzero(~valid_frame_mask)),
+        "analysis_n_frames": int(np.count_nonzero(valid_frame_mask)),
         "balance_seed": int(args.seed),
         "equal_joint_cell_n": equal_n,
         "labels": {"digit_levels": 10, "sector_levels": 9},

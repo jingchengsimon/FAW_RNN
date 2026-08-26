@@ -68,6 +68,16 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional JSON destination for multi-seed aggregation provenance.",
     )
+    parser.add_argument(
+        "--exclude_zero_feedback_reset",
+        action="store_true",
+        help="Remove the known t=0 (all-zero-feedback, gate=0.5) contribution from each seed.",
+    )
+    parser.add_argument(
+        "--effective_weight_stats",
+        default=None,
+        help="Optional NPZ overriding only the input/recurrent W and G⊙W histograms.",
+    )
     return parser.parse_args()
 
 
@@ -132,15 +142,14 @@ def _gate_axes(
 
 
 def _style_probability_axis(axis: plt.Axes) -> None:
-    """Apply the shared grid/spine style used by the pooled gate and weight panels."""
+    """Apply the shared spine style used by the pooled gate and weight panels."""
 
-    axis.grid(axis="y", linestyle="--", linewidth=0.7, alpha=0.3)
-    axis.set_axisbelow(True)
+    axis.grid(False)
     axis.spines["top"].set_visible(False)
     axis.spines["right"].set_visible(False)
 
 
-GATE_YTICKS = {"input": (0, 10, 20, 30, 40), "recurrent": (0, 5, 10, 15)}
+GATE_YTICKS = {"input": (0, 15, 30, 45, 60), "recurrent": (0, 6, 12, 18, 24)}
 WEIGHT_YTICKS = {"input": (0, 12, 24, 36), "recurrent": (0, 7, 14, 21)}
 GATE_XTICKS = (0.0, 0.25, 0.5, 0.75, 1.0)
 WEIGHT_XTICKS = (-2, -1, 0, 1, 2)
@@ -169,20 +178,13 @@ def _pooled_gate_probability_axes(
     """Draw the input/recurrent pooled-gate probability panels (row 1 of the 2-by-2 summary).
 
     The saved histogram uses 0.0025-wide bins; those are re-binned here to 0.01-wide bins
-    (``GATE_REBIN_FACTOR``) so each bar carries enough mass to read clearly. The gate curve is
-    labeled ``G`` and the reference line is labeled ``$\tilde{G}$`` (median) so both can join
-    the single legend shared with row 2 (G, median, W, G⊙W). Median is kept over mean because
-    the gate distribution is heavily skewed (most mass sits very close to 0 or 1), which drags
-    the mean away from where samples actually concentrate; the median stays representative of
-    that bulk.
+    (``GATE_REBIN_FACTOR``) so each curve carries enough probability mass to read clearly.
     """
 
     for axis, kind, title in zip(axes, ("input", "recurrent"), ("Input gate", "Recurrent gate")):
         counts, coarse_edges = _rebin_counts(arrays[f"hist_{kind}_all"], edges, GATE_REBIN_FACTOR)
         centers = (coarse_edges[:-1] + coarse_edges[1:]) / 2.0
-        stats = metadata["distribution"][kind]
         axis.plot(centers, _probability_percent(counts), color="#2b6cb0", linewidth=1.5, label="G")
-        axis.axvline(stats["median"], color="#38a169", linestyle=":", label=r"$\tilde{G}$")
         axis.set(title=title, xlabel="Gate value", ylabel="Probability (%)", xlim=(-0.01, 1.01))
         axis.set_xticks(GATE_XTICKS)
         axis.set_yticks(GATE_YTICKS[kind])
@@ -210,7 +212,8 @@ def _weight_probability_axes(axes: np.ndarray, arrays: dict[str, np.ndarray]) ->
         )
         axis.set(title=title, xlabel="Weight", ylabel="Probability (%)", xlim=(-2.0, 2.0))
         axis.set_xticks(WEIGHT_XTICKS)
-        axis.set_yticks(WEIGHT_YTICKS[kind])
+        if effective_edges.size <= 1001:
+            axis.set_yticks(WEIGHT_YTICKS[kind])
         _style_probability_axis(axis)
 
 
@@ -263,7 +266,43 @@ def _reproject_histogram_counts(
     return projected
 
 
-def _load_multiseed_gate_statistics(seed_dirs: list[str]) -> tuple[dict[str, np.ndarray], dict[str, object]]:
+def _fixed_histogram(values: np.ndarray, edges: np.ndarray) -> np.ndarray:
+    """Count values in the fixed-edge convention used by the saved Fig3 histograms."""
+
+    bins = edges.size - 1
+    indices = np.floor((np.asarray(values).reshape(-1) - edges[0]) * bins / (edges[-1] - edges[0]))
+    indices = np.clip(indices.astype(np.int64), 0, bins - 1)
+    return np.bincount(indices, minlength=bins).astype(np.int64)
+
+
+def _exclude_reset_histograms(
+    arrays: dict[str, np.ndarray],
+    trajectory_path: str,
+) -> int:
+    """Exactly remove all-zero-feedback t=0 gate and effective-weight histogram mass."""
+
+    with np.load(trajectory_path, allow_pickle=False) as trajectory:
+        feedback = trajectory["feedback"]
+        reset_frames = int(np.all(feedback == 0.0, axis=-1).sum())
+        if reset_frames == 0:
+            raise RuntimeError(f"Expected reset frames in {trajectory_path}, found none")
+        for kind, weight_key in (("input", "weight_ih"), ("recurrent", "weight_hh")):
+            weight = trajectory[weight_key]
+            gate_hist = arrays[f"hist_{kind}_all"].copy()
+            midpoint_bin = int(np.searchsorted(arrays["gate_edges"], 0.5, side="right") - 1)
+            gate_hist[midpoint_bin] -= reset_frames * weight.size
+            if gate_hist[midpoint_bin] < 0:
+                raise RuntimeError("Reset correction exceeded the saved gate histogram mass")
+            arrays[f"hist_{kind}_all"] = gate_hist
+            arrays[f"hist_effective_{kind}"] = arrays[f"hist_effective_{kind}"] - (
+                reset_frames * _fixed_histogram(0.5 * weight, arrays[f"effective_edges_{kind}"])
+            )
+    return reset_frames
+
+
+def _load_multiseed_gate_statistics(
+    seed_dirs: list[str], *, exclude_zero_feedback_reset: bool = False
+) -> tuple[dict[str, np.ndarray], dict[str, object]]:
     """Pool same-bin Fig3 histograms and preserve an explicit 10-seed provenance record."""
 
     if len(seed_dirs) < 2:
@@ -274,7 +313,10 @@ def _load_multiseed_gate_statistics(seed_dirs: list[str]) -> tuple[dict[str, np.
         stats_path = os.path.join(directory, "gawf_gate_distribution_stats.npz")
         metadata_path = os.path.join(directory, "gawf_gate_distribution_meta.json")
         with np.load(stats_path, allow_pickle=False) as loaded:
-            arrays_by_seed.append({key: np.asarray(loaded[key]) for key in loaded.files})
+            arrays = {key: np.asarray(loaded[key]) for key in loaded.files}
+        if exclude_zero_feedback_reset:
+            _exclude_reset_histograms(arrays, os.path.join(directory, "gawf_gate_trajectory.npz"))
+        arrays_by_seed.append(arrays)
         with open(metadata_path, encoding="utf-8") as file_obj:
             metadata_by_seed.append(json.load(file_obj))
     reference = arrays_by_seed[0]
@@ -337,6 +379,7 @@ def _load_multiseed_gate_statistics(seed_dirs: list[str]) -> tuple[dict[str, np.
             "reprojected by bin overlap to a common symmetric range before summation."
         ),
         "seed42_included": False,
+        "reset_frames_excluded": bool(exclude_zero_feedback_reset),
     }
     return pooled, metadata
 
@@ -356,10 +399,25 @@ def main() -> None:
         with open(metadata_path, encoding="utf-8") as file_obj:
             metadata = json.load(file_obj)
     else:
-        arrays, metadata = _load_multiseed_gate_statistics(args.seed_dirs)
+        arrays, metadata = _load_multiseed_gate_statistics(
+            args.seed_dirs,
+            exclude_zero_feedback_reset=args.exclude_zero_feedback_reset,
+        )
     if args.metadata_path is not None:
         with open(args.metadata_path, "w", encoding="utf-8") as file_obj:
             json.dump(metadata, file_obj, indent=2)
+    if args.effective_weight_stats is not None:
+        with np.load(args.effective_weight_stats, allow_pickle=False) as loaded:
+            required = {
+                f"{prefix}_{kind}"
+                for prefix in ("effective_edges", "hist_weight", "hist_effective")
+                for kind in ("input", "recurrent")
+            }
+            missing = sorted(required.difference(loaded.files))
+            if missing:
+                raise ValueError(f"Effective-weight override is missing arrays: {missing}")
+            for key in required:
+                arrays[key] = np.asarray(loaded[key])
     suffix = args.format
 
     edges = arrays["gate_edges"]
@@ -383,7 +441,8 @@ def main() -> None:
             labels = axes[0, 0].get_legend_handles_labels()[1] + axes[1, 0].get_legend_handles_labels()[1]
             fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.954), ncol=4, frameon=False)
             stem = args.gate_weight_stem
-            for extension in ("png", "pdf"):
+            extensions = ("png", "pdf") if args.format == "png" else (args.format,)
+            for extension in extensions:
                 path = os.path.join(args.raw_dir, f"{stem}.{extension}")
                 fig.savefig(path, dpi=150, bbox_inches="tight", pad_inches=0.06)
                 print(f"Saved figure: {path}")

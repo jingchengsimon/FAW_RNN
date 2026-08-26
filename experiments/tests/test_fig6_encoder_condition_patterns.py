@@ -1,0 +1,27 @@
+"""Regression checks for equal-n Sector/Digit pattern selection."""
+
+from __future__ import annotations
+
+import numpy as np
+
+from utils.analysis.clutter.fig6_encoder_sector_patterns import CONDITIONS, _equal_n_condition_mask
+
+
+def test_equal_n_condition_mask_balances_all_digit_values() -> None:
+    """The generic selector retains the minimum count for every requested class value."""
+
+    labels = np.repeat(np.arange(10), np.arange(1, 11))
+    selected, target, original_counts = _equal_n_condition_mask(labels, 10, seed=7)
+
+    assert target == 1
+    np.testing.assert_array_equal(original_counts, np.arange(1, 11))
+    np.testing.assert_array_equal(np.bincount(labels[selected], minlength=10), np.ones(10))
+
+
+def test_figure6_condition_grids_match_the_requested_combined_layouts() -> None:
+    """Sector and Digit keep their prescribed internal spatial and channel grids."""
+
+    assert CONDITIONS["sector"].spatial_grid == (3, 3)
+    assert CONDITIONS["sector"].channel_grid == (2, 5)
+    assert CONDITIONS["digit"].spatial_grid == (2, 5)
+    assert CONDITIONS["digit"].channel_grid == (3, 4)

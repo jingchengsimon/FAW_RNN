@@ -46,11 +46,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Rectangle
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils.analysis.anal_paths import output_dir
+from utils.analysis.clutter.multiseed_plotting import add_seed_points
 from utils.analysis.variance_decomposition import (
     CM_FACTORS,
     TRIAL_FACTORS,
@@ -276,30 +277,33 @@ def _load_inputs(path: Path) -> tuple[np.ndarray, dict[str, BlockSource], dict[s
     return labels, sources, payload
 
 
-def _mean_ci(values: np.ndarray) -> tuple[float, float, float]:
-    values = np.asarray(values, dtype=np.float64)
-    low, high = np.quantile(values, [0.025, 0.975])
-    return float(values.mean()), float(low), float(high)
-
-
-def _mean_sd_band(values: np.ndarray) -> tuple[float, float, float]:
-    """Return ``(mean, mean-sd, mean+sd)`` using the sample sd (0 spread for a singleton).
-
-    This is the cross-seed error mode: ``values`` is one point estimate per training seed, so the
-    band reflects training randomness, matching the best-model-accuracy figure's mean +/- sd. The
-    single-model default (``_mean_ci``) instead reports the 2.5/97.5 quantiles of the within-model
-    balanced-subsample draws, a different and much smaller kind of spread.
-    """
+def _mean_sem(values: np.ndarray) -> tuple[float, float, float]:
+    """Return ``(mean, mean-sem, mean+sem)`` (zero spread for a singleton)."""
 
     values = np.asarray(values, dtype=np.float64)
     mean = float(values.mean())
-    sd = float(np.std(values, ddof=1)) if values.size > 1 else 0.0
-    return mean, mean - sd, mean + sd
+    sem = float(np.std(values, ddof=1) / np.sqrt(values.size)) if values.size > 1 else 0.0
+    return mean, mean - sem, mean + sem
 
 
-# Error-band selector shared by the two compact-aggregate plotters. "ci" keeps the historical
-# single-model within-subsample quantile band; "sd" is the cross-seed mean +/- sd.
-_ERROR_BANDS = {"ci": _mean_ci, "sd": _mean_sd_band}
+# Error-band selector shared by the two compact-aggregate plotters.
+_ERROR_BANDS = {"sem": _mean_sem}
+
+
+def _component_values(
+    result: RepeatedDecomposition,
+    factor: str,
+    *,
+    include_residual: bool,
+) -> np.ndarray:
+    """Return a component on the common trial-level denominator when residual is shown."""
+
+    if not include_residual:
+        return result.aggregate_cm[factor]
+    residual = result.aggregate_trial["residual"]
+    if factor == "residual":
+        return residual
+    return result.aggregate_cm[factor] * (1.0 - residual)
 
 
 def _per_unit_draw_mean(values: np.ndarray) -> np.ndarray:
@@ -380,15 +384,14 @@ def _tidy_rows(
     )
     for variant, values_by_factor, factors in variants:
         for factor in factors:
-            mean, low, high = _mean_ci(values_by_factor[factor])
+            mean, low, high = _mean_sem(values_by_factor[factor])
             rows.append(
                 {
                     "object": object_name,
                     "variant": variant,
                     "factor": factor,
                     "value": mean,
-                    "ci_low": low,
-                    "ci_high": high,
+                    "sem": high - mean,
                 }
             )
     return rows
@@ -425,7 +428,7 @@ def _plot_object(
         (axes[0, 1], "Trial-level aggregate", result.aggregate_trial, TRIAL_FACTORS),
     )
     for axis, title, values_by_factor, factors in aggregate_cells:
-        means, lows, highs = zip(*(_mean_ci(values_by_factor[factor]) for factor in factors))
+        means, lows, highs = zip(*(_mean_sem(values_by_factor[factor]) for factor in factors))
         means_array = np.asarray(means)
         highs_array = np.asarray(highs)
         x = np.arange(len(factors))
@@ -535,13 +538,14 @@ def _plot_compact_aggregate(
     figure_dir: Path,
     results: dict[str, RepeatedDecomposition],
     publication_fig_dir: Path | None = None,
-    error_mode: str = "ci",
+    error_mode: str = "sem",
+    show_seed_points: bool = True,
+    include_residual: bool = False,
 ) -> Path:
     """Plot the poster-style condition-mean aggregate summary for four core objects.
 
-    ``error_mode`` selects the error band: ``"ci"`` (default) keeps the single-model
-    within-subsample quantile band; ``"sd"`` treats ``aggregate_cm[factor]`` as one point estimate
-    per training seed and draws the cross-seed mean +/- sd.
+    ``error_mode`` is ``"sem"``: ``aggregate_cm[factor]`` contains one point estimate per
+    training seed and the figure draws cross-seed mean +/- SEM.
     """
 
     band = _ERROR_BANDS[error_mode]
@@ -552,15 +556,20 @@ def _plot_compact_aggregate(
             ("hidden_state", "Hidden\nactivation"),
         ),
     )
-    factors = CM_FACTORS
+    factors = (*CM_FACTORS, "residual") if include_residual else CM_FACTORS
     # This high-contrast navy/coral/mustard palette is distinct from the model and gate palettes
     # used by the adjacent 2-by-3 and 1-by-3 publication panels.
-    colors = {"sector": "#264653", "digit": "#E76F51", "interaction": "#E9C46A"}
+    colors = {
+        "sector": "#264653",
+        "digit": "#E76F51",
+        "interaction": "#E9C46A",
+        "residual": "#8D99AE",
+    }
     # The row-wide axis contains two logical quadrants.  This data width gives each bar the same
     # physical width-to-height ratio as a bar in the GRU afferent-gate panel of the 1-by-3 figure.
     bar_width = 0.095
     # Three bars occupy each group; leave exactly 1.5 bar widths between adjacent group edges.
-    category_centers = np.arange(2, dtype=np.float64) * (3.0 + 1.5) * bar_width
+    category_centers = np.arange(2, dtype=np.float64) * (len(factors) + 1.5) * bar_width
     with plt.rc_context(
         {
             "font.size": 13,
@@ -574,7 +583,7 @@ def _plot_compact_aggregate(
         for axis, objects in zip(axes, object_rows):
             for factor_index, factor in enumerate(factors):
                 statistics = [
-                    band(results[object_name].aggregate_cm[factor])
+                    band(_component_values(results[object_name], factor, include_residual=include_residual))
                     for object_name, _ in objects
                 ]
                 means = 100.0 * np.asarray([item[0] for item in statistics])
@@ -586,16 +595,34 @@ def _plot_compact_aggregate(
                     means,
                     width=bar_width,
                     color=colors[factor],
+                    edgecolor="none",
                     yerr=np.asarray([means - lows, highs - means]),
                     capsize=2.5,
                     label=factor.title(),
                     error_kw={"elinewidth": 1.0, "capthick": 1.0, "ecolor": "#333333"},
                 )
+                seed_values = np.column_stack(
+                    [
+                        100.0
+                        * _component_values(
+                            results[object_name], factor, include_residual=include_residual
+                        )
+                        for object_name, _ in objects
+                    ]
+                )
+                if seed_values.shape[0] == 10:
+                    add_seed_points(
+                        axis,
+                        positions,
+                        seed_values,
+                        bar_width=bar_width,
+                        show=show_seed_points,
+                        rng=np.random.default_rng(factor_index),
+                    )
             axis.set_xticks(category_centers, [label for _, label in objects])
             axis.set_ylim(0.0, 105.0)
             axis.set_yticks(np.arange(0.0, 100.1, 20.0))
-            axis.set_axisbelow(True)
-            axis.grid(axis="y", linewidth=0.7, alpha=0.25)
+            axis.grid(False)
             axis.spines["top"].set_visible(False)
             axis.spines["right"].set_visible(False)
 
@@ -619,7 +646,7 @@ def _plot_compact_aggregate(
             loc="upper left",
             # Offset the legend's first patch so its center sits on the shared y-axis.
             bbox_to_anchor=(0.205, 0.937),
-            ncol=3,
+            ncol=len(factors),
             frameon=False,
             handlelength=1.15,
             handleheight=0.85,
@@ -627,14 +654,15 @@ def _plot_compact_aggregate(
             columnspacing=0.75,
             borderaxespad=0.0,
         )
-        destination = figure_dir / "core_objects_aggregate_2x2.png"
+        suffix = "_with_residual" if include_residual else ""
+        destination = figure_dir / f"core_objects_aggregate_2x2{suffix}.png"
         fig.savefig(destination, dpi=180, bbox_inches="tight", pad_inches=0.04)
         # Workflow policy: the PDF sits next to the PNG in the local results tree. The
         # ``publication_fig_dir`` copy is an opt-in extra only (no automatic 6-Writing sync).
         fig.savefig(destination.with_suffix(".pdf"), bbox_inches="tight", pad_inches=0.04)
         if publication_fig_dir is not None:
             fig.savefig(
-                publication_fig_dir / "core_objects_aggregate_2x2.pdf",
+                publication_fig_dir / f"core_objects_aggregate_2x2{suffix}.pdf",
                 bbox_inches="tight",
                 pad_inches=0.04,
             )
@@ -646,12 +674,13 @@ def _plot_compact_aggregate_1x4(
     figure_dir: Path,
     results: dict[str, RepeatedDecomposition],
     publication_fig_dir: Path | None = None,
-    error_mode: str = "ci",
+    error_mode: str = "sem",
+    show_seed_points: bool = True,
+    include_residual: bool = False,
 ) -> Path:
     """Plot ``_plot_compact_aggregate``'s two stacked rows side-by-side as a horizontal figure.
 
-    ``error_mode`` matches ``_plot_compact_aggregate``: ``"ci"`` (default) single-model subsample
-    quantiles; ``"sd"`` cross-seed mean +/- sd.
+    ``error_mode`` matches ``_plot_compact_aggregate`` and is ``"sem"`` for cross-seed SEM.
 
     This is the 2x2 figure flattened to a 1x2 layout: exactly TWO axes. The left axis holds the
     two gates (Input gate, Recurrent gate) as two x-categories; the right axis holds the two
@@ -667,8 +696,13 @@ def _plot_compact_aggregate_1x4(
     """
 
     band = _ERROR_BANDS[error_mode]
-    factors = CM_FACTORS
-    colors = {"sector": "#264653", "digit": "#E76F51", "interaction": "#E9C46A"}
+    factors = (*CM_FACTORS, "residual") if include_residual else CM_FACTORS
+    colors = {
+        "sector": "#264653",
+        "digit": "#E76F51",
+        "interaction": "#E9C46A",
+        "residual": "#8D99AE",
+    }
     # (object_key, x-tick label) per category, split into the two axes.
     axis_objects = (
         (("input_gate", "Input gate"), ("recurrent_gate", "Recurrent gate")),
@@ -678,8 +712,8 @@ def _plot_compact_aggregate_1x4(
     # Per-axis geometry copied verbatim from _plot_compact_aggregate (see docstring), so bars are
     # pixel-identical to the 2x2 figure's.
     bar_width = 0.095
-    category_centers = np.arange(2, dtype=np.float64) * (3.0 + 1.5) * bar_width
-    xlim = (-0.178125, 0.605625)  # the auto-limits the 2x2 axis resolved to for these bars.
+    category_centers = np.arange(2, dtype=np.float64) * (len(factors) + 1.5) * bar_width
+    xlim = (-0.178125, 0.795625) if include_residual else (-0.178125, 0.605625)
     axis_width_in = 3.15625
     axis_height_in = 3.0288288288288285
 
@@ -712,25 +746,44 @@ def _plot_compact_aggregate_1x4(
 
         for axis, objects in zip(axes, axis_objects):
             for factor_index, factor in enumerate(factors):
-                statistics = [band(results[name].aggregate_cm[factor]) for name, _ in objects]
+                statistics = [
+                    band(_component_values(results[name], factor, include_residual=include_residual))
+                    for name, _ in objects
+                ]
                 means = 100.0 * np.asarray([item[0] for item in statistics])
                 lows = 100.0 * np.asarray([item[1] for item in statistics])
                 highs = 100.0 * np.asarray([item[2] for item in statistics])
+                positions = category_centers + (factor_index - 1) * bar_width
                 axis.bar(
-                    category_centers + (factor_index - 1) * bar_width,
+                    positions,
                     means,
                     width=bar_width,
                     color=colors[factor],
+                    edgecolor="none",
                     yerr=np.asarray([means - lows, highs - means]),
                     capsize=2.5,
                     error_kw={"elinewidth": 1.0, "capthick": 1.0, "ecolor": "#333333"},
                 )
+                seed_values = np.column_stack(
+                    [
+                        100.0 * _component_values(results[name], factor, include_residual=include_residual)
+                        for name, _ in objects
+                    ]
+                )
+                if seed_values.shape[0] == 10:
+                    add_seed_points(
+                        axis,
+                        positions,
+                        seed_values,
+                        bar_width=bar_width,
+                        show=show_seed_points,
+                        rng=np.random.default_rng(factor_index),
+                    )
             axis.set_xlim(*xlim)
             axis.set_xticks(category_centers, [label for _, label in objects])
             axis.set_ylim(0.0, 105.0)
             axis.set_yticks(np.arange(0.0, 100.1, 20.0))
-            axis.set_axisbelow(True)
-            axis.grid(axis="y", linewidth=0.7, alpha=0.25)
+            axis.grid(False)
             axis.spines["top"].set_visible(False)
             axis.spines["right"].set_visible(False)
 
@@ -747,49 +800,68 @@ def _plot_compact_aggregate_1x4(
         # spine, xlim[0]), Interaction<->Hidden left boundary (that midline). A single constant
         # ``legend_shift`` moves all three; both axes share width and xlim, so one data-space shift
         # is one figure-space shift for every square.
-        fig.canvas.draw()
-        category_midline = float(np.mean(category_centers))
-        legend_shift = category_midline - bar_width  # lands Sector on the Input-gate Interaction bar
-        legend_targets = (
-            ("sector", "Sector", axes[0], category_midline - legend_shift),
-            ("digit", "Digit", axes[1], xlim[0] - legend_shift),
-            ("interaction", "Interaction", axes[1], category_midline - legend_shift),
-        )
-        axis_top_frac = bottom_frac + height_frac
-        legend_y = axis_top_frac + 0.06
-        square_h = 0.14 / figure_height_in
-        square_w = 0.14 / figure_width_in
-        inv = fig.transFigure.inverted()
-        for factor, label, axis, x_data in legend_targets:
-            x_frac = inv.transform(axis.transData.transform((x_data, 0.0)))[0]
-            fig.add_artist(
-                Rectangle(
-                    (x_frac - square_w / 2.0, legend_y - square_h / 2.0),
-                    square_w,
-                    square_h,
-                    transform=fig.transFigure,
-                    facecolor=colors[factor],
-                    edgecolor="none",
+        if include_residual:
+            handles = [
+                Rectangle((0, 0), 1, 1, facecolor=colors[factor], edgecolor="none")
+                for factor in factors
+            ]
+            labels = [
+                "Residual (trial-level)" if factor == "residual" else factor.title()
+                for factor in factors
+            ]
+            fig.legend(
+                handles,
+                labels,
+                loc="upper center",
+                ncol=4,
+                frameon=False,
+                bbox_to_anchor=(0.52, 0.99),
+            )
+        else:
+            fig.canvas.draw()
+            category_midline = float(np.mean(category_centers))
+            legend_shift = category_midline - bar_width
+            legend_targets = (
+                ("sector", "Sector", axes[0], category_midline - legend_shift),
+                ("digit", "Digit", axes[1], xlim[0] - legend_shift),
+                ("interaction", "Interaction", axes[1], category_midline - legend_shift),
+            )
+            axis_top_frac = bottom_frac + height_frac
+            legend_y = axis_top_frac + 0.06
+            square_h = 0.14 / figure_height_in
+            square_w = 0.14 / figure_width_in
+            inv = fig.transFigure.inverted()
+            for factor, label, axis, x_data in legend_targets:
+                x_frac = inv.transform(axis.transData.transform((x_data, 0.0)))[0]
+                fig.add_artist(
+                    Rectangle(
+                        (x_frac - square_w / 2.0, legend_y - square_h / 2.0),
+                        square_w,
+                        square_h,
+                        transform=fig.transFigure,
+                        facecolor=colors[factor],
+                        edgecolor="none",
+                    )
                 )
-            )
-            fig.text(
-                x_frac + square_w / 2.0 + 0.008,
-                legend_y,
-                label,
-                transform=fig.transFigure,
-                ha="left",
-                va="center",
-                fontsize=13,
-            )
+                fig.text(
+                    x_frac + square_w / 2.0 + 0.008,
+                    legend_y,
+                    label,
+                    transform=fig.transFigure,
+                    ha="left",
+                    va="center",
+                    fontsize=13,
+                )
 
-        destination = figure_dir / "core_objects_aggregate_1x4.png"
+        suffix = "_with_residual" if include_residual else ""
+        destination = figure_dir / f"core_objects_aggregate_1x4{suffix}.png"
         fig.savefig(destination, dpi=180, bbox_inches="tight", pad_inches=0.04)
         # Workflow policy: the PDF sits next to the PNG in the local results tree. The
         # ``publication_fig_dir`` copy is an opt-in extra only (no automatic 6-Writing sync).
         fig.savefig(destination.with_suffix(".pdf"), bbox_inches="tight", pad_inches=0.04)
         if publication_fig_dir is not None:
             fig.savefig(
-                publication_fig_dir / "core_objects_aggregate_1x4.pdf",
+                publication_fig_dir / f"core_objects_aggregate_1x4{suffix}.pdf",
                 bbox_inches="tight",
                 pad_inches=0.04,
             )
@@ -847,17 +919,17 @@ def _consistency_report(
         values_by_factor = getattr(result, variant)
         factors = CM_FACTORS if variant == "aggregate_cm" else TRIAL_FACTORS
         for factor, old in zip(factors, old_values):
-            mean, low, high = _mean_ci(values_by_factor[factor] * 100.0)
+            mean, low, high = _mean_sem(values_by_factor[factor] * 100.0)
             outside = old < low or old > high
             explanation = (
-                "UNEXPLAINED outside subsample interval; run fails until protocol difference is "
+                "UNEXPLAINED outside mean +/- SEM band; run fails until protocol difference is "
                 "resolved"
                 if outside
-                else "within subsample interval"
+                else "within mean +/- SEM band"
             )
             lines.append(
                 f"{object_name} {variant} {factor}: new={mean:.4f}% "
-                f"CI=[{low:.4f}, {high:.4f}] old={old:.4f}% "
+                f"SEM={high - mean:.4f} old={old:.4f}% "
                 f"diff={mean - old:+.4f} pp; {explanation}"
             )
 
@@ -910,13 +982,12 @@ def _save_trace_arrays(
         values_by_factor = getattr(result, variant)
         for factor, old in zip(factors, old_values):
             values = values_by_factor[factor] * 100.0
-            mean, low, high = _mean_ci(values)
+            mean, low, high = _mean_sem(values)
             stem = f"{object_name}_{variant}_{factor}"
             regression_arrays[f"{stem}_draws"] = values.astype(np.float64)
             regression_arrays[f"{stem}_old"] = np.asarray(old, dtype=np.float64)
             regression_arrays[f"{stem}_mean"] = np.asarray(mean, dtype=np.float64)
-            regression_arrays[f"{stem}_ci_low"] = np.asarray(low, dtype=np.float64)
-            regression_arrays[f"{stem}_ci_high"] = np.asarray(high, dtype=np.float64)
+            regression_arrays[f"{stem}_sem"] = np.asarray(high - mean, dtype=np.float64)
             regression_arrays[f"{stem}_difference"] = np.asarray(mean - old, dtype=np.float64)
             if old < low or old > high:
                 unexplained += 1
@@ -1035,7 +1106,7 @@ def main() -> None:
     with csv_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(
             handle,
-            fieldnames=["object", "variant", "factor", "value", "ci_low", "ci_high"],
+            fieldnames=["object", "variant", "factor", "value", "sem"],
         )
         writer.writeheader()
         writer.writerows(tidy_rows)

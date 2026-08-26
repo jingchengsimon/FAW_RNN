@@ -151,11 +151,14 @@ def main() -> None:
     os.makedirs(args.save_dir, exist_ok=True)
     trajectory_path = os.path.abspath(args.trajectory)
     with np.load(trajectory_path, allow_pickle=False) as loaded:
-        feedback = loaded["feedback"].astype(np.float32, copy=False)
-        labels = loaded["labels"].reshape(-1, 2).astype(np.int64, copy=False)
+        raw_feedback = loaded["feedback"].astype(np.float32, copy=False)
+        raw_labels = loaded["labels"].astype(np.int64, copy=False)
         u = loaded["U"].astype(np.float32, copy=False)
         v = loaded["V"].astype(np.float32, copy=False)
         gate_shape = tuple(int(value) for value in loaded["weight_ih"].shape)
+    from utils.analysis.clutter.fig3_gate_distribution import exclude_zero_feedback_reset_frames
+
+    feedback, labels, reset_frames = exclude_zero_feedback_reset_frames(raw_feedback, raw_labels)
     sectors = labels[:, 1]
     selected, target, original_counts = equal_n_sector_mask(sectors, args.seed)
     print(
@@ -206,6 +209,7 @@ def main() -> None:
         "original_frames_by_sector": original_counts.astype(int).tolist(),
         "selected_frames_per_sector": target,
         "selected_frames_total": int(selected.sum()),
+        "reset_frames_excluded": reset_frames,
         "gate_tau": args.gate_tau,
         "point_tolerance": args.point_tolerance,
         "input_gate_shape_per_frame": list(gate_shape),

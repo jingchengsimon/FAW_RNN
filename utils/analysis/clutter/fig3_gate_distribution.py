@@ -111,6 +111,23 @@ def _gate_tensors(
     return gate[..., :input_size], gate[..., input_size:]
 
 
+def exclude_zero_feedback_reset_frames(
+    feedback: np.ndarray,
+    labels: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, int]:
+    """Flatten a trajectory and remove its zero-feedback sequence-start frames."""
+
+    flat_feedback = np.asarray(feedback, dtype=np.float32).reshape(-1, feedback.shape[-1])
+    flat_labels = np.asarray(labels, dtype=np.int64).reshape(-1, labels.shape[-1])
+    if flat_feedback.shape[0] != flat_labels.shape[0]:
+        raise ValueError("Feedback and labels must have the same flattened frame count")
+    keep = ~np.all(flat_feedback == 0.0, axis=1)
+    excluded = int(np.count_nonzero(~keep))
+    if excluded == 0:
+        raise RuntimeError("Expected zero-feedback sequence-start frames, found none")
+    return flat_feedback[keep], flat_labels[keep], excluded
+
+
 def _trajectory(
     encoded: torch.Tensor,
     model: torch.nn.Module,
@@ -392,6 +409,8 @@ def _radix_medians(
     input_size: int,
     tau: float,
     chunk_size: int,
+    *,
+    device: str | torch.device = "cpu",
 ) -> dict[str, float]:
     """Find exact even-sample float32 medians with four streaming radix passes."""
 
@@ -418,7 +437,7 @@ def _radix_medians(
             for kind, kind_states in states.items()
         }
         for _start, _end, gate_ih, gate_hh in iter_gate_chunks(
-            feedback, u, v, input_size, tau, chunk_size
+            feedback, u, v, input_size, tau, chunk_size, device=device
         ):
             for kind, gate in (("input", gate_ih), ("recurrent", gate_hh)):
                 bits = np.ascontiguousarray(gate).view(np.uint32).reshape(-1)
@@ -481,11 +500,13 @@ def compute_distribution_statistics(
     chunk_size: int,
     hist_bins: int,
     effective_hist_bins: int,
+    *,
+    device: str | torch.device = "cpu",
 ) -> tuple[dict[str, np.ndarray], dict[str, object]]:
     """Stream all requested distribution, centering, sign, and effective-weight statistics."""
 
+    feedback, flat_labels, _excluded = exclude_zero_feedback_reset_frames(feedback, labels)
     hidden_size, input_size = weight_ih.shape
-    flat_labels = labels.reshape(-1, labels.shape[-1])
     sectors = flat_labels[:, 1].astype(np.int64)
     edges = np.linspace(0.0, 1.0, hist_bins + 1, dtype=np.float64)
     delta_edges = np.linspace(-1.0, 1.0, hist_bins * 2 + 1, dtype=np.float64)
@@ -527,7 +548,7 @@ def compute_distribution_statistics(
 
     gate_pass_start = time.perf_counter()
     for chunk_idx, (start, end, gate_ih, gate_hh) in enumerate(
-        iter_gate_chunks(feedback, u, v, input_size, tau, chunk_size)
+        iter_gate_chunks(feedback, u, v, input_size, tau, chunk_size, device=device)
     ):
         chunk_sectors = sectors[start:end]
         for kind, gate, weight in (
@@ -599,7 +620,7 @@ def compute_distribution_statistics(
                 np.count_nonzero(np.abs(delta) > threshold)
             )
 
-    medians = _radix_medians(feedback, u, v, input_size, tau, chunk_size)
+    medians = _radix_medians(feedback, u, v, input_size, tau, chunk_size, device=device)
     base_summary: dict[str, object] = {}
     for kind in ("input", "recurrent"):
         base_summary[kind] = moments[kind].summary()
@@ -671,7 +692,7 @@ def compute_distribution_statistics(
     effective_hist_ih = np.zeros(effective_hist_bins, dtype=np.int64)
     effective_hist_hh = np.zeros(effective_hist_bins, dtype=np.int64)
     for _start, _end, gate_ih, gate_hh in iter_gate_chunks(
-        feedback, u, v, input_size, tau, chunk_size
+        feedback, u, v, input_size, tau, chunk_size, device=device
     ):
         effective_hist_ih += _hist(gate_ih * weight_ih[None, ...], effective_edges_ih)
         effective_hist_hh += _hist(gate_hh * weight_hh[None, ...], effective_edges_hh)
@@ -777,11 +798,13 @@ def main() -> None:
         args.gate_chunk_size,
         args.hist_bins,
         args.effective_hist_bins,
+        device=device,
     )
     stats_path = os.path.join(args.save_dir, "gawf_gate_distribution_stats.npz")
     np.savez_compressed(stats_path, **arrays)
 
     n_sequences, frame_num, feedback_dim = trajectory["feedback"].shape
+    reset_frames = int(np.all(trajectory["feedback"] == 0.0, axis=-1).sum())
     full_gate_bytes = n_sequences * frame_num * (
         weight_ih.size + weight_hh.size
     ) * np.dtype(np.float32).itemsize
@@ -794,7 +817,10 @@ def main() -> None:
             "data_suffix": args.data_suffix,
             "n_sequences": n_sequences,
             "frames_per_sequence": frame_num,
-            "n_frames": n_sequences * frame_num,
+            "n_frames": n_sequences * frame_num - reset_frames,
+            "raw_n_frames": n_sequences * frame_num,
+            "reset_frames_excluded": reset_frames,
+            "gate_frame_filter": "exclude all-zero pre-step feedback sequence starts",
             "feedback_dim": feedback_dim,
             "input_gate_shape_per_frame": list(weight_ih.shape),
             "recurrent_gate_shape_per_frame": list(weight_hh.shape),

@@ -1,8 +1,8 @@
 """Visualize GaWF feedback-component ablation metrics.
 
-Reads ``ablation_metrics.json`` from ``utils.analysis/feedback_ablation.py`` and produces:
+Reads exactly ten ``ablation_metrics.json`` files and produces:
 - a grouped bar chart of char/sector accuracy per ablation condition
-- post-fg-switch recovery curves for char and sector readouts
+- switch recovery curves with seed mean ± SEM for char and sector readouts
 
 Outputs (in --save_dir):
 - fig_ablation_2x2.png
@@ -13,13 +13,17 @@ from __future__ import annotations
 import os as _anal_os
 import sys as _anal_sys
 
-_ANAL_PROJECT_ROOT = _anal_os.path.dirname(_anal_os.path.dirname(_anal_os.path.dirname(_anal_os.path.abspath(__file__))))
+_ANAL_PROJECT_ROOT = _anal_os.path.abspath(
+    _anal_os.path.join(_anal_os.path.dirname(__file__), "..", "..", "..")
+)
 if _ANAL_PROJECT_ROOT not in _anal_sys.path:
     _anal_sys.path.insert(0, _ANAL_PROJECT_ROOT)
 
 from utils.analysis.anal_paths import output_dir
+from utils.analysis.clutter.multiseed_plotting import add_seed_points
 
 import argparse
+import glob
 import json
 import os
 from typing import Any, Dict, List
@@ -47,17 +51,50 @@ def parse_args() -> argparse.Namespace:
         default=str(output_dir("G_behaviour", "viz_feedback_ablation", "figs")),
         help="Directory for PNG outputs.",
     )
+    parser.add_argument(
+        "--conditions",
+        nargs="*",
+        default=None,
+        help="Optional ordered subset of saved ablation conditions to plot.",
+    )
+    parser.add_argument(
+        "--show-seed-points",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Overlay one neutral-gray point per training seed on 10-seed bar charts.",
+    )
     return parser.parse_args()
 
 
-def _load_metrics(data_dir: str) -> Dict[str, Any]:
-    path = os.path.join(data_dir, "ablation_metrics.json")
-    with open(path, "r") as f:
-        return json.load(f)
+def _load_metrics(data_dir: str) -> List[Dict[str, Any]]:
+    paths = sorted(glob.glob(os.path.join(data_dir, "*-seed*", "ablation_metrics.json")))
+    if not paths:
+        path = os.path.join(data_dir, "ablation_metrics.json")
+        paths = [path] if os.path.isfile(path) else []
+    if len(paths) != 10:
+        raise RuntimeError(f"Expected exactly ten ablation metrics files, found {len(paths)}.")
+    return [json.load(open(path)) for path in paths]
 
 
-def _conditions(metrics: Dict[str, Any]) -> List[str]:
-    return list(metrics.get("conditions_order", metrics["conditions"].keys()))
+def _conditions(metrics: List[Dict[str, Any]], selected: List[str] | None) -> List[str]:
+    available = list(
+        metrics[0].get("conditions_order", metrics[0]["conditions"].keys())
+    )
+    conditions = available if selected is None else selected
+    for condition in conditions:
+        if any(condition not in record["conditions"] for record in metrics):
+            raise RuntimeError(f"Condition {condition!r} is not present in every seed.")
+    return conditions
+
+
+def _mean_sem(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Return mean and cross-seed SEM over exactly ten training seeds."""
+
+    values = np.asarray(values, dtype=np.float64)
+    if values.shape[0] != 10:
+        raise ValueError(f"Expected exactly ten seeds, got {values.shape[0]}.")
+    mean = values.mean(axis=0)
+    return mean, values.std(axis=0, ddof=1) / np.sqrt(values.shape[0])
 
 
 def _pretty_condition(name: str) -> str:
@@ -87,23 +124,46 @@ def _save_figure(fig: plt.Figure, out_path: str) -> None:
     fig.savefig(pdf_path, bbox_inches="tight", pad_inches=0.06)
 
 
-def _plot_bar(metrics: Dict[str, Any], out_path: str) -> None:
-    conds = _conditions(metrics)
+def _plot_bar(
+    metrics: List[Dict[str, Any]],
+    conds: List[str],
+    out_path: str,
+    *,
+    show_seed_points: bool,
+) -> None:
     char = np.asarray(
-        [metrics["conditions"][c]["char_acc"] for c in conds],
-        dtype=np.float32,
+        [[record["conditions"][c]["char_acc"] for c in conds] for record in metrics],
+        dtype=np.float64,
     )
     sector = np.asarray(
-        [metrics["conditions"][c]["sector_acc"] for c in conds],
-        dtype=np.float32,
+        [[record["conditions"][c]["sector_acc"] for c in conds] for record in metrics],
+        dtype=np.float64,
     )
+    char_mean, char_sem = _mean_sem(char)
+    sector_mean, sector_sem = _mean_sem(sector)
     x = np.arange(len(conds), dtype=np.float32)
     width = 0.36
 
     fig, ax = plt.subplots(figsize=(8.4, 4.7))
     # Digit/sector colours aligned with core_objects_aggregate_2x2 (digit #E76F51, sector #264653).
-    bars0 = ax.bar(x - width / 2, char, width=width, color="#E76F51", label="char")
-    bars1 = ax.bar(x + width / 2, sector, width=width, color="#264653", label="sector")
+    bars0 = ax.bar(
+        x - width / 2, char_mean, width=width, yerr=char_sem, color="#E76F51", label="char"
+    )
+    bars1 = ax.bar(
+        x + width / 2,
+        sector_mean,
+        width=width,
+        yerr=sector_sem,
+        color="#264653",
+        label="sector",
+    )
+    rng = np.random.default_rng(0)
+    add_seed_points(
+        ax, x - width / 2, char, bar_width=width, show=show_seed_points, rng=rng
+    )
+    add_seed_points(
+        ax, x + width / 2, sector, bar_width=width, show=show_seed_points, rng=rng
+    )
     ax.set_ylabel("Accuracy (%)")
     ax.set_xticks(x)
     ax.set_xticklabels([_pretty_condition(c) for c in conds])
@@ -130,8 +190,7 @@ def _plot_bar(metrics: Dict[str, Any], out_path: str) -> None:
     print(f"Saved figure: {out_path}")
 
 
-def _plot_recovery(metrics: Dict[str, Any], out_path: str) -> None:
-    conds = _conditions(metrics)
+def _plot_recovery(metrics: List[Dict[str, Any]], conds: List[str], out_path: str) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(9.2, 4.5), sharex=True, sharey=True)
     colors = {
         "baseline": "#4C78A8",
@@ -141,7 +200,7 @@ def _plot_recovery(metrics: Dict[str, Any], out_path: str) -> None:
         "shuffle_digit": "#72B7B2",
         "shuffle_sector": "#B279A2",
     }
-    first = metrics["conditions"][conds[0]]
+    first = metrics[0]["conditions"][conds[0]]
     first_offsets = np.asarray(
         first.get("switch_offsets", first["switch_post_offsets"]),
         dtype=np.int64,
@@ -161,19 +220,27 @@ def _plot_recovery(metrics: Dict[str, Any], out_path: str) -> None:
         (axes[1], "sector", "Sector readout", 100.0 / 9.0, "chance = 11.1%"),
     ]:
         for cond in conds:
-            row = metrics["conditions"][cond]
-            if "switch_offsets" in row:
-                offsets = np.asarray(row["switch_offsets"], dtype=np.int64)
+            rows = [record["conditions"][cond] for record in metrics]
+            if "switch_offsets" in rows[0]:
+                offset_key = "switch_offsets"
+                offsets = np.asarray(rows[0]["switch_offsets"], dtype=np.int64)
                 value_key = f"switch_{key}_acc"
             else:
-                offsets = np.asarray(row["switch_post_offsets"], dtype=np.int64)
+                offset_key = "switch_post_offsets"
+                offsets = np.asarray(rows[0]["switch_post_offsets"], dtype=np.int64)
                 value_key = f"switch_post_{key}_acc"
-            values = np.asarray(row[value_key], dtype=np.float32)
             if not np.array_equal(offsets, first_offsets):
                 raise RuntimeError(f"Switch offsets differ for ablation condition {cond!r}")
+            values = np.asarray([row[value_key] for row in rows], dtype=np.float64)
+            if any(
+                not np.array_equal(np.asarray(row[offset_key]), first_offsets)
+                for row in rows
+            ):
+                raise RuntimeError(f"Seed offsets differ for ablation condition {cond!r}")
+            mean, sem = _mean_sem(values)
             ax.plot(
                 x,
-                values,
+                mean,
                 marker="o",
                 markevery=selected_indices.tolist(),
                 linewidth=1.8,
@@ -181,6 +248,15 @@ def _plot_recovery(metrics: Dict[str, Any], out_path: str) -> None:
                 label=cond,
                 color=colors.get(cond),
             )
+            if np.any(sem):
+                ax.fill_between(
+                    x,
+                    mean - sem,
+                    mean + sem,
+                    color=colors.get(cond),
+                    alpha=0.55,
+                    linewidth=0,
+                )
         ax.axhline(
             chance_level,
             color="0.3",
@@ -217,7 +293,11 @@ def _plot_recovery(metrics: Dict[str, Any], out_path: str) -> None:
         fontsize=8,
         ncol=len(conds),
     )
-    fig.suptitle("Switch-window recovery under feedback ablation", fontsize=12, y=0.99)
+    fig.suptitle(
+        "Switch-window recovery under feedback ablation (mean ± SEM)",
+        fontsize=12,
+        y=0.99,
+    )
     fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.84])
     _save_figure(fig, out_path)
     plt.close(fig)
@@ -230,10 +310,17 @@ def main() -> None:
     save_dir = os.path.abspath(args.save_dir)
     os.makedirs(save_dir, exist_ok=True)
     metrics = _load_metrics(data_dir)
+    conditions = _conditions(metrics, args.conditions)
 
-    _plot_bar(metrics, os.path.join(save_dir, "fig_ablation_2x2.png"))
+    _plot_bar(
+        metrics,
+        conditions,
+        os.path.join(save_dir, "fig_ablation_2x2.png"),
+        show_seed_points=args.show_seed_points,
+    )
     _plot_recovery(
         metrics,
+        conditions,
         os.path.join(save_dir, "fig_ablation_switch_recovery.png"),
     )
 
