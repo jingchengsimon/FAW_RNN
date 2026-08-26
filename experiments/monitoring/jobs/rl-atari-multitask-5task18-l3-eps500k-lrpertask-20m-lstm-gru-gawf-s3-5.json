@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "id": "rl-atari-multitask-5task18-l3-eps500k-lrpertask-20m-lstm-gru-gawf-s3-5",
+  "description": "Five-task full18 L3 formal 20M Amarel extension: LSTM/GRU/GaWF, seeds 3-5, per-task 500K replay, per-task 1M LR decay, and fixed 500K global epsilon decay.",
+  "host": "amarel",
+  "status": "queued",
+  "created_at": "2026-08-13T23:56:14-04:00",
+  "updated_at": "2026-08-26T12:06:37-04:00",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn_snapshot_ed1f038",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": ["60561566", "60561658", "60656109", "60656112", "60686224", "60686225", "60739444", "60787710", "60835981", "60835982", "60835983"],
+    "run_ids": [],
+    "process_patterns": [
+      "atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gru_seed",
+      "atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_lstm_seed",
+      "atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gawf_seed"
+    ],
+    "collect_gpu": false
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/formal/*.out",
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/formal/*.err",
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/recovery_20260820_*.out",
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/recovery_20260820_*.err",
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/recovery_20260821_*.out",
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/recovery_20260821_*.err",
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/recovery_20260823_*.out",
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/recovery_20260823_*.err",
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/recovery_20260825_*.out",
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/recovery_20260825_*.err"
+    ],
+    "status_dir": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status",
+    "result_paths": [
+      "/scratch/js3269/results/data/rl/atari/5task_18action/formal_20m_4mpertask/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_{gru,lstm,gawf}_seed{3,4,5}"
+    ]
+  },
+  "tracking": {
+    "expected_units": 9,
+    "auto_complete": true,
+    "defaults": {
+      "metrics_file": "metrics.json",
+      "history_file": "metrics_history.jsonl",
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1,
+      "expected": {
+        "global_step": 20000000,
+        "num_layers": 3,
+        "replay_layout": "per_task",
+        "buffer_size": 500000,
+        "learning_rate_decay_step": 0,
+        "learning_rate_decay_per_task_steps": 1000000,
+        "learning_rate_decay_applied": true,
+        "exploration_steps": 500000
+      }
+    },
+    "units": [
+      {
+        "id": "gru-seed3",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/formal_20m_4mpertask/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gru_seed3",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gru_seed3.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gru_seed3.fail",
+        "expected": {"model_type": "gru", "hidden_size": 458}
+      },
+      {
+        "id": "gru-seed4",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/formal_20m_4mpertask/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gru_seed4",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gru_seed4.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gru_seed4.fail",
+        "expected": {"model_type": "gru", "hidden_size": 458}
+      },
+      {
+        "id": "gru-seed5",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/formal_20m_4mpertask/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gru_seed5",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gru_seed5.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gru_seed5.fail",
+        "expected": {"model_type": "gru", "hidden_size": 458}
+      },
+      {
+        "id": "lstm-seed3",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/formal_20m_4mpertask/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_lstm_seed3",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_lstm_seed3.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_lstm_seed3.fail",
+        "expected": {"model_type": "lstm", "hidden_size": 373}
+      },
+      {
+        "id": "lstm-seed4",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/formal_20m_4mpertask/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_lstm_seed4",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_lstm_seed4.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_lstm_seed4.fail",
+        "expected": {"model_type": "lstm", "hidden_size": 373}
+      },
+      {
+        "id": "lstm-seed5",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/formal_20m_4mpertask/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_lstm_seed5",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_lstm_seed5.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_lstm_seed5.fail",
+        "expected": {"model_type": "lstm", "hidden_size": 373}
+      },
+      {
+        "id": "gawf-seed3",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/formal_20m_4mpertask/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gawf_seed3",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gawf_seed3.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gawf_seed3.fail",
+        "expected": {"model_type": "gawf", "hidden_size": 604}
+      },
+      {
+        "id": "gawf-seed4",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/formal_20m_4mpertask/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gawf_seed4",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gawf_seed4.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gawf_seed4.fail",
+        "expected": {"model_type": "gawf", "hidden_size": 604}
+      },
+      {
+        "id": "gawf-seed5",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/formal_20m_4mpertask/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gawf_seed5",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gawf_seed5.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gawf_seed5.fail",
+        "expected": {"model_type": "gawf", "hidden_size": 604}
+      }
+    ]
+  },
+  "notes": [
+    "Array tasks 6-8 map to GRU seeds 3-5; 9-11 map to LSTM seeds 3-5; 12-14 map to GaWF seeds 3-5.",
+    "2026-08-17: recovery array 60656109 resumes timed-out tasks 10,13,14 at throttle 1; replacement array 60656112 resumes formerly stuck pending tasks 6,7,11,12 at throttle 1. The cancelled originals were pending only and had no active writer.",
+    "2026-08-20: recovery array 60686224 runs GRU seeds 3-4 (tasks 6-7) in round 1.",
+    "2026-08-21: 60686225 was cancelled before any array task started because its afterok dependency left idle capacity. Replacement array 60739444 runs LSTM seeds 4-5 and GaWF seeds 3-5 (tasks 10-14) at throttle 5 with no dependency, preserving each exact checkpoint/replay/result leaf.",
+    "2026-08-23: GRU seed4 task 7 in array 60686224 reached 17.770M steps, then ended at the 72-hour limit with Slurm signal 10 and no active writer. Recovery array 60787710_7 resumes its exact checkpoint and five replay partitions.",
+    "2026-08-25: GRU seed3, LSTM seed5, and GaWF seed3/5 had no active writer after 72-hour exit 0:10. Recovery wrapper array 60835981 maps GRU3/LSTM5/GaWF3 to their exact leaves. Job 60836173 was later cancelled before execution; GaWF seed5 task 60835982_5 was restored to afterany:60835981_1, preserving at most six concurrent GPU tasks.",
+    "2026-08-25: active GaWF seed4 is 60739444_13. Recovery task 60835983_6 depends on afternotok:60739444_13, so it starts only if the old batch-signal job times out; all new wrapper tasks use direct SIGUSR1@600 and self-requeue after checkpointing.",
+    "Each array task requests one Ada Lovelace GPU; array throttle is 2.",
+    "Array 60561566 failed before training because the comma-delimited SEEDS_CSV value was split by Slurm --export; its failed artifact leaf remains preserved under snapshot_32008e4.",
+    "The active code root is a read-only snapshot derived from commit ed1f038; only its exact artifact leaf is writable."
+  ]
+}

@@ -6,10 +6,16 @@ from argparse import Namespace
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from utils.training.atari.atari_envs import _EpisodeTaskScheduler
 from utils.training.atari.atari_replay import AtariReplayBuffer, PerTaskAtariReplayBuffer
-from utils.training.train_scripts.atari_dqn import _learning_ready
+from utils.training.train_scripts.atari_dqn import (
+    _json_safe,
+    _learning_ready,
+    _linear_epsilon,
+    _resolve_exploration_steps,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -122,6 +128,50 @@ def test_learning_waits_for_every_task_threshold() -> None:
     assert _learning_ready(args, 100_000, counts)
 
 
+def test_atari_default_epsilon_decay_uses_fixed_global_steps() -> None:
+    args = Namespace(
+        total_timesteps=10_000_000,
+        exploration_steps=None,
+        exploration_fraction=None,
+        start_epsilon=1.0,
+        end_epsilon=0.01,
+    )
+
+    _resolve_exploration_steps(args)
+
+    assert args.exploration_steps == 500_000
+    assert _linear_epsilon(args, 500_000) == 0.01
+
+
+def test_atari_legacy_epsilon_fraction_requires_explicit_opt_in() -> None:
+    args = Namespace(
+        total_timesteps=5_000_000,
+        exploration_steps=None,
+        exploration_fraction=0.10,
+        start_epsilon=1.0,
+        end_epsilon=0.01,
+    )
+
+    _resolve_exploration_steps(args)
+
+    assert args.exploration_steps == 500_000
+
+
+def test_atari_rejects_ambiguous_epsilon_schedule() -> None:
+    args = Namespace(
+        total_timesteps=5_000_000,
+        exploration_steps=500_000,
+        exploration_fraction=0.10,
+    )
+
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        _resolve_exploration_steps(args)
+
+
+def test_unavailable_atari_metrics_are_json_null_not_nan() -> None:
+    assert _json_safe({"loss": float("nan"), "fps": 12.0}) == {"loss": None, "fps": 12.0}
+
+
 def test_per_task_pilot_completion_validator_only_checks_required_artifacts() -> None:
     """Completion requires only final artifacts, requested steps, and finite loss."""
 
@@ -159,3 +209,15 @@ def test_per_task_pilot_completion_validator_only_checks_required_artifacts() ->
     assert '"metrics_history.jsonl"' in validator
     assert "Missing final or resumable checkpoint" in validator
     assert "!= 1" not in validator
+
+
+def test_five_task_runner_signals_training_step_for_checkpoint_requeue() -> None:
+    """The pre-timeout warning must reach Python, not only the batch shell."""
+
+    runner = (
+        ROOT / "experiments/rl/atari/amarel/run_atari_5task_18action_l3_array.sh"
+    ).read_text(encoding="utf-8")
+
+    assert "#SBATCH --signal=USR1@600" in runner
+    assert "#SBATCH --signal=B:USR1" not in runner
+    assert 'scontrol requeue "$SLURM_JOB_ID"' in runner

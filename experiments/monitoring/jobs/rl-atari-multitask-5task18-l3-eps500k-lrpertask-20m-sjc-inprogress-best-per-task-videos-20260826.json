@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "id": "rl-atari-multitask-5task18-l3-eps500k-lrpertask-20m-sjc-inprogress-best-per-task-videos-20260826",
+  "description": "SJC current-progress diagnostic videos: for each model/task pair, record one fixed greedy episode from the seed with the highest latest training-history return for that task.",
+  "host": "sjc-remote",
+  "status": "completed",
+  "created_at": "2026-08-26T12:06:37-04:00",
+  "updated_at": "2026-08-26T12:32:00-04:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": ["sjc_atari5_inprogress_videos_20260826_r5"],
+    "tmux_session": "sjc_atari5_inprogress_videos_20260826_r5",
+    "process_patterns": ["evaluate_dqn_video"],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/amarel_inprogress_videos_20260826/logs/sjc_atari5_inprogress_videos_20260826.out",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/amarel_inprogress_videos_20260826/logs/sjc_atari5_inprogress_videos_20260826.err"
+    ],
+    "result_paths": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/videos/5task_18action/amarel_inprogress_20260826_best_per_task/{gru,lstm,gawf}"
+    ]
+  },
+  "tracking": {
+    "expected_units": 15,
+    "auto_complete": true,
+    "result_globs": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/videos/5task_18action/amarel_inprogress_20260826_best_per_task/*/*/*_eval20260826.mp4"
+    ],
+    "defaults": {
+      "validation_mode": "artifacts"
+    }
+  },
+  "notes": [
+    "SJC aim3_rnn was verified with torch 2.3.1, CUDA, OpenCV 4.12.0, Gymnasium 1.3.0, and the canonical Atari evaluator before launch.",
+    "The initial tmux launch exited before evaluation because SJC's repository evaluator lacked multi-task video arguments. A later isolated attempt also exposed SJC's missing canonical 18-action wrapper. The isolated r5 evaluator and environment wrapper were preflighted on Skiing and leave SJC's repository code unchanged; r5 retains the four validated videos and resumes only the remaining eleven.",
+    "The isolated SJC input leaf contains 15 Amarel metrics histories (181,976,602 bytes) and only nine selected model states. Replay buffers were intentionally not transferred.",
+    "For every model/task pair, selection uses the highest finite latest per_env episodic_return_100 across training seeds. Ties prefer the larger history step, then the lower seed number.",
+    "Each video metadata records selection-history step/return and the actual checkpoint global_step used. Resumable checkpoints are reduced to model state only for evaluation.",
+    "2026-08-26: r5 exited 0. All 15 requested final MP4 files and their metadata were validated one-to-one against the selection manifest."
+  ]
+}

@@ -1,0 +1,67 @@
+"""Selection coverage for isolated experiment-progress manifest lookups."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from subprocess import CompletedProcess
+from unittest.mock import patch
+
+from experiments.monitoring.job_registry import RegistryError
+from experiments.monitoring.progress import collect_remote_jobs, select_job
+
+
+def _manifest(job_id: str, *, status: str = "running") -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "id": job_id,
+        "description": f"{job_id} description",
+        "host": "sjc-remote",
+        "status": status,
+        "remote_root": "/remote/project",
+        "environment": {"name": "aim3_rnn", "conda_init": "/remote/conda.sh"},
+    }
+
+
+def _write_manifest(root: Path, manifest: dict[str, object]) -> None:
+    jobs_dir = root / "jobs"
+    jobs_dir.mkdir(parents=True, exist_ok=True)
+    (jobs_dir / f"{manifest['id']}.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+
+def test_exact_id_does_not_read_unrelated_historical_manifest(tmp_path: Path) -> None:
+    target = _manifest("sjc-exact-target")
+    _write_manifest(tmp_path, target)
+    (tmp_path / "jobs" / "broken-history.json").write_text("{not json", encoding="utf-8")
+    (tmp_path / "active_jobs.json").write_text("{not json", encoding="utf-8")
+
+    selected = select_job("sjc-exact-target", base_dir=tmp_path)
+
+    assert selected["id"] == "sjc-exact-target"
+
+
+def test_nonexistent_id_does_not_fall_back_to_historical_scan(tmp_path: Path) -> None:
+    (tmp_path / "jobs").mkdir()
+    (tmp_path / "jobs" / "broken-history.json").write_text("{not json", encoding="utf-8")
+
+    try:
+        select_job("historical", base_dir=tmp_path)
+    except RegistryError as exc:
+        assert "No retained job has exact ID 'historical'" in str(exc)
+    else:
+        raise AssertionError("A nonexistent complete ID must fail")
+
+
+def test_socket_check_failure_does_not_open_a_remote_ssh_connection() -> None:
+    job = _manifest("sjc-exact-target")
+
+    with patch(
+        "experiments.monitoring.progress.subprocess.run",
+        return_value=CompletedProcess(["ssh"], 255, "", "Control socket missing"),
+    ) as run:
+        reports = collect_remote_jobs([job], timeout=30)
+
+    assert len(reports) == 1
+    assert reports[0]["probe_error"] == "SSH socket unavailable: Control socket missing"
+    assert run.call_count == 1
+    assert run.call_args.args[0] == ["ssh", "-O", "check", "sjc-remote"]

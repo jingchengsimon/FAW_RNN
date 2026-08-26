@@ -566,7 +566,7 @@ class _PreemptionWatcher:
     The handler only flips a flag; the training loop performs the actual save at
     a point where model, optimizer, and replay are mutually consistent. Slurm
     sends SIGTERM on preemption and can be asked for an early SIGUSR1 warning
-    via ``--signal=B:USR1@120``.
+    via ``--signal=USR1@600``.
     """
 
     def __init__(self) -> None:
