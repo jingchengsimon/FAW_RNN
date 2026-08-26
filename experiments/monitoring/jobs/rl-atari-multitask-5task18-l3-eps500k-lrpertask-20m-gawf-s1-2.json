@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+    "id": "rl-atari-multitask-5task18-l3-eps500k-lrpertask-20m-gawf-s1-2",
+  "description": "Five-task full18 L3 formal 20M GaWF restart on Amarel: two seeds, per-task 500K replay, per-task 1M LR decay, and fixed 500K global epsilon decay.",
+  "host": "amarel",
+  "status": "queued",
+  "created_at": "2026-08-13T00:26:47-04:00",
+  "updated_at": "2026-08-25T11:39:12-04:00",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn_snapshot_5a1594f",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": ["60536204", "60637596", "60686223", "60835981"],
+    "run_ids": [],
+    "process_patterns": [
+      "atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gawf_seed"
+    ],
+    "collect_gpu": false
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_gawf_amarel72h/formal/*.out",
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_gawf_amarel72h/formal/*.err",
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_gawf_amarel72h/recovery_20260820_*.out",
+      "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_gawf_amarel72h/recovery_20260820_*.err",
+      "/cache/home/js3269/projects/aim3_gawf_rnn_snapshot_ed1f038/experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/recovery_20260825_*.out",
+      "/cache/home/js3269/projects/aim3_gawf_rnn_snapshot_ed1f038/experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_rnn_seeds3_5_amarel72h/recovery_20260825_*.err"
+    ],
+    "status_dir": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_gawf_amarel72h/status",
+    "result_paths": [
+      "/scratch/js3269/results/data/rl/atari/5task_18action/formal_20m_4mpertask/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gawf_seed*"
+    ]
+  },
+  "tracking": {
+    "expected_units": 2,
+    "auto_complete": true,
+    "defaults": {
+      "metrics_file": "metrics.json",
+      "history_file": "metrics_history.jsonl",
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1,
+      "expected": {
+        "global_step": 20000000,
+        "model_type": "gawf",
+        "num_layers": 3,
+        "hidden_size": 604,
+        "replay_layout": "per_task",
+        "buffer_size": 500000,
+        "learning_rate_decay_step": 0,
+        "learning_rate_decay_per_task_steps": 1000000,
+        "learning_rate_decay_applied": true,
+        "exploration_steps": 500000
+      }
+    },
+    "units": [
+      {
+        "id": "gawf-seed1",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/formal_20m_4mpertask/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gawf_seed1",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_gawf_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gawf_seed1.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_gawf_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gawf_seed1.fail"
+      },
+      {
+        "id": "gawf-seed2",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/formal_20m_4mpertask/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gawf_seed2",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_gawf_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gawf_seed2.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_gawf_amarel72h/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gawf_seed2.fail"
+      }
+    ]
+  },
+  "notes": [
+    "Fresh restart; the paused SJC GaWF results were not migrated.",
+    "Array 8-9 with SEED_COUNT=2 maps to GaWF seeds 1-2; each array task requests one Ada Lovelace GPU.",
+    "2026-08-20: recovery array 60686223 resumes GaWF seeds 1-2 (tasks 8-9) in round 1; it is one of six concurrent recovery units.",
+    "2026-08-25: both units reached 72-hour exit 0:10 with no active writer, resumable checkpoint, and five replay partitions. Shared recovery array 60835981 maps slots 2-3 to their exact leaves under this snapshot while retaining the direct-SIGUSR1 automatic requeue behavior.",
+    "The code root is a read-only snapshot of commit 5a1594f563bb6dcde8b4bfe0da4da4473614a9b4; only its exact artifact leaf is writable."
+  ]
+}

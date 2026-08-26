@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+    "id": "rl-atari-multitask-5task18-l3-eps500k-lrpertask-20m-lstm-gru-s1-2",
+  "description": "Five-task full18 L3 formal 20M LSTM/GRU seeds 1-2: SJC-origin results resumed on Amarel, per-task 500K replay, per-task 1M LR decay, and fixed 500K global epsilon decay.",
+  "host": "amarel",
+  "status": "queued",
+  "created_at": "2026-08-12T23:28:00-04:00",
+  "updated_at": "2026-08-20T09:06:07-04:00",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn_sjc_resume_5c08adea",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": ["60561827", "60656110", "60686222"],
+    "run_ids": [
+      "sjc_5task_l3_20m_seed1_20260812",
+      "sjc_5task_l3_20m_seed2_20260812"
+    ],
+    "tmux_session": null,
+    "process_patterns": [
+      "atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m"
+    ],
+    "collect_gpu": false
+  },
+  "paths": {
+        "log_globs": [
+        "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_lstm_gru_amarel72h_resume/*.out",
+        "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_lstm_gru_amarel72h_resume/*.err"
+        ],
+    "status_dir": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_lstm_gru_amarel72h_resume/status",
+    "result_paths": [
+      "/scratch/js3269/results/data/rl/atari/5task_18action/formal_20m_4mpertask/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_*_seed*"
+    ]
+  },
+  "tracking": {
+    "expected_units": 4,
+    "auto_complete": true,
+    "defaults": {
+      "metrics_file": "metrics.json",
+      "history_file": "metrics_history.jsonl",
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1,
+      "expected": {
+        "global_step": 20000000,
+        "replay_layout": "per_task",
+        "buffer_size": 500000,
+        "learning_rate_decay_step": 0,
+        "learning_rate_decay_per_task_steps": 1000000,
+        "learning_rate_decay_applied": true,
+        "exploration_steps": 500000
+      }
+    },
+    "units": [
+      {
+        "id": "gru-seed1",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/formal_20m_4mpertask/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gru_seed1",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_lstm_gru_amarel72h_resume/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gru_seed1.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_lstm_gru_amarel72h_resume/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gru_seed1.fail",
+        "expected": {"model_type": "gru", "num_layers": 3, "hidden_size": 458}
+      },
+      {
+        "id": "gru-seed2",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/formal_20m_4mpertask/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gru_seed2",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_lstm_gru_amarel72h_resume/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gru_seed2.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_lstm_gru_amarel72h_resume/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_gru_seed2.fail",
+        "expected": {"model_type": "gru", "num_layers": 3, "hidden_size": 458}
+      },
+      {
+        "id": "lstm-seed1",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/formal_20m_4mpertask/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_lstm_seed1",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_lstm_gru_amarel72h_resume/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_lstm_seed1.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_lstm_gru_amarel72h_resume/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_lstm_seed1.fail",
+        "expected": {"model_type": "lstm", "num_layers": 3, "hidden_size": 373}
+      },
+      {
+        "id": "lstm-seed2",
+        "result_dir": "/scratch/js3269/results/data/rl/atari/5task_18action/formal_20m_4mpertask/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_lstm_seed2",
+        "done_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_lstm_gru_amarel72h_resume/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_lstm_seed2.done",
+        "fail_file": "experiments/rl/atari/amarel/artifacts/atari_5task_18action_l3_formal_20m_4mpertask_lstm_gru_amarel72h_resume/status/atari_dqn_5task_fs4_stack4_l3_buf0p5m_eps500k_lrpertask1m_20m_lstm_seed2.fail",
+        "expected": {"model_type": "lstm", "num_layers": 3, "hidden_size": 373}
+      }
+    ]
+  },
+  "notes": [
+        "The original retained ID included GaWF, but this record tracks only LSTM/GRU; GaWF moved to rl-atari-multitask-5task18-l3-eps500k-lrpertask-20m-gawf-s1-2 on Amarel.",
+    "2026-08-17: Amarel recovery array 60656110 resumes timed-out GRU seed1 (task 4) and LSTM seed2 (task 7), at throttle 1 using their existing checkpoints and replay backing.",
+    "2026-08-20: recovery array 60686222 resumes GRU seed1 (task 4) and LSTM seed2 (task 7) in round 1; it is one of six concurrent recovery units.",
+    "GPU0 runs seed1 GRU/LSTM concurrently; GPU1 runs the seed2 counterparts concurrently.",
+    "20M global steps under transition-balanced collection is approximately 4M environment steps per task.",
+    "Epsilon decays from 1.0 to 0.01 over the fixed first 500k global steps; the per-task 1M LR threshold is expected to trigger."
+  ]
+}

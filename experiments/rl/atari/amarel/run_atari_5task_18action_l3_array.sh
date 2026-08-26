@@ -7,7 +7,7 @@
 #SBATCH --mem=64G
 #SBATCH --time=30:00:00
 #SBATCH --requeue
-#SBATCH --signal=B:USR1@120
+#SBATCH --signal=USR1@600
 
 # Run one recoverable five-task/full-18 Atari L3 model and seed.
 

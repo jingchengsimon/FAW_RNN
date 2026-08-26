@@ -209,3 +209,15 @@ def test_per_task_pilot_completion_validator_only_checks_required_artifacts() ->
     assert '"metrics_history.jsonl"' in validator
     assert "Missing final or resumable checkpoint" in validator
     assert "!= 1" not in validator
+
+
+def test_five_task_runner_signals_training_step_for_checkpoint_requeue() -> None:
+    """The pre-timeout warning must reach Python, not only the batch shell."""
+
+    runner = (
+        ROOT / "experiments/rl/atari/amarel/run_atari_5task_18action_l3_array.sh"
+    ).read_text(encoding="utf-8")
+
+    assert "#SBATCH --signal=USR1@600" in runner
+    assert "#SBATCH --signal=B:USR1" not in runner
+    assert 'scontrol requeue "$SLURM_JOB_ID"' in runner
