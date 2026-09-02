@@ -103,19 +103,9 @@ pid1=$!
 wait "$pid0"
 wait "$pid1"
 
-FIGURES="$BASE/figures"
+FIGURES="$RESULTS/figs/F_timing"
 python -m utils.analysis.clutter.gawf_dynamics plot \
   --input_root "$BASE" \
   --figure_dir "$FIGURES" \
   --expected_seeds 10
-
-mkdir -p "$RESULTS/save"
-for source in "$FIGURES"/*.pdf; do
-  destination="$RESULTS/save/$(basename "$source")"
-  [[ ! -e "$destination" ]] || {
-    echo "Refusing to overwrite saved figure: $destination" >&2
-    exit 1
-  }
-  cp "$source" "$destination"
-done
 touch "$BASE/.complete"

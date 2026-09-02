@@ -34,6 +34,14 @@ PLOT_COLORS = {
     "realized_gate_jacobian": "#2C7FB8",
     "closed_loop_jacobian": "#D95F0E",
 }
+FIGURE_BASENAMES = (
+    "gawf_static_recurrent_spectrum",
+    "gawf_dynamic_landmark_spectra",
+    "gawf_dynamics_switch_timecourses",
+    "gawf_closed_loop_feedback_contribution",
+    "gawf_dynamics_digit_sector_interaction",
+    "gawf_finite_time_gain",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -805,9 +813,15 @@ def plot(args: argparse.Namespace) -> None:
         raise RuntimeError(f"Expected {args.expected_seeds} complete seeds, found {len(complete)}")
     figure_dir = args.figure_dir or output_dir("F_timing", "gawf_dynamics", "figs")
     figure_dir = Path(figure_dir)
-    if figure_dir.exists() and any(figure_dir.iterdir()):
-        raise FileExistsError(f"Refusing to overwrite non-empty figure directory: {figure_dir}")
     figure_dir.mkdir(parents=True, exist_ok=True)
+    existing = [
+        figure_dir / f"{basename}.{suffix}"
+        for basename in FIGURE_BASENAMES
+        for suffix in ("pdf", "png")
+        if (figure_dir / f"{basename}.{suffix}").exists()
+    ]
+    if existing:
+        raise FileExistsError(f"Refusing to overwrite existing figures: {existing}")
     matrix_rows = _load_seed_rows(args.input_root, "event_matrix_metrics.csv")
     feedback_rows = _load_seed_rows(args.input_root, "feedback_jacobian_metrics.csv")
     eigen_rows = _load_seed_rows(args.input_root, "landmark_eigenvalues.csv")
@@ -834,7 +848,9 @@ def plot(args: argparse.Namespace) -> None:
         "complete_seeds": len(complete),
         "scope": "descriptive_task_driven_dynamics_no_intervention",
     }
-    (figure_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    (args.input_root / "figure_manifest.json").write_text(
+        json.dumps(manifest, indent=2) + "\n"
+    )
 
 
 def main() -> None:
