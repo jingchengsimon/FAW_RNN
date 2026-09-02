@@ -10,6 +10,7 @@ import torch
 
 from utils.analysis.clutter.gawf_dynamics import (
     _event_measurements,
+    _event_candidates,
     gawf_jacobian_objects,
     plot,
     select_balanced_events,
@@ -100,6 +101,26 @@ def test_event_selection_excludes_nonjoint_target_switches() -> None:
     )
     with np.testing.assert_raises(RuntimeError):
         select_balanced_events(dataset, [10], 1, 1, 4)
+
+
+def test_event_candidates_exclude_trailing_incomplete_rollout() -> None:
+    frame_num = 64
+    chan_num = 2
+    total_frames = chan_num + frame_num + 32
+    fg_switch = np.zeros(total_frames, dtype=np.int64)
+    bg_switch = np.zeros(total_frames, dtype=np.int64)
+    labels = np.zeros((total_frames, 2), dtype=np.int64)
+    trailing_event = chan_num + frame_num + 16
+    fg_switch[trailing_event] = 1
+    bg_switch[trailing_event] = 1
+    dataset = SimpleNamespace(
+        fg_switch=fg_switch,
+        bg_switch=bg_switch,
+        labels_sector=labels,
+        frame_num=frame_num,
+        chan_num=chan_num,
+    )
+    assert _event_candidates(dataset, radius=10) == []
 
 
 def test_event_measurements_accept_numpy_frames() -> None:

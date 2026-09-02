@@ -84,12 +84,13 @@ def _event_candidates(dataset: Any, radius: int) -> list[dict[str, int]]:
     labels = np.asarray(dataset.labels_sector, dtype=np.int64)
     frame_num = int(dataset.frame_num)
     chan_num = int(dataset.chan_num)
+    complete_output_frames = ((fg_switch.size - chan_num) // frame_num) * frame_num
     candidates: list[dict[str, int]] = []
     for raw_frame in np.flatnonzero(fg_switch != 0):
         if bg_switch[int(raw_frame)] == 0:
             continue
         output_position = int(raw_frame) - chan_num
-        if output_position < 0:
+        if output_position < 0 or output_position >= complete_output_frames:
             continue
         sequence_id, center = divmod(output_position, frame_num)
         if center - radius < 1 or center + radius - 1 >= frame_num:

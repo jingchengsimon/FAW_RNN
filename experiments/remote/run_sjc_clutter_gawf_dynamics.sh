@@ -25,7 +25,7 @@ case "$MODE" in
     WINDOW_CANDIDATES=(10)
     ;;
   formal)
-    BASE="$RESULTS/data/analysis/F_timing/gawf_dynamics_jointbalanced_10seed_v1"
+    BASE="$RESULTS/data/analysis/F_timing/gawf_dynamics_jointbalanced_10seed_v2"
     SEEDS=(1 2 3 4 5 6 7 8 9 10)
     EVENTS_PER_CELL=6
     MINIMUM_EVENTS_PER_CELL=6
