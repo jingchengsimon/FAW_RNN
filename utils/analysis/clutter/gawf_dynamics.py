@@ -610,7 +610,7 @@ def _plot_timecourses(rows: list[dict[str, str]], figure_dir: Path) -> None:
             if column == 0:
                 ax.set_ylabel("Spectral radius" if row_index == 0 else "Largest singular value")
             if row_index == 1:
-                ax.set_xlabel("Frames relative to target switch")
+                ax.set_xlabel("Frames relative to joint switch")
     fig.tight_layout()
     fig.savefig(figure_dir / "gawf_dynamics_switch_timecourses.pdf", bbox_inches="tight")
     fig.savefig(figure_dir / "gawf_dynamics_switch_timecourses.png", dpi=300, bbox_inches="tight")
@@ -634,7 +634,7 @@ def _plot_feedback(rows: list[dict[str, str]], figure_dir: Path) -> None:
         for marker in (1, 3, 4):
             ax.axvline(marker, color="#999999", lw=0.7, ls="--")
         ax.axhline(0.0, color="#333333", lw=0.7, ls=":")
-        ax.set_xlabel("Frames relative to target switch")
+        ax.set_xlabel("Frames relative to joint switch")
         ax.set_ylabel(label)
         ax.spines[["top", "right"]].set_visible(False)
     fig.tight_layout()
@@ -674,8 +674,14 @@ def _plot_static_spectrum(input_root: Path, figure_dir: Path) -> None:
 
 
 def _plot_landmark_spectra(rows: list[dict[str, str]], figure_dir: Path) -> None:
-    landmarks = ("post1", "post3", "post4", "post10", "post_extended")
-    fig, axes = plt.subplots(3, len(landmarks), figsize=(12.5, 7.3), sharex=True, sharey=True)
+    landmarks = ("post1", "post3", "post4", "post10")
+    fig, axes = plt.subplots(
+        3,
+        len(landmarks),
+        figsize=(10.5, 7.3),
+        sharex="row",
+        sharey="row",
+    )
     theta = np.linspace(0, 2 * np.pi, 400)
     for row_index, object_name in enumerate(OBJECTS):
         for column, landmark in enumerate(landmarks):
@@ -707,7 +713,7 @@ def _plot_landmark_spectra(rows: list[dict[str, str]], figure_dir: Path) -> None
 
 def _plot_condition_heatmaps(rows: list[dict[str, str]], figure_dir: Path) -> None:
     offsets = (-1, 3, 4, 10)
-    fig, axes = plt.subplots(1, 4, figsize=(12.0, 2.8), sharex=True, sharey=True)
+    fig, axes = plt.subplots(1, 4, figsize=(12.0, 3.1), sharex=True, sharey=True)
     for ax, offset in zip(axes, offsets):
         cell = np.full((10, 9), np.nan, dtype=np.float64)
         for digit in range(10):
@@ -730,7 +736,7 @@ def _plot_condition_heatmaps(rows: list[dict[str, str]], figure_dir: Path) -> No
         ax.set_xticks(range(9))
     axes[0].set_ylabel("Digit")
     axes[0].set_yticks(range(10))
-    fig.colorbar(image, ax=axes, label="Interaction residual of largest singular value")
+    fig.colorbar(image, ax=axes, label="Digit × sector interaction residual")
     fig.savefig(figure_dir / "gawf_dynamics_digit_sector_interaction.pdf", bbox_inches="tight")
     fig.savefig(
         figure_dir / "gawf_dynamics_digit_sector_interaction.png",
@@ -745,7 +751,6 @@ def _plot_finite_time_gain(rows: list[dict[str, str]], figure_dir: Path) -> None
         "post1_to_post3",
         "post1_to_post4",
         "post1_to_post10",
-        "post1_to_post_extended",
     )
     seeds = sorted({int(row["seed"]) for row in rows})
     if len(seeds) != 10:
@@ -800,6 +805,8 @@ def plot(args: argparse.Namespace) -> None:
         raise RuntimeError(f"Expected {args.expected_seeds} complete seeds, found {len(complete)}")
     figure_dir = args.figure_dir or output_dir("F_timing", "gawf_dynamics", "figs")
     figure_dir = Path(figure_dir)
+    if figure_dir.exists() and any(figure_dir.iterdir()):
+        raise FileExistsError(f"Refusing to overwrite non-empty figure directory: {figure_dir}")
     figure_dir.mkdir(parents=True, exist_ok=True)
     matrix_rows = _load_seed_rows(args.input_root, "event_matrix_metrics.csv")
     feedback_rows = _load_seed_rows(args.input_root, "feedback_jacobian_metrics.csv")
@@ -827,7 +834,7 @@ def plot(args: argparse.Namespace) -> None:
         "complete_seeds": len(complete),
         "scope": "descriptive_task_driven_dynamics_no_intervention",
     }
-    (args.input_root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    (figure_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
 
 def main() -> None:

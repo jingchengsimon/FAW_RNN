@@ -239,4 +239,4 @@ def test_plot_smoke(tmp_path) -> None:
     figure_dir = tmp_path / "figures"
     plot(SimpleNamespace(input_root=tmp_path, figure_dir=figure_dir, expected_seeds=10))
     assert len(list(figure_dir.glob("*.pdf"))) == 6
-    assert (tmp_path / "manifest.json").is_file()
+    assert (figure_dir / "manifest.json").is_file()
