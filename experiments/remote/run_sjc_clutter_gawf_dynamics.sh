@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Collect and plot descriptive GaWF dynamics on the joint-balanced CM-MNIST test set.
 
-set -euo pipefail
+set -eo pipefail
 
 ROOT="${AIM3_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 RESULTS="${AIM3_RESULTS_PATH:?AIM3_RESULTS_PATH is required}"
@@ -13,6 +13,7 @@ MODE="${1:-pilot}"
 
 source "$CONDA_SH"
 conda activate "${AIM3_CONDA_ENV:-aim3_rnn}"
+set -u
 export PYTHONDONTWRITEBYTECODE=1
 
 case "$MODE" in
