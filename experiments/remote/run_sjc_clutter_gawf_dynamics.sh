@@ -18,7 +18,7 @@ export PYTHONDONTWRITEBYTECODE=1
 
 case "$MODE" in
   pilot)
-    BASE="$RESULTS/data/analysis/F_timing/gawf_dynamics_jointbalanced_pilot_v1"
+    BASE="$RESULTS/data/analysis/F_timing/gawf_dynamics_jointbalanced_pilot_v2"
     SEEDS=(1)
     EVENTS_PER_CELL=1
     MINIMUM_EVENTS_PER_CELL=1

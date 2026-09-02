@@ -336,7 +336,7 @@ def _event_measurements(
     """Run one complete rollout and measure one selected event window."""
 
     frames, _labels = dataset[event["sequence_id"]][:2]
-    frames = frames.unsqueeze(0).to(device=device, dtype=torch.float32)
+    frames = torch.tensor(frames, device=device, dtype=torch.float32).unsqueeze(0)
     with torch.no_grad():
         encoded = model.encode_frames(frames)
     hidden = model.core.initial_state(1, device, encoded.dtype)

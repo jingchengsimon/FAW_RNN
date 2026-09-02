@@ -9,6 +9,7 @@ import numpy as np
 import torch
 
 from utils.analysis.clutter.gawf_dynamics import (
+    _event_measurements,
     gawf_jacobian_objects,
     plot,
     select_balanced_events,
@@ -99,6 +100,39 @@ def test_event_selection_excludes_nonjoint_target_switches() -> None:
     )
     with np.testing.assert_raises(RuntimeError):
         select_balanced_events(dataset, [10], 1, 1, 4)
+
+
+def test_event_measurements_accept_numpy_frames() -> None:
+    class NumpyFrameDataset:
+        def __getitem__(self, _index):
+            frames = np.zeros((32, 2, 96, 96), dtype=np.float32)
+            labels = np.zeros((32, 2), dtype=np.int64)
+            return frames, labels
+
+    model = GaWFRNNConv(
+        num_classes=10,
+        num_pos=9,
+        hidden_size=4,
+        kernel_size=5,
+        device="cpu",
+        rnn_dropout=0.0,
+    ).eval()
+    event = {
+        "sequence_id": 0,
+        "center": 16,
+        "cell_rank": 0,
+        "event_id": 0,
+        "raw_frame": 18,
+        "digit": 0,
+        "sector": 0,
+    }
+    rows, feedback_rows, eigen_rows, propagator_rows = _event_measurements(
+        NumpyFrameDataset(), model, torch.device("cpu"), event, 10, torch.float32, 1
+    )
+    assert len(rows) == 60
+    assert len(feedback_rows) == 20
+    assert len(eigen_rows) == 60
+    assert len(propagator_rows) == 8
 
 
 def _write_rows(path, rows: list[dict[str, object]]) -> None:
