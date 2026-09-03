@@ -74,6 +74,9 @@ Clutter metrics JSON records `seed`, `patience`, `use_acceleration`, `use_mmap`,
 `input_cast_mode`, `frame_layout`, and `shuffle_block_size` in addition
 to the model/dataset hyperparameters and epoch summaries. Multi-seed result directories must
 encode the seed even though checkpoint stems retain the standard model naming contract.
+The formal data-scale campaign uses
+`data_scale/clutter_formal_4scale_ep150/<scale>/<model>-seedNN` as its `--result_suffix`; it keeps
+each scale/model/seed unit in an independent resumable result leaf.
 
 Atari DQN additionally uses `--frame_skip`, `--frame_stack`, `--task_schedule`,
 `--replay_sampling`, `--replay_layout`, `--learning_starts_per_task`,
