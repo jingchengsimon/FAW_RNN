@@ -8,6 +8,19 @@
   ],
   "jobs": [
     {
+      "id": "clutter-data-scale-formal-40h-ep150-rnn-lstm-gru-gawf-mamba-s5-seed1",
+      "description": "Formal 40h/seed1 data-scale units for the six best6 Clutter models.",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "61220165"
+      ],
+      "run_ids": [],
+      "tmux_session": null,
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+      "updated_at": "2026-09-03T21:03:30+00:00"
+    },
+    {
       "id": "rl-atari-skiing-full18-stall-actionfix-v1-total4m-lstm-gru-gawf-s1",
       "description": "Seed-1 single-Skiing exposure extended from cumulative 2M to 4M with fresh 2M weights-only phases for LSTM, GRU, and GaWF.",
       "host": "sjc-remote",

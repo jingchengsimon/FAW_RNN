@@ -6,6 +6,7 @@
 
 | Experiment ID | Status | Host | Scheduler / run IDs | Units | Remote root | Description |
 |---|---|---|---|---:|---|---|
+| `clutter-data-scale-formal-40h-ep150-rnn-lstm-gru-gawf-mamba-s5-seed1` | queued | `amarel` | 61220165 | 6 | `/cache/home/js3269/projects/aim3_gawf_rnn` | Formal 40h/seed1 data-scale units for the six best6 Clutter models. |
 | `clutter-data-scale-fullgrid-4h10h20h40h-rnn-lstm-gru-gawf` | completed | `amarel` | 61210496 | 1 | `/cache/home/js3269/projects/aim3_gawf_rnn` | Summarize and render the retained Clutter 4h/10h/20h/40h full-grid comparison. |
 | `clutter-jointbalanced-dynamics-descriptive-gawf-10seeds` | completed | `sjc-remote` | clutter-gawf-dynamics-formal-v1-820525f, clutter-gawf-dynamics-formal-v2-ddc822b, clutter-gawf-dynamics-formal-v2-ddc822b | 10 | `/G/MIMOlab/Codes/aim3_gawf_rnn` | Ten-seed comparison of static recurrent weight, effective connectivity, and closed-loop Jacobian on balanced clean joint-switch CM-MNIST events. |
 | `clutter-jointbalanced-dynamics-descriptive-gawf-seed1-pilot` | completed | `sjc-remote` | clutter-gawf-dynamics-pilot-v2-3fcc5c0, clutter-gawf-dynamics-pilot-v2-3fcc5c0 | 1 | `/G/MIMOlab/Codes/aim3_gawf_rnn` | Seed-1 pilot for descriptive GaWF Jacobian and effective-connectivity analysis on balanced joint-switch CM-MNIST events. |

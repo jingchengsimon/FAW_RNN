@@ -1,0 +1,187 @@
+{
+  "schema_version": 1,
+  "id": "clutter-data-scale-formal-40h-ep150-rnn-lstm-gru-gawf-mamba-s5-seed1",
+  "description": "Formal 40h/seed1 data-scale units for the six best6 Clutter models.",
+  "host": "amarel",
+  "status": "queued",
+  "created_at": "2026-09-03T21:03:30+00:00",
+  "updated_at": "2026-09-03T21:03:30+00:00",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "61220165"
+    ],
+    "run_ids": [],
+    "tmux_session": null,
+    "process_patterns": [
+      "data_scale/clutter_formal_4scale_ep150/40h"
+    ],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/clutter/amarel/artifacts/clutter_data_scale_formal_4scale_ep150/40h/61220165_*.out",
+      "experiments/clutter/amarel/artifacts/clutter_data_scale_formal_4scale_ep150/40h/61220165_*.err"
+    ],
+    "status_dir": "experiments/clutter/amarel/artifacts/clutter_data_scale_formal_4scale_ep150/40h/status",
+    "result_paths": [
+      "/scratch/js3269/results/data/clutter/runs/data_scale/clutter_formal_4scale_ep150/40h"
+    ]
+  },
+  "tracking": {
+    "expected_units": 6,
+    "auto_complete": true,
+    "validation_mode": "strict",
+    "defaults": {
+      "checkpoint_glob": "*_model.pth",
+      "checkpoint_count": 1
+    },
+    "units": [
+      {
+        "id": "40h-rnn-seed01",
+        "result_dir": "/scratch/js3269/results/data/clutter/runs/data_scale/clutter_formal_4scale_ep150/40h/rnn-seed01",
+        "metrics_file": "rnn_sector_acc_h275_lr0.001_wd1e-05_cdo0.0_rdo0.5_metrics.json",
+        "done_file": "experiments/clutter/amarel/artifacts/clutter_data_scale_formal_4scale_ep150/40h/status/task_0.done",
+        "fail_file": "experiments/clutter/amarel/artifacts/clutter_data_scale_formal_4scale_ep150/40h/status/task_0.fail",
+        "expected": {
+          "model_type": "rnn",
+          "seed": 1,
+          "actual_epochs": 150,
+          "patience": 0,
+          "stopped_by_patience": false,
+          "dataset_suffix": "40h-uint8",
+          "eval_dataset_suffix": "40h-uint8",
+          "use_acceleration": true,
+          "use_mmap": true,
+          "input_cast_mode": "device",
+          "frame_layout": "compact",
+          "shuffle_block_size": -1,
+          "checkpoint_interval_epochs": 5
+        }
+      },
+      {
+        "id": "40h-lstm-seed01",
+        "result_dir": "/scratch/js3269/results/data/clutter/runs/data_scale/clutter_formal_4scale_ep150/40h/lstm-seed01",
+        "metrics_file": "lstm_sector_acc_h80_lr0.001_wd0.001_cdo0.0_rdo0.5_metrics.json",
+        "done_file": "experiments/clutter/amarel/artifacts/clutter_data_scale_formal_4scale_ep150/40h/status/task_10.done",
+        "fail_file": "experiments/clutter/amarel/artifacts/clutter_data_scale_formal_4scale_ep150/40h/status/task_10.fail",
+        "expected": {
+          "model_type": "lstm",
+          "seed": 1,
+          "actual_epochs": 150,
+          "patience": 0,
+          "stopped_by_patience": false,
+          "dataset_suffix": "40h-uint8",
+          "eval_dataset_suffix": "40h-uint8",
+          "use_acceleration": true,
+          "use_mmap": true,
+          "input_cast_mode": "device",
+          "frame_layout": "compact",
+          "shuffle_block_size": -1,
+          "checkpoint_interval_epochs": 5
+        }
+      },
+      {
+        "id": "40h-gru-seed01",
+        "result_dir": "/scratch/js3269/results/data/clutter/runs/data_scale/clutter_formal_4scale_ep150/40h/gru-seed01",
+        "metrics_file": "gru_sector_acc_h105_lr0.005_wd0.001_cdo0.0_rdo0.5_metrics.json",
+        "done_file": "experiments/clutter/amarel/artifacts/clutter_data_scale_formal_4scale_ep150/40h/status/task_20.done",
+        "fail_file": "experiments/clutter/amarel/artifacts/clutter_data_scale_formal_4scale_ep150/40h/status/task_20.fail",
+        "expected": {
+          "model_type": "gru",
+          "seed": 1,
+          "actual_epochs": 150,
+          "patience": 0,
+          "stopped_by_patience": false,
+          "dataset_suffix": "40h-uint8",
+          "eval_dataset_suffix": "40h-uint8",
+          "use_acceleration": true,
+          "use_mmap": true,
+          "input_cast_mode": "device",
+          "frame_layout": "compact",
+          "shuffle_block_size": -1,
+          "checkpoint_interval_epochs": 5
+        }
+      },
+      {
+        "id": "40h-gawf-seed01",
+        "result_dir": "/scratch/js3269/results/data/clutter/runs/data_scale/clutter_formal_4scale_ep150/40h/gawf-seed01",
+        "metrics_file": "gawf_sector_acc_h256_lr0.005_wd0.001_cdo0.0_rdo0.5_metrics.json",
+        "done_file": "experiments/clutter/amarel/artifacts/clutter_data_scale_formal_4scale_ep150/40h/status/task_30.done",
+        "fail_file": "experiments/clutter/amarel/artifacts/clutter_data_scale_formal_4scale_ep150/40h/status/task_30.fail",
+        "expected": {
+          "model_type": "gawf",
+          "seed": 1,
+          "actual_epochs": 150,
+          "patience": 0,
+          "stopped_by_patience": false,
+          "dataset_suffix": "40h-uint8",
+          "eval_dataset_suffix": "40h-uint8",
+          "use_acceleration": true,
+          "use_mmap": true,
+          "input_cast_mode": "device",
+          "frame_layout": "compact",
+          "shuffle_block_size": -1,
+          "checkpoint_interval_epochs": 5
+        }
+      },
+      {
+        "id": "40h-mamba-seed01",
+        "result_dir": "/scratch/js3269/results/data/clutter/runs/data_scale/clutter_formal_4scale_ep150/40h/mamba-seed01",
+        "metrics_file": "mamba_sector_acc_dmodel170_lr0.001_wd0.001_cdo0.0_rdo0.5_metrics.json",
+        "done_file": "experiments/clutter/amarel/artifacts/clutter_data_scale_formal_4scale_ep150/40h/status/task_40.done",
+        "fail_file": "experiments/clutter/amarel/artifacts/clutter_data_scale_formal_4scale_ep150/40h/status/task_40.fail",
+        "expected": {
+          "model_type": "mamba",
+          "seed": 1,
+          "actual_epochs": 150,
+          "patience": 0,
+          "stopped_by_patience": false,
+          "dataset_suffix": "40h-uint8",
+          "eval_dataset_suffix": "40h-uint8",
+          "use_acceleration": true,
+          "use_mmap": true,
+          "input_cast_mode": "device",
+          "frame_layout": "compact",
+          "shuffle_block_size": -1,
+          "checkpoint_interval_epochs": 5
+        }
+      },
+      {
+        "id": "40h-s5-seed01",
+        "result_dir": "/scratch/js3269/results/data/clutter/runs/data_scale/clutter_formal_4scale_ep150/40h/s5-seed01",
+        "metrics_file": "s5_sector_acc_dmodel256_state128_lr0.001_wd0.0_cdo0.0_rdo0.5_metrics.json",
+        "done_file": "experiments/clutter/amarel/artifacts/clutter_data_scale_formal_4scale_ep150/40h/status/task_50.done",
+        "fail_file": "experiments/clutter/amarel/artifacts/clutter_data_scale_formal_4scale_ep150/40h/status/task_50.fail",
+        "expected": {
+          "model_type": "s5",
+          "seed": 1,
+          "actual_epochs": 150,
+          "patience": 0,
+          "stopped_by_patience": false,
+          "dataset_suffix": "40h-uint8",
+          "eval_dataset_suffix": "40h-uint8",
+          "use_acceleration": true,
+          "use_mmap": true,
+          "input_cast_mode": "device",
+          "frame_layout": "compact",
+          "shuffle_block_size": -1,
+          "checkpoint_interval_epochs": 5
+        }
+      }
+    ]
+  },
+  "notes": [
+    "Submitted from source commit 78a58eaac0f349cdbf32b121cc2be7e7608cf47d.",
+    "Sparse array tasks 0,10,20,30,40,50 map to RNN/LSTM/GRU/GaWF/Mamba/S5 at seed 1.",
+    "Each unit requests one Ada Lovelace GPU, 16 CPUs, 64G memory, and 12 hours.",
+    "No smoke job was run, per explicit user instruction.",
+    "Existing historical data-scale results are retained and are not read or overwritten.",
+    "All units use 150 epochs with patience=0, fixed 40h-uint8 validation, and periodic checkpointing every 5 completed epochs with auto-resume."
+  ]
+}
