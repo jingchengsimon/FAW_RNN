@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "id": "rl-atari-skiing-full18-stall-actionfix-v1-warmstart20m-smoke25k-gru-s1",
+  "description": "SJC 25K smoke for seed-1 GRU weights-only single-Skiing adaptation with one full18-to-9 mapping and a 450-step no-course-progress truncation.",
+  "host": "sjc-remote",
+  "status": "completed",
+  "created_at": "2026-08-26T17:33:03-04:00",
+  "updated_at": "2026-08-26T17:56:17-04:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn_snapshot_skiing_5ad4de5f",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": [
+      "sjc_skiing_actionfix_smoke_gru_s1_20260826",
+      "sjc_skiing_actionfix_smoke_gru_s1_20260826_r2"
+    ],
+    "tmux_session": "sjc_skiing_actionfix_smoke_gru_s1_20260826_r2",
+    "process_patterns": ["stallactionfix_v1_warmstart20m_smoke25k_gru_seed1_r2"],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart20m_smoke25k_gru_seed1/run.log",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart20m_smoke25k_gru_seed1_r2/run.log"
+    ],
+    "status_dir": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart20m_smoke25k_gru_seed1_r2/status",
+    "result_paths": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart20m_smoke25k_gru_seed1_r2"
+    ]
+  },
+  "tracking": {
+    "expected_units": 1,
+    "auto_complete": true,
+    "validation_mode": "strict",
+    "defaults": {
+      "metrics_file": "metrics.json",
+      "history_file": "metrics_history.jsonl",
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1,
+      "expected": {
+        "global_step": 25000,
+        "model_type": "gru",
+        "num_layers": 3,
+        "hidden_size": 458,
+        "env_id": "ALE/Skiing-v5",
+        "action_space_mode": "full18",
+        "num_actions": 18,
+        "atari_env_protocol": "skiing-stall-actionfix-v1",
+        "action_mapping_protocol": "single_canonical_full18",
+        "stalled_truncation_bootstrap": true
+      }
+    },
+    "units": [
+      {
+        "id": "gru-seed1-smoke25k",
+        "result_dir": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart20m_smoke25k_gru_seed1_r2",
+        "done_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart20m_smoke25k_gru_seed1_r2/status/done",
+        "fail_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart20m_smoke25k_gru_seed1_r2/status/fail"
+      }
+    ]
+  },
+  "notes": [
+    "Code snapshot is read-only, based on local 11cac19 with content digest 5ad4de5fd8994ca48fe312df99d70e6c5e02dfd8c5957772192caa3caa9a7002; neither Amarel snapshot nor the dirty SJC main checkout was updated.",
+    "The source is the completed 20M GRU seed1 final state_dict already present in the isolated SJC video-input leaf; no active Amarel result was synchronized.",
+    "Smoke success additionally requires a non-empty MP4 and metadata JSON recording episode returns, lengths, terminal/truncation flags, end reasons, and stall rate.",
+    "The first completed attempt was rejected because natural training episodes were labelled with the string None in end_reason_counts; its diagnostic leaf is retained. R2 fixes only that structured-statistics label and is the tracked acceptance unit.",
+    "R2 training completed at 25K, but its first evaluator invocation rejected the retry suffix seed1_r2. Snapshot 5ad4de5f resolves seed from metrics with a historical leaf-name fallback; only the three-episode evaluation and final validation were rerun, without retraining.",
+    "Accepted R2 evidence before required smoke cleanup: loss=0.060296326875686646; training episodes=20, natural=20, stall_rate=0.0, length100=1204.2, return100=-16311.4; greedy video returns=[-30000,-30000,-30000], lengths=[964,964,889], end reasons all stalled, stall_rate=1.0; MP4 bytes=611098 and SHA256=0da436d4664dda2fc58478db8f3c41635cca1df22bb4cd3aede7f5f70f5d2804; final model SHA256=64168c76d6a89afcdc49ee05051c30a2a69981aa7beede8b111eca80a822b4c4.",
+    "The accepted R2 smoke result leaf is temporary and is removed after this evidence is recorded; the first rejected diagnostic leaf remains protected."
+  ]
+}

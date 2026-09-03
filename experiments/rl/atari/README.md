@@ -73,3 +73,36 @@ per-task 1M LR decay; the two-task run additionally uses `transition_balanced` c
 `task_balanced` replay. Its smoke is fixed at 25k steps and writes to a separate `_smoke` result
 leaf. These results belong under `results/data/rl/atari/multitask_18action/`, never the fixed
 five-task namespace.
+
+## Skiing stall/actionfix weights-only adaptation
+
+`skiing-stall-actionfix-v1` 是独立于 historical five-task formal baseline 的新 MDP。模型仍
+输出 18 个 Q-values；Pong、Breakout、Assault、Seaquest 的 ALE full action set 保持 identity，
+Skiing 只做一次 18-to-9 non-FIRE legal-action mapping。Skiing 使用 ALE RAM 86:94 的 course
+object y slots 变化作为下坡/赛程进展；连续 450 agent steps 无变化时返回
+`truncated=True`、`info["end_reason"]="stalled"`，并用一次性 reward adjustment 将总 raw
+return 限制到不高于 -30,000。该 truncation 重置 episode/recurrent state，但 TD target 继续
+bootstrap；自然 terminal 仍停止 bootstrap。
+
+SJC launcher `experiments/remote/run_sjc_atari_skiing_warmstart_l3.sh` 默认只接受完成的 20M
+five-task final `state_dict`，不直接接受 resumable checkpoint。诊断性实验可显式使用
+`--allow-incomplete-source`，但必须先从稳定只读复制的 checkpoint 中仅提取 model
+`state_dict`，并在 metadata 与 result leaf 中记录精确 source step。两种路径均只加载 model
+weights，fresh 初始化 optimizer、replay、global step、epsilon/LR schedules，并固定 seed1、
+fs4/stack4、L3、full18。25k smoke 验收后，分别运行 LSTM h373、GRU h458、GaWF h604 的
+1M single-Skiing adaptation。所有 leaf 均位于
+`results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/`，不得写回 20M source
+leaf，也不得建立平行 result parent。
+
+三模型 single-Skiing return comparison 复用
+`utils.analysis.rl.atari.atari_5task_raw_learning_curves` 的 model colors、rolling-100 return
+和 provenance manifest。传入 `--task-only Skiing --x-axis environment_steps` 时只生成一个
+Skiing return panel，不生成 shared TD loss panel；running histories 可作为明确标注时间点的
+snapshot 重复渲染。
+
+累计 2M diagnostic extension 对完成的 1M 模型使用 `--extend-from-skiing-1m`：只加载 final
+model weights，新增 phase 训练 1M steps，fresh 初始化 optimizer/replay/phase-local global
+step，并固定 epsilon=0.01、LR=1e-5。仍在运行且保留 resumable checkpoint/replay 的 unit 可用
+显式 budget-extension 开关把 target 从 1M 单向增加到 2M；除 `total_timesteps` 外的 resume
+协议字段继续严格匹配。两种路径必须在 manifest 中分别标注 continuous resume 与
+weights-only extension，不能把后者描述为严格续训。

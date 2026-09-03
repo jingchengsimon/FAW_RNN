@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import numpy as np
 
-from utils.analysis.clutter.fig6_encoder_sector_patterns import CONDITIONS, _equal_n_condition_mask
+from utils.analysis.clutter.fig6_encoder_sector_patterns import (
+    CONDITIONS,
+    _equal_n_condition_mask,
+    _spatial_activation_limits,
+)
 
 
 def test_equal_n_condition_mask_balances_all_digit_values() -> None:
@@ -25,3 +29,11 @@ def test_figure6_condition_grids_match_the_requested_combined_layouts() -> None:
     assert CONDITIONS["sector"].channel_grid == (2, 5)
     assert CONDITIONS["digit"].spatial_grid == (2, 5)
     assert CONDITIONS["digit"].channel_grid == (3, 4)
+
+
+def test_spatial_plot_uses_the_spatial_activation_range_only() -> None:
+    """The standalone grid must not inherit the combined plot's channel scale."""
+
+    maps = np.linspace(0.02, 0.18, 9 * 6 * 6, dtype=np.float32).reshape(9, 6, 6)
+
+    assert np.allclose(_spatial_activation_limits(maps, CONDITIONS["sector"]), (0.02, 0.18))

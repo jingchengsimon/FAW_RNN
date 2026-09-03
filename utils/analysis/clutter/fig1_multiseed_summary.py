@@ -1,7 +1,7 @@
 """Merged 2x4 summary: the best6 multiseed 2x3 panels plus a GaWF shuffle-ablation column.
 
 Columns 0-2 reuse the exact panels of ``clutter_multiseed_summary`` (test accuracy, validation
-loss, target-switch recovery) for the Digit (row 0) and Sector (row 1) readouts. Column 3 adds
+loss, target-switch recovery) for the Location (row 0) and Identity (row 1) readouts. Column 3 adds
 the GaWF feedback shuffle ablation: three bars (Baseline, Shuffle digit, Shuffle sector) per
 readout, with the baseline taken from the same multiseed test CSV as column 0. The two shuffle
 panels share one y-axis. All four columns are equal width and 30% narrower than the 2x3 columns.
@@ -304,35 +304,38 @@ def main() -> None:
         _plot_test_axis(
             axes[0, 0],
             test_metrics,
-            "char",
+            "sector",
             show_xticks=False,
             show_seed_points=args.show_seed_points,
         )
         _plot_test_axis(
             axes[1, 0],
             test_metrics,
-            "sector",
+            "char",
             show_xticks=True,
             show_seed_points=args.show_seed_points,
         )
         # Override the shared helper's default ylim/ticks for this merged figure only. Bounds
-        # track the tick range with a 1-point margin where real seeds sit just outside it (digit
-        # char_acc spans 73.2-86.6 across models; sector spans 87.9-93.2).
-        axes[0, 0].set_ylim(73.0, 87.0)
-        axes[0, 0].set_yticks((74.0, 78.0, 82.0, 86.0))
-        axes[1, 0].set_ylim(87.0, 94.0)
-        axes[1, 0].set_yticks((88.0, 90.0, 92.0, 94.0))
+        # track the tick range with a 1-point margin where real seeds sit just outside it.
+        axes[0, 0].set_ylim(87.0, 94.0)
+        axes[0, 0].set_yticks((88.0, 90.0, 92.0, 94.0))
+        axes[1, 0].set_ylim(73.0, 87.0)
+        axes[1, 0].set_yticks((74.0, 78.0, 82.0, 86.0))
         _plot_validation_loss_axis(
-            axes[0, 1], validation_losses["char"], "char", show_xlabel=False, show_xticks=False
+            axes[0, 1],
+            validation_losses["sector"],
+            "sector",
+            show_xlabel=False,
+            show_xticks=False,
         )
         _plot_validation_loss_axis(
-            axes[1, 1], validation_losses["sector"], "sector", show_xlabel=True, show_xticks=True
+            axes[1, 1], validation_losses["char"], "char", show_xlabel=True, show_xticks=True
         )
         _plot_recovery_axis(
             axes[0, 2],
             recovery_offsets,
             recovery_curves,
-            "char",
+            "sector",
             show_xlabel=False,
             show_xticks=False,
         )
@@ -340,7 +343,7 @@ def main() -> None:
             axes[1, 2],
             recovery_offsets,
             recovery_curves,
-            "sector",
+            "char",
             show_xlabel=True,
             show_xticks=True,
         )
@@ -354,33 +357,33 @@ def main() -> None:
         baseline_sector_key = "sector_acc" if use_shuffle_baseline else "sector"
         _plot_shuffle_axis(
             axes[0, 3],
-            ablation_baseline[baseline_char_key],
-            ablation["shuffle_digit"]["char_acc"],
-            ablation["shuffle_sector"]["char_acc"],
-            DIGIT_COLOR,
-            show_xticks=False,
-            y_min=70.0,
-            y_max=90.0,
-            y_step=4.0,
-            show_seed_points=args.show_seed_points,
-        )
-        _plot_shuffle_axis(
-            axes[1, 3],
             ablation_baseline[baseline_sector_key],
             ablation["shuffle_digit"]["sector_acc"],
             ablation["shuffle_sector"]["sector_acc"],
             SECTOR_COLOR,
-            show_xticks=True,
+            show_xticks=False,
             y_min=75.0,
             y_max=95.0,
             y_step=4.0,
             show_seed_points=args.show_seed_points,
         )
-        # The requested readout-specific ranges: digit on the first row, sector on the second.
-        axes[0, 3].set_ylim(50.0, 92.0)
-        axes[0, 3].set_yticks((55.0, 65.0, 75.0, 85.0))
-        axes[1, 3].set_ylim(60.0, 95.0)
-        axes[1, 3].set_yticks((65.0, 75.0, 85.0, 95.0))
+        _plot_shuffle_axis(
+            axes[1, 3],
+            ablation_baseline[baseline_char_key],
+            ablation["shuffle_digit"]["char_acc"],
+            ablation["shuffle_sector"]["char_acc"],
+            DIGIT_COLOR,
+            show_xticks=True,
+            y_min=70.0,
+            y_max=90.0,
+            y_step=4.0,
+            show_seed_points=args.show_seed_points,
+        )
+        # The requested readout-specific ranges: location on top, identity on the bottom.
+        axes[0, 3].set_ylim(60.0, 95.0)
+        axes[0, 3].set_yticks((65.0, 75.0, 85.0, 95.0))
+        axes[1, 3].set_ylim(50.0, 92.0)
+        axes[1, 3].set_yticks((55.0, 65.0, 75.0, 85.0))
 
         # The 30% narrower columns crowd the recovery tick labels; rotate that column's bottom
         # x labels so pre10/switch/post4/post10 no longer overlap. Only this merged figure is
@@ -423,7 +426,7 @@ def main() -> None:
             )
             for row in range(2)
         ]
-        for y, label in zip(row_centers, ("Digit", "Sector")):
+        for y, label in zip(row_centers, ("Location", "Identity")):
             fig.text(0.038, y, label, rotation=90, ha="center", va="center", fontsize=15)
 
         models = [model for model in MODEL_ORDER if model in test_metrics]

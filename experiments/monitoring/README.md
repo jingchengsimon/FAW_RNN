@@ -48,20 +48,24 @@ python -m experiments.monitoring.job_registry register /tmp/my-run-manifest.json
 - 精确日志 glob、status 目录和 result path/prefix；
 - expected units，以及能够定位对应结果的 metrics/checkpoint 文件名或 glob。
 
-默认使用 `artifacts` 判定：可解析的最终 `metrics.json` 存在，并且 manifest 明确要求的
-checkpoint 文件数量满足，即视为 valid。`expected` 元数据差异与缺少 `.done` marker 仍会
-显示在诊断输出中，但不会否决结果；早期失败尝试遗留的 `.fail` marker 也不会覆盖已经完整
-生成的结果 artifacts。确实需要逐字段、marker 都完全一致的实验，可以在 `tracking` 或单个
-unit 中设置 `"validation_mode": "strict"`。
+默认使用 `artifacts` 判定：若 `result_globs` 匹配结果目录，则可解析的最终
+`metrics.json` 与明确要求的 checkpoint 数量构成 valid 证据；若它匹配精确结果文件
+（例如每 seed 的 `.npz`），该文件本身就是该 unit 的 valid artifact，不再要求不存在的
+`metrics.json`。`expected` 元数据差异与缺少 `.done` marker 仍会显示在诊断输出中，
+但不会否决结果；早期失败尝试遗留的 `.fail` marker 也不会覆盖已经完整生成的结果
+artifacts。确实需要逐字段、marker 都完全一致的实验，
+可以在 `tracking` 或单个 unit 中设置 `"validation_mode": "strict"`。
 
 ## 快速搜索进度
 
 ```bash
 # 只使用完整 experiment ID：不会读取或校验无关历史 manifest
-python -m experiments.monitoring.progress sjc-pong-fscompare1m-c219996 --no-update
+python -m experiments.monitoring.progress \
+  rl-atari-multitask-5task18-l3-eps500k-lrpertask-20m-lstm-gru-s1-2 --no-update
 
 # 机器可读结果
-python -m experiments.monitoring.progress sjc-pong-fscompare1m-c219996 --json
+python -m experiments.monitoring.progress \
+  rl-atari-multitask-5task18-l3-eps500k-lrpertask-20m-lstm-gru-s1-2 --json
 ```
 
 检查器不会递归搜索远端 home。它只访问 manifest 中记录的 remote root、日志和结果路径。
@@ -69,9 +73,13 @@ python -m experiments.monitoring.progress sjc-pong-fscompare1m-c219996 --json
 自然语言只用于人工或 agent 在 `JOBS.md` / `active_jobs.json` 中确定唯一完整 ID，不能作为
 checker 参数。单任务查询没有扫描完整历史的入口。每次
 `progress` 会先执行 `ssh -O check <alias>`；失败会原样报告 socket 错误且不新建 SSH。成功后，
-同一 host/Conda 配置的多个 job 会合并到一个前台 SSH 会话。只有 manifest 明确设置
-`tracking.auto_complete=true` 且全部 expected units 都具有有效结果 artifacts 时，检查器
-才会把非终态记录自动更新为 `completed`；其他状态不会被猜测。简单 CLI 登记默认关闭自动完成。
+同一 host/Conda 配置的多个 job 会合并到一个前台 SSH 会话。即使用 `--no-update`，若全部
+expected units 都具有有效 artifacts，输出也会报告 `completed (verified)`，不会再把
+已经完成的文件型分析显示为 `0/N`。只有 manifest 明确设置
+`tracking.auto_complete=true` 且不传 `--no-update` 时，检查器才会将非终态记录写为
+`completed`；这应在完成交接而非纯 status-only 查询中执行。`job_registry new` 对带有
+`--expected-units` 和 `--result-path` 的新登记默认启用自动完成，可用
+`--no-auto-complete` 明确关闭。
 
 如果某台 Mac 使用不同 SSH alias，可临时覆盖：
 

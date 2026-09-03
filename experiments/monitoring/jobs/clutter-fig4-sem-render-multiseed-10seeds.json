@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "id": "clutter-fig4-sem-render-multiseed-10seeds",
+  "description": "Render existing Figure 4 core-object ten-seed NPZ summaries with mean +/- SEM.",
+  "host": "amarel",
+  "status": "completed",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "60654771",
+      "60654855"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/clutter/amarel/artifacts/fig4_sem_render_20260817/*.out"
+    ],
+    "status_dir": "/scratch/js3269/results/data/analysis/sem_delivery_20260817_1035_fig4_core",
+    "result_paths": [
+      "/scratch/js3269/results/data/analysis/sem_delivery_20260817_1035_fig4_core/core_objects_aggregate_2x2.pdf",
+      "/scratch/js3269/results/data/analysis/sem_delivery_20260817_1035_fig4_core/core_objects_aggregate_1x4.pdf"
+    ]
+  },
+  "tracking": {
+    "expected_units": 2,
+    "auto_complete": true,
+    "result_globs": [
+      "/scratch/js3269/results/data/analysis/sem_delivery_20260817_1035_fig4_core/core_objects_aggregate_2x2.pdf",
+      "/scratch/js3269/results/data/analysis/sem_delivery_20260817_1035_fig4_core/core_objects_aggregate_1x4.pdf"
+    ],
+    "done_glob": null,
+    "fail_glob": null,
+    "defaults": {
+      "expected": {}
+    },
+    "units": []
+  },
+  "notes": [
+    "Existing structured Fig4 results only; no data collection or training.",
+    "Slurm job 60654771 exited 0 after creating an empty output leaf; job 60654855 uses a new leaf and stage logging."
+  ],
+  "created_at": "2026-08-17T13:50:24+00:00",
+  "updated_at": "2026-08-17T13:54:49+00:00",
+  "completed_at": "2026-08-17T13:54:49+00:00"
+}

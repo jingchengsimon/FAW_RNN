@@ -46,6 +46,7 @@ from utils.analysis.clutter.fig5_unit_gate_context import (
 
 MODEL_ORDER = ("gawf", "lstm", "gru")
 FACTORS = ("sector", "digit", "interaction")
+RESIDUAL = "residual"
 
 
 def parse_args() -> argparse.Namespace:
@@ -106,14 +107,20 @@ def _collect_reference_labels(dataset: torch.utils.data.Dataset, batch_size: int
 
 
 def _fractions_from_report(report: dict[str, Any], model_type: str) -> dict[str, dict[str, float]]:
-    """Extract per-gate condition-mean fractions as plain floats."""
+    """Extract condition-mean factors plus trial-level residual as plain fractions."""
 
     return {
         gate: {
-            factor: float(
-                report["gates"][gate]["equal_cell_condition_mean"]["fractions"][factor]
+            **{
+                factor: float(
+                    report["gates"][gate]["equal_cell_condition_mean"]["fractions"][factor]
+                )
+                for factor in FACTORS
+            },
+            RESIDUAL: float(
+                report["gates"][gate]["equal_cell_trial_total"]["percent"][RESIDUAL]
             )
-            for factor in FACTORS
+            / 100.0,
         }
         for gate in GATE_NAMES[model_type]
     }
@@ -208,7 +215,10 @@ def _load_progress(save_json: Path) -> dict[str, dict[int, dict[str, dict[str, f
         per_seed: dict[int, dict[str, dict[str, float]]] = {seed: {} for seed in seeds}
         for gate, gate_block in model_block.get("gates", {}).items():
             fractions = gate_block["equal_cell_condition_mean"]["fractions"]
-            for factor, values in fractions.items():
+            residuals = gate_block.get("equal_cell_trial_total", {}).get("fractions", {}).get(
+                RESIDUAL, []
+            )
+            for factor, values in {**fractions, RESIDUAL: residuals}.items():
                 for seed, value in zip(seeds, values):
                     per_seed[seed].setdefault(gate, {})[factor] = float(value)
         collected[model] = per_seed
@@ -233,7 +243,11 @@ def _save_progress(
                 factor: [collected[model][seed][gate][factor] for seed in seeds]
                 for factor in FACTORS
             }
-            gates_block[gate] = {"equal_cell_condition_mean": {"fractions": fractions}}
+            residuals = [collected[model][seed][gate][RESIDUAL] for seed in seeds]
+            gates_block[gate] = {
+                "equal_cell_condition_mean": {"fractions": fractions},
+                "equal_cell_trial_total": {"fractions": {RESIDUAL: residuals}},
+            }
         models_block[model] = {"seeds": seeds, "gates": gates_block}
     payload = {**metadata, "models": models_block}
     partial = save_json.with_name(f"{save_json.stem}.partial{save_json.suffix}")

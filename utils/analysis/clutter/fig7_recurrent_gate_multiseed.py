@@ -21,6 +21,7 @@ matplotlib.use("Agg")
 import numpy as np
 import pandas as pd
 import torch
+from scipy.stats import f as f_distribution
 
 from utils.analysis.clutter.fig6_encoder_sector_patterns import _equal_n_condition_mask
 from utils.analysis.clutter.fig3_gate_distribution import exclude_zero_feedback_reset_frames
@@ -270,6 +271,53 @@ def _mean_sem(values: list[float]) -> dict[str, object]:
     }
 
 
+def _group_variable_interaction(data_root: Path) -> dict[str, float | int]:
+    """Fit the seed-level group-by-variable interaction on saved sign-gap cells."""
+
+    summary_path = data_root / "final" / "fig7_seed_level_summary.npz"
+    if not summary_path.is_file():
+        raise FileNotFoundError(f"Missing Figure 7 seed-level summary: {summary_path}")
+    values = np.empty((10, len(GROUP_NAMES), len(VARIABLES)), dtype=np.float64)
+    with np.load(summary_path, allow_pickle=False) as arrays:
+        for group_index, group in enumerate(GROUP_NAMES):
+            for variable_index, variable in enumerate(VARIABLES):
+                cell = np.asarray(arrays[f"{variable}_{group}_gap_seed_values"], dtype=np.float64)
+                if cell.shape != (10,):
+                    raise RuntimeError(
+                        f"Expected ten {variable}/{group} sign-gap values, got {cell.shape}."
+                    )
+                values[:, group_index, variable_index] = cell
+    grand = values.mean()
+    subject_mean = values.mean(axis=(1, 2), keepdims=True)
+    group_mean = values.mean(axis=(0, 2), keepdims=True)
+    variable_mean = values.mean(axis=(0, 1), keepdims=True)
+    cell_mean = values.mean(axis=0, keepdims=True)
+    interaction = cell_mean - group_mean - variable_mean + grand
+    residual = (
+        values
+        - values.mean(axis=2, keepdims=True)
+        - values.mean(axis=1, keepdims=True)
+        - cell_mean
+        + subject_mean
+        + group_mean
+        + variable_mean
+        - grand
+    )
+    df_num = (len(GROUP_NAMES) - 1) * (len(VARIABLES) - 1)
+    df_den = (values.shape[0] - 1) * df_num
+    ss_effect = float(values.shape[0] * np.square(interaction).sum())
+    ss_error = float(np.square(residual).sum())
+    statistic = (ss_effect / df_num) / (ss_error / df_den)
+    return {
+        "f_statistic": float(statistic),
+        "df_num": df_num,
+        "df_den": df_den,
+        "p_value": float(f_distribution.sf(statistic, df_num, df_den)),
+        "ss_effect": ss_effect,
+        "ss_error": ss_error,
+    }
+
+
 def write_supple3_seed_stats(args: argparse.Namespace) -> Path:
     """Write Session-6 seed-level sign/magnitude statistics from existing compact arrays."""
 
@@ -318,6 +366,7 @@ def write_supple3_seed_stats(args: argparse.Namespace) -> Path:
                 ),
                 "level": "Per-seed mean delta_g over all group connections and contexts",
                 "inference_unit": "training seed; mean +/- SEM",
+                "group_variable_interaction": _group_variable_interaction(args.data_root),
                 "groups": summary,
             },
             indent=2,

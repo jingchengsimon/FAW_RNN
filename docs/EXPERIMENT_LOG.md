@@ -360,3 +360,81 @@
 - **结论（Conclusion）：** 每卡 8 job 未显示超出 baseline envelope 的系统性数值偏移，作为
   GPU-contention 下的 execution variance 可接受。该检验固定 warm-up checkpoint/seed，只证明
   并发配置的数值可比性，不替代跨 seed 的训练泛化评估。
+
+## 2026-08-16 — Figure 7 改为分组报告 raw seed-level gap p
+
+- **改动（Change）：** Figure 7 的 Digit/Sector × TT/TR/RT/RR 各组分别报告 10-seed paired
+  sign gap 的 uncorrected exact sign-flip p-value；不再在图中显示 positive/negative bar
+  相对零的 significance stars。Structured summary 继续保留全部 raw p 与 24-test Holm
+  diagnostic，Supplementary 3 不变。
+- **原因（Reason）：** 八个 sign-gap 被定义为分别解释的研究问题，而不是一个需要共同控制
+  family-wise error 的联合结论；主图只呈现每组直接对应的 gap test。
+
+## 2026-08-16 — Recovery 改用 joint-balanced 10-digit test protocol
+
+- **改动（Change）：** Fig1 六模型与 Supplementary 1 GaWF feedback-ablation recovery
+  统一改用 `40h-float32-jointswitch-balanced-10digit-unique` test dataset，并以 seeds 1–10
+  在 `pre10`–`pre1`、`post1`–`post10` 的每个 offset 报告 mean 与 95% t-CI。
+- **原因（Reason）：** 先前 runner 实际传入默认 `40h-uint8`，没有保证 foreground 与
+  background 同时 switch，也没有保证 switch-event 的 90 个 digit×sector cells 平衡。
+- **证据（Evidence）：** dataset metadata 记录 2430 次 joint switches、每个 digit×sector
+  cell 27 次；每帧 digits 0–9 各一次，每个 clutter onset 覆盖全部九个 sectors。修正后的
+  60/60 Fig1 model-seed 与 10/10 Supplementary 1 GaWF-seed outputs 均通过 finite、offset、
+  frame-count 和条件完整性检查；最终两张 PDF 均保留 95% t-CI，并移除标题中的
+  `10-seed mean` 字样。
+
+## 2026-08-17 — Figure 3 的 0.5 点质量来自 sequence reset
+
+- **改动（Change）：** 对十个 GaWF seeds 的 retained Figure 3 trajectories 直接重建 input /
+  recurrent gates，并以 $|g-0.5|<10^{-6}$ 审计 0.5 点质量、reset 外点质量、剔除点质量后的
+  `[0.1, 0.9]` 比例，以及 `U[j]` 的零行。
+- **证据（Evidence）：** input / recurrent 的 0.5 点质量分别为 3.125026% / 3.125063%，而每条
+  32-frame sequence 的首帧 reset 恰占 3.125%；reset 外仅余 0.0000257% / 0.0000633%。十个
+  seed 均无 $\max_r|U[j,r]|<10^{-6}$ 的 destination unit。剔除点质量后，中间区间仍占
+  14.8352% / 33.3198%。
+- **结论（Conclusion）：** 0.5 spike 是 zero-feedback reset 的全行瞬时现象，不是
+  `U[j]≈0` 的死反馈通路。input gate 的 binary tendency 仍较强，但 recurrent gate 保留约
+  三分之一的 graded mass；后续文字不能把两类 gate 统一概括为普遍 binary。
+
+## 2026-08-19 — Figure 4 raw-synapse gate ANOVA 排除 reset frame
+
+- **改动（Change）：** 用 SJC 保留的十个 feedback trajectories 和对应 GaWF checkpoints，
+  在每个 32-frame window 排除 zero-feedback `t=0` 后重算 raw input/recurrent synapse 的
+  20-draw balanced Sector × Digit ANOVA；Fig4 core PDFs 随之更新为 10-seed mean ± SEM 并显示
+  每个 seed 点。
+- **证据（Evidence）：** 十个 seeds 各排除 1,799 个 reset frames，保留 55,769 frames；Input
+  gate 的 Sector / Digit / Interaction 为 76.7069% / 15.9906% / 7.3025%，recurrent gate 为
+  23.2512% / 71.7333% / 5.0155%（均为 10-seed mean）。
+- **结论（Conclusion）：** §4.4–4.5 现与其他正式 gate 统计共用 reset-excluded 口径；不得再以
+  旧 `unified_multiseed` 的含-reset synapse decomposition 引用这些数字。
+
+## 2026-08-26 — Skiing stall boundary 与 single canonical mapping protocol
+
+- **改动（Change）：** 新增独立 `skiing-stall-actionfix-v1`，不改变 historical baseline。
+  所有 task 仍使用 18-output Q head；Pong、Breakout、Assault、Seaquest 的 full ALE action set
+  保持 identity，Skiing 仅做一次 18-to-9 non-FIRE legal-action mapping。Skiing 以 ALE RAM
+  86:94 course-object y slots 的变化作为 course progress；连续 450 agent steps 无进展时返回
+  `truncated=True` 与 `end_reason=stalled`，并将 raw episode return 限制到不高于 -30,000。
+  stall boundary 重置 episode/recurrent state，但 TD target 保留 final-observation bootstrap。
+- **证据（Evidence）：** unit tests 覆盖正常下滑、阈值恰好触发、natural terminal 优先级、
+  reward/flags/info、baseline 默认路径、18-to-9 mapping、四任务 identity、weights-only loading
+  与 truncation bootstrap。真实 ALE probe 在持续撞边时于 475 steps 结束，其中恰有连续 450
+  steps 无 progress，return=-30,000。SJC 25k GRU seed1 weights-only smoke 达到 finite
+  loss=0.0602963；训练 20 episodes 均自然结束，return100=-16,311.4、length100=1,204.2；固定
+  greedy video 的 3 episodes 均由 stall 截断，returns 全为 -30,000，lengths 为
+  964/964/889。另一个从已完成 1M GRU weights 启动的 25k extension smoke 固定
+  `epsilon=0.01`、`LR=1e-5` 且不再 decay，得到 finite loss=0.0375964；训练与 greedy video
+  的 episodes 均以 `stalled` 截断、returns 为 -30,000，证明 fresh extension phase 的
+  artifacts 与 boundary metadata 完整。
+- **现状（Current）：** 该协议改变 MDP，不把派生训练当作 resume。LSTM/GRU seed1 从完成的
+  20M final model `state_dict` 初始化；GaWF seed1 从稳定只读复制的 19.45M resumable
+  checkpoint 中仅提取 model `state_dict`。三者均 fresh 初始化 optimizer、replay、global step、
+  RNG trajectory、epsilon/LR schedules，并已在 SJC 提交 1M single-Skiing diagnostic run；所有
+  新 leaf 均位于唯一 parent `formal_20m_4mpertask_raw_seeds`，GaWF leaf 记录 source step
+  `19450000`。后续累计 2M exposure 采用两种明确区分的语义：仍有 resumable checkpoint 的
+  GaWF 连续保留 optimizer/replay/global step/RNG/epsilon/LR；已 finalization 的 GRU/LSTM
+  分别从其 1M final `state_dict` 启动独立 fresh 1M phase，固定末端 `epsilon=0.01` 与
+  `LR=1e-5`，不把 phase-local step 冒充 strict resume step。累计 2M 完成后的三个 source
+  均已按 finalization 回收 resumable checkpoint/replay；因此累计 4M 使用各自 2M final
+  `state_dict` 再启动独立 fresh 2M phase，继续固定末端 epsilon/LR，并在分析中为该 phase
+  增加 2M x-axis offset。

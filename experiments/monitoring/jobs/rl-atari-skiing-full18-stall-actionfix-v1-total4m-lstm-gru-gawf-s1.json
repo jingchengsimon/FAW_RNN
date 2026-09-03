@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "id": "rl-atari-skiing-full18-stall-actionfix-v1-total4m-lstm-gru-gawf-s1",
+  "description": "Seed-1 single-Skiing exposure extended from cumulative 2M to 4M with fresh 2M weights-only phases for LSTM, GRU, and GaWF.",
+  "host": "sjc-remote",
+  "status": "running",
+  "created_at": "2026-08-28T00:56:59-04:00",
+  "updated_at": "2026-08-28T00:58:53-04:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn_snapshot_skiing_64c9f1c7",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": [
+      "sjc_skiing_actionfix_extend2mto4m_gawf_s1_20260828",
+      "sjc_skiing_actionfix_extend2mto4m_gru_lstm_s1_20260828"
+    ],
+    "tmux_session": "sjc_skiing_actionfix_extend2mto4m_gru_lstm_s1_20260828",
+    "process_patterns": [
+      "stallactionfix_v1_extend2mto4m_2m_gawf_seed1",
+      "stallactionfix_v1_extend2mto4m_2m_gru_seed1",
+      "stallactionfix_v1_extend2mto4m_2m_lstm_seed1"
+    ],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_2m_gawf_seed1/run.log",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_2m_gru_seed1/run.log",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_2m_lstm_seed1/run.log"
+    ],
+    "result_paths": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_2m_gawf_seed1",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_2m_gru_seed1",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_2m_lstm_seed1"
+    ]
+  },
+  "tracking": {
+    "expected_units": 3,
+    "auto_complete": true,
+    "validation_mode": "strict",
+    "defaults": {
+      "metrics_file": "metrics.json",
+      "history_file": "metrics_history.jsonl",
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1
+    },
+    "units": [
+      {
+        "id": "gawf-seed1-fresh-extension-phase",
+        "result_dir": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_2m_gawf_seed1",
+        "done_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_2m_gawf_seed1/status/done",
+        "fail_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_2m_gawf_seed1/status/fail",
+        "expected": {
+          "global_step": 2000000,
+          "model_type": "gawf",
+          "num_layers": 3,
+          "hidden_size": 604,
+          "env_id": "ALE/Skiing-v5",
+          "action_space_mode": "full18",
+          "num_actions": 18,
+          "atari_env_protocol": "skiing-stall-actionfix-v1",
+          "action_mapping_protocol": "single_canonical_full18",
+          "stalled_truncation_bootstrap": true,
+          "learning_rate": 0.00001,
+          "learning_rate_decay_step": 0,
+          "epsilon": 0.01,
+          "effective_learning_rate": 0.00001
+        }
+      },
+      {
+        "id": "gru-seed1-fresh-extension-phase",
+        "result_dir": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_2m_gru_seed1",
+        "done_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_2m_gru_seed1/status/done",
+        "fail_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_2m_gru_seed1/status/fail",
+        "expected": {
+          "global_step": 2000000,
+          "model_type": "gru",
+          "num_layers": 3,
+          "hidden_size": 458,
+          "env_id": "ALE/Skiing-v5",
+          "action_space_mode": "full18",
+          "num_actions": 18,
+          "atari_env_protocol": "skiing-stall-actionfix-v1",
+          "action_mapping_protocol": "single_canonical_full18",
+          "stalled_truncation_bootstrap": true,
+          "learning_rate": 0.00001,
+          "learning_rate_decay_step": 0,
+          "epsilon": 0.01,
+          "effective_learning_rate": 0.00001
+        }
+      },
+      {
+        "id": "lstm-seed1-fresh-extension-phase",
+        "result_dir": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_2m_lstm_seed1",
+        "done_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_2m_lstm_seed1/status/done",
+        "fail_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_2m_lstm_seed1/status/fail",
+        "expected": {
+          "global_step": 2000000,
+          "model_type": "lstm",
+          "num_layers": 3,
+          "hidden_size": 373,
+          "env_id": "ALE/Skiing-v5",
+          "action_space_mode": "full18",
+          "num_actions": 18,
+          "atari_env_protocol": "skiing-stall-actionfix-v1",
+          "action_mapping_protocol": "single_canonical_full18",
+          "stalled_truncation_bootstrap": true,
+          "learning_rate": 0.00001,
+          "learning_rate_decay_step": 0,
+          "epsilon": 0.01,
+          "effective_learning_rate": 0.00001
+        }
+      }
+    ]
+  },
+  "notes": [
+    "Cumulative 4M means the completed cumulative-2M model followed by this additional 2M phase. All completed 2M sources had already finalized and removed resumable checkpoint/replay state, so every model uses weights-only initialization with fresh optimizer, replay, RNG, and phase-local global step.",
+    "GRU runs first and LSTM second on SJC GPU0. GaWF runs concurrently on GPU1. Epsilon remains 0.01 and LR remains 1e-5 with no further decay throughout all phases.",
+    "GRU source model SHA256=ee41cd6642eadc4a3fa44b05ce24e11543a4d3ef31fd4d95242c9dffed9d7d26 and source metrics SHA256=15d69183d76f30f4761a57b4092f38039d6ebec84e15aa8d3b2956302bdce7ba.",
+    "LSTM source model SHA256=4f17befbd95db29fe0b37b322e31762e327165c467a5ab3f53f7796658d12969 and source metrics SHA256=57bbc89cb32fd075c6446c5825e1e2ff9a5116fa53f670fb032464a23ecb3f63.",
+    "GaWF source model SHA256=e56944c51392bf7393eeecd46e17ac62c01075bd40a61314ff51c745ad125926 and source metrics SHA256=d49f468d258bec585e5257049579df530a3732c350cd50054569ef71a60a3da6.",
+    "Formal code runs from read-only SJC snapshot /G/MIMOlab/Codes/aim3_gawf_rnn_snapshot_skiing_64c9f1c7; the dirty SJC checkout, previous read-only snapshots, completed source leaves, and Amarel snapshots remain untouched.",
+    "Submitted at 2026-08-28T00:58:53-04:00 after the registered GRU 25K extension smoke completed with finite metrics, complete artifacts/video, and no recent errors."
+  ]
+}

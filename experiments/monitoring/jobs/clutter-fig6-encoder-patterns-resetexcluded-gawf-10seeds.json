@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "id": "clutter-fig6-encoder-patterns-resetexcluded-gawf-10seeds",
+  "description": "Figure 6 encoder Sector and Digit spatial activation maps after excluding the t=0 reset frame in every 32-frame held-out rollout.",
+  "host": "sjc-remote",
+  "status": "completed",
+  "created_at": "2026-08-19T00:00:00-04:00",
+  "updated_at": "2026-08-19T10:39:55-04:00",
+  "completed_at": "2026-08-19T10:39:55-04:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": ["sjc_fig6_encoder_patterns_resetexcluded_20260819"],
+    "tmux_session": "sjc_fig6_encoder_patterns_resetexcluded_20260819",
+    "process_patterns": ["fig6_encoder_sector_patterns_resetexcluded_20260819.py"],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": ["results/run_fig6_encoder_patterns_resetexcluded_20260819/*.log"],
+    "status_dir": "results/data/analysis/fig6_encoder_patterns_resetexcluded_gawf_10seed/final",
+    "result_paths": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig6_encoder_patterns_resetexcluded_gawf_10seed",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig6_encoder_patterns_resetexcluded_gawf_10seed/final/Fig6_encoder_sector_spatial_patterns_3x3_10seed.pdf"
+    ]
+  },
+  "tracking": {
+    "expected_units": 20,
+    "auto_complete": true,
+    "result_globs": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig6_encoder_patterns_resetexcluded_gawf_10seed/sector/gawf-seed*/encoder_sector_patterns.npz",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig6_encoder_patterns_resetexcluded_gawf_10seed/digit/gawf-seed*/encoder_digit_patterns.npz"
+    ]
+  },
+  "notes": [
+    "Each of the ten seeds and each condition excludes 1,799 reset frames and retains 55,769 frames before equal-n selection.",
+    "Only compact condition means and the final PDFs are retained; dense activation tensors are not saved.",
+    "Sector and Digit seed queues use the two available A6000 GPUs independently."
+  ]
+}

@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "id": "rl-atari-skiing-full18-stall-actionfix-v1-total2m-lstm-gru-gawf-s1",
+  "description": "Seed-1 single-Skiing exposure extended to cumulative 2M: continuous GaWF resume plus fresh terminal-schedule 1M phases for GRU and LSTM.",
+  "host": "sjc-remote",
+  "status": "running",
+  "created_at": "2026-08-27T01:00:50-04:00",
+  "updated_at": "2026-08-27T01:05:03-04:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn_snapshot_skiing_15682aff",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": [
+      "sjc_skiing_actionfix_total2m_gawf_s1_20260827",
+      "sjc_skiing_actionfix_extend1mto2m_gru_lstm_s1_20260827"
+    ],
+    "tmux_session": "sjc_skiing_actionfix_extend1mto2m_gru_lstm_s1_20260827",
+    "process_patterns": [
+      "stallactionfix_v1_warmstart19450000_1m_gawf_seed1",
+      "stallactionfix_v1_extend1mto2m_1m_gru_seed1",
+      "stallactionfix_v1_extend1mto2m_1m_lstm_seed1"
+    ],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart19450000_1m_gawf_seed1/run.log",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend1mto2m_1m_gru_seed1/run.log",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend1mto2m_1m_lstm_seed1/run.log"
+    ],
+    "result_paths": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart19450000_1m_gawf_seed1",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend1mto2m_1m_gru_seed1",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend1mto2m_1m_lstm_seed1"
+    ]
+  },
+  "tracking": {
+    "expected_units": 3,
+    "auto_complete": true,
+    "validation_mode": "strict",
+    "defaults": {
+      "metrics_file": "metrics.json",
+      "history_file": "metrics_history.jsonl",
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1
+    },
+    "units": [
+      {
+        "id": "gawf-seed1-continuous-total2m",
+        "result_dir": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart19450000_1m_gawf_seed1",
+        "done_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart19450000_1m_gawf_seed1/status/done",
+        "fail_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart19450000_1m_gawf_seed1/status/fail",
+        "expected": {
+          "global_step": 2000000,
+          "model_type": "gawf",
+          "num_layers": 3,
+          "hidden_size": 604,
+          "env_id": "ALE/Skiing-v5",
+          "action_space_mode": "full18",
+          "num_actions": 18,
+          "atari_env_protocol": "skiing-stall-actionfix-v1",
+          "action_mapping_protocol": "single_canonical_full18",
+          "stalled_truncation_bootstrap": true,
+          "learning_rate": 0.0001,
+          "learning_rate_decay_step": 1000000,
+          "epsilon": 0.01,
+          "effective_learning_rate": 0.00001,
+          "extended_from_total_timesteps": 1000000
+        }
+      },
+      {
+        "id": "gru-seed1-fresh-extension-phase",
+        "result_dir": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend1mto2m_1m_gru_seed1",
+        "done_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend1mto2m_1m_gru_seed1/status/done",
+        "fail_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend1mto2m_1m_gru_seed1/status/fail",
+        "expected": {
+          "global_step": 1000000,
+          "model_type": "gru",
+          "num_layers": 3,
+          "hidden_size": 458,
+          "env_id": "ALE/Skiing-v5",
+          "action_space_mode": "full18",
+          "num_actions": 18,
+          "atari_env_protocol": "skiing-stall-actionfix-v1",
+          "action_mapping_protocol": "single_canonical_full18",
+          "stalled_truncation_bootstrap": true,
+          "learning_rate": 0.00001,
+          "learning_rate_decay_step": 0,
+          "epsilon": 0.01,
+          "effective_learning_rate": 0.00001
+        }
+      },
+      {
+        "id": "lstm-seed1-fresh-extension-phase",
+        "result_dir": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend1mto2m_1m_lstm_seed1",
+        "done_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend1mto2m_1m_lstm_seed1/status/done",
+        "fail_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend1mto2m_1m_lstm_seed1/status/fail",
+        "expected": {
+          "global_step": 1000000,
+          "model_type": "lstm",
+          "num_layers": 3,
+          "hidden_size": 373,
+          "env_id": "ALE/Skiing-v5",
+          "action_space_mode": "full18",
+          "num_actions": 18,
+          "atari_env_protocol": "skiing-stall-actionfix-v1",
+          "action_mapping_protocol": "single_canonical_full18",
+          "stalled_truncation_bootstrap": true,
+          "learning_rate": 0.00001,
+          "learning_rate_decay_step": 0,
+          "epsilon": 0.01,
+          "effective_learning_rate": 0.00001
+        }
+      }
+    ]
+  },
+  "notes": [
+    "Cumulative 2M means 1M already completed plus this authorized extension. GaWF preserves replay, optimizer, RNG, global step, epsilon, and LR through strict checkpoint resume; its existing result leaf is retained.",
+    "GRU and LSTM finalized their original 1M leaves, so each extension is a distinct fresh 1M phase initialized only from that model's completed 1M state_dict. Replay, optimizer, RNG, and phase-local global step restart; epsilon is fixed at 0.01 and LR at 1e-5 with no further decay.",
+    "GRU runs first and LSTM second on SJC GPU0. GaWF runs concurrently on GPU1. All outputs stay under formal_20m_4mpertask_raw_seeds and use the unchanged full18 Skiing stall-actionfix-v1 protocol.",
+    "GRU source model SHA256=52dbf53720cdc67776783ef15bc8669ee04a9aee7d1d8a68f3191f395653ea57 and source metrics SHA256=c51a230e7895d97e7f0f8ba6093a3ecb96cd0616e1ab6b5157ba0fc706823fb2.",
+    "LSTM source model SHA256=616d2dda6ee39570dc7558c590f0557f488a35a92ef9709c0f0d376a9b3d04c7 and source metrics SHA256=45bdfb043fc9afbe7cb6aa073eb0151ca4f08bf7e493f5ad83b4f9f873eb43d3.",
+    "Formal code runs from read-only SJC snapshot /G/MIMOlab/Codes/aim3_gawf_rnn_snapshot_skiing_15682aff; the dirty SJC checkout and Amarel snapshots remain untouched.",
+    "Submitted at 2026-08-27T01:05:03-04:00. The prior GaWF writer on GPU1 received SIGTERM at adaptation step 608820, wrote a refreshed 121108334-byte checkpoint, and exited normally before the new 2M-target writer was launched."
+  ]
+}

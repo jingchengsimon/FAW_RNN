@@ -17,6 +17,7 @@ Outputs (in ``--save_dir``):
 - fg: ``fg_switch_offset_acc_<ckpt_tag>.npz``, ``fg_switch_offset_meta_<ckpt_tag>.json``
 - bg: ``bg_switch_offset_acc_<ckpt_tag>.npz``, ``bg_switch_offset_meta_<ckpt_tag>.json``
 """
+
 from __future__ import annotations
 
 import argparse
@@ -89,7 +90,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--save_dir",
         type=str,
-        default=str(output_dir("G_behaviour", "export_fg_switch_offset_acc", "data")),
+        default=None,
         help="Directory to save exported npz/json files.",
     )
     parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda"])
@@ -145,6 +146,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--use_mmap", action="store_true", default=True)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--exclude_window_initial_frame",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Exclude timestep 0 of every fixed rollout window from each recovery offset.",
+    )
     return parser.parse_args()
 
 
@@ -267,6 +274,7 @@ def evaluate_ckpt_offset_acc(
     *,
     switch_source: str,
     window_radius: int = DEFAULT_WINDOW_RADIUS,
+    exclude_window_initial_frame: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Per-offset char (fg id) and sector accuracy; windows from ``fg_switch`` or ``bg_switch``.
@@ -315,8 +323,8 @@ def evaluate_ckpt_offset_acc(
                 use_feedback=use_feedback,
             )
 
-            pred_char_ok = (torch.argmax(out_char, dim=2) == labels[:, :, 0].long())
-            pred_pos_ok = (torch.argmax(out_pos, dim=2) == labels[:, :, 1].long())
+            pred_char_ok = torch.argmax(out_char, dim=2) == labels[:, :, 0].long()
+            pred_pos_ok = torch.argmax(out_pos, dim=2) == labels[:, :, 1].long()
             pred_char_ok_np = _tensor_to_cpu_np(pred_char_ok)
             pred_pos_ok_np = _tensor_to_cpu_np(pred_pos_ok)
 
@@ -324,9 +332,12 @@ def evaluate_ckpt_offset_acc(
             global_start = bidx * batch_size * seq_len + chan_num
             global_end = global_start + bs * seq_len
             batch_offsets = offset_targets[global_start:global_end].reshape(bs, seq_len)
+            valid_time = np.ones((bs, seq_len), dtype=bool)
+            if exclude_window_initial_frame:
+                valid_time[:, 0] = False
 
             for off in offset_order:
-                m = batch_offsets == off
+                m = (batch_offsets == off) & valid_time
                 n = int(m.sum())
                 if n == 0:
                     continue
@@ -346,12 +357,8 @@ def evaluate_ckpt_offset_acc(
         c_tot = stats[off]["char_total"]
         p_tot = stats[off]["pos_total"]
         frame_counts[i] = c_tot
-        char_acc[i] = (
-            100.0 * float(stats[off]["char_correct"]) / float(c_tot) if c_tot > 0 else 0.0
-        )
-        pos_acc[i] = (
-            100.0 * float(stats[off]["pos_correct"]) / float(p_tot) if p_tot > 0 else 0.0
-        )
+        char_acc[i] = 100.0 * float(stats[off]["char_correct"]) / float(c_tot) if c_tot > 0 else 0.0
+        pos_acc[i] = 100.0 * float(stats[off]["pos_correct"]) / float(p_tot) if p_tot > 0 else 0.0
     return char_acc, pos_acc, frame_counts
 
 
@@ -362,6 +369,7 @@ def evaluate_ckpt_offset_acc_fg(
     device: torch.device,
     batch_size: int,
     window_radius: int = DEFAULT_WINDOW_RADIUS,
+    exclude_window_initial_frame: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Backward-compatible alias for ``evaluate_ckpt_offset_acc(..., switch_source='fg')``."""
     return evaluate_ckpt_offset_acc(
@@ -372,6 +380,7 @@ def evaluate_ckpt_offset_acc_fg(
         batch_size,
         switch_source="fg",
         window_radius=window_radius,
+        exclude_window_initial_frame=exclude_window_initial_frame,
     )
 
 
@@ -398,9 +407,7 @@ def _finetune_fcchars_only(
     )
     if use_accel:
         accel_cfg = AccelerationConfig(use_acceleration=True)
-        autocast_fn, scaler, _, _, pin_memory = setup_acceleration(
-            accel_cfg, device, logger=None
-        )
+        autocast_fn, scaler, _, _, pin_memory = setup_acceleration(accel_cfg, device, logger=None)
         amp_on = scaler is not None
         tqdm.write(
             f"  [bg head] acceleration: AMP={'on' if amp_on else 'off'}, "
@@ -442,9 +449,7 @@ def _finetune_fcchars_only(
             opt.zero_grad(set_to_none=True)
             with autocast_fn(device):
                 out_char, _ = run_forward_with_feedback(model, inputs, use_feedback=None)
-                loss, _ = loss_char_all_chars(
-                    out_char, labels, criterion, max_chars, device
-                )
+                loss, _ = loss_char_all_chars(out_char, labels, criterion, max_chars, device)
 
             if scaler is not None:
                 scaler.scale(loss).backward()
@@ -458,9 +463,7 @@ def _finetune_fcchars_only(
                     scaler.update()
                     loss_val = float(loss.detach().float().item())
                 else:
-                    torch.nn.utils.clip_grad_norm_(
-                        model.fcchars.parameters(), max_norm=1.0
-                    )
+                    torch.nn.utils.clip_grad_norm_(model.fcchars.parameters(), max_norm=1.0)
                     scaler.step(opt)
                     scaler.update()
                     loss_val = float(loss.detach().float().item())
@@ -487,6 +490,7 @@ def _save_outputs_fg(
     frame_counts: np.ndarray,
     offset_order: List[int],
     offset_labels: List[str],
+    exclude_window_initial_frame: bool,
 ) -> None:
     ckpt_tag = os.path.basename(ckpt_path).replace("_model.pth", "")
     npz_path = os.path.join(save_dir, f"fg_switch_offset_acc_{ckpt_tag}.npz")
@@ -509,6 +513,7 @@ def _save_outputs_fg(
                 "offset_order": offset_order,
                 "offset_labels": offset_labels,
                 "frame_counts": frame_counts.astype(np.int64).tolist(),
+                "exclude_window_initial_frame": exclude_window_initial_frame,
             },
             f,
             indent=2,
@@ -557,6 +562,8 @@ def _save_outputs_bg(
 
 def main() -> None:
     args = parse_args()
+    if args.save_dir is None:
+        args.save_dir = str(output_dir("G_behaviour", "export_fg_switch_offset_acc", "data"))
     cuda_visible_preset = bool(os.environ.get("CUDA_VISIBLE_DEVICES", "").strip())
     if args.device == "cuda" and not cuda_visible_preset:
         cuda_index = pick_cuda_device_index_prefer_no_python()
@@ -572,9 +579,7 @@ def main() -> None:
                 "using default CUDA device order."
             )
     elif args.device == "cuda" and cuda_visible_preset:
-        print(
-            f"Using preset CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')}"
-        )
+        print(f"Using preset CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')}")
 
     os.makedirs(args.save_dir, exist_ok=True)
     device = resolve_device(args.device, require_cuda_if_requested=False)
@@ -625,6 +630,7 @@ def main() -> None:
             batch_size=args.batch_size,
             switch_source=args.switch_target,
             window_radius=args.window_radius,
+            exclude_window_initial_frame=args.exclude_window_initial_frame,
         )
         if args.switch_target == "fg":
             _save_outputs_fg(
@@ -635,6 +641,7 @@ def main() -> None:
                 frame_counts,
                 offset_order,
                 offset_labels,
+                args.exclude_window_initial_frame,
             )
         else:
             _save_outputs_bg(

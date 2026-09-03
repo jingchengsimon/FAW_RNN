@@ -20,6 +20,12 @@ ATARI_PILOT_ENVS = (
 )
 
 ATARI_TASK_SCHEDULES = ("transition_balanced", "round_robin")
+ATARI_ENV_PROTOCOLS = ("baseline", "skiing-stall-actionfix-v1")
+
+SKIING_STALL_ENV_ID = "ALE/Skiing-v5"
+SKIING_STALL_STEPS = 450
+SKIING_STALL_RETURN_FLOOR = -30_000.0
+SKIING_PROGRESS_RAM_SLICE = slice(86, 94)
 
 # ALE action enum values use the canonical order 0..17. Games such as Skiing expose only
 # non-fire actions even under ``full_action_space=True``. Map fire variants to the matching
@@ -173,6 +179,72 @@ def _flicker(env, gym, flicker_prob: float, seed: int):
     return _FlickerObservation(env, flicker_prob, seed)
 
 
+def _skiing_stall_boundary(env, gym):
+    """Truncate Skiing after 450 agent steps without course-object scrolling."""
+
+    import numpy as np
+
+    class _SkiingStallBoundary(gym.Wrapper):
+        def __init__(self, wrapped_env) -> None:
+            super().__init__(wrapped_env)
+            self._progress_marker: tuple[int, ...] | None = None
+            self._steps_without_progress = 0
+            self._course_progress_events = 0
+            self._episode_return = 0.0
+
+        def _read_progress_marker(self) -> tuple[int, ...]:
+            ram = np.asarray(self.env.unwrapped.ale.getRAM(), dtype=np.uint8)
+            marker = tuple(int(value) for value in ram[SKIING_PROGRESS_RAM_SLICE])
+            if len(marker) != SKIING_PROGRESS_RAM_SLICE.stop - SKIING_PROGRESS_RAM_SLICE.start:
+                raise RuntimeError("Skiing RAM does not expose course-object y slots 86:94")
+            return marker
+
+        def reset(self, **kwargs):
+            observation, info = self.env.reset(**kwargs)
+            self._progress_marker = self._read_progress_marker()
+            self._steps_without_progress = 0
+            self._course_progress_events = 0
+            self._episode_return = 0.0
+            return observation, info
+
+        def step(self, action):
+            observation, reward, terminated, truncated, info = self.env.step(action)
+            reward_value = float(reward)
+            next_return = self._episode_return + reward_value
+            if terminated or truncated:
+                self._episode_return = next_return
+                return observation, reward, terminated, truncated, info
+
+            marker = self._read_progress_marker()
+            if marker != self._progress_marker:
+                self._course_progress_events += 1
+                self._steps_without_progress = 0
+            else:
+                self._steps_without_progress += 1
+            self._progress_marker = marker
+
+            if self._steps_without_progress >= SKIING_STALL_STEPS:
+                adjustment = min(0.0, SKIING_STALL_RETURN_FLOOR - next_return)
+                reward_value += adjustment
+                next_return += adjustment
+                enriched = dict(info)
+                enriched.update(
+                    {
+                        "end_reason": "stalled",
+                        "stall_steps": self._steps_without_progress,
+                        "course_progress_events": self._course_progress_events,
+                        "stall_reward_adjustment": adjustment,
+                    }
+                )
+                info = enriched
+                truncated = True
+
+            self._episode_return = next_return
+            return observation, reward_value, terminated, truncated, info
+
+    return _SkiingStallBoundary(env)
+
+
 def make_atari_env(
     env_id: str,
     seed: int,
@@ -184,11 +256,14 @@ def make_atari_env(
     video_dir: str | None = None,
     full_action_space: bool = False,
     render_mode: str | None = None,
+    atari_env_protocol: str = "baseline",
 ) -> Callable[[], object]:
     """Return a thunk that creates one preprocessed Atari environment."""
 
     if frame_skip < 1:
         raise ValueError(f"frame_skip must be >= 1, got {frame_skip}")
+    if atari_env_protocol not in ATARI_ENV_PROTOCOLS:
+        raise ValueError(f"Unsupported Atari environment protocol: {atari_env_protocol}")
 
     def thunk():
         try:
@@ -209,22 +284,45 @@ def make_atari_env(
         )
         if full_action_space:
             env = _canonical_18_action_space(env, gym)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
-        if capture_video and idx == 0:
-            if video_dir is None:
-                raise ValueError("video_dir must be set when capture_video=True")
-            env = gym.wrappers.RecordVideo(env, video_dir)
-        env = gym.wrappers.AtariPreprocessing(
-            env,
-            noop_max=30,
-            frame_skip=frame_skip,
-            screen_size=84,
-            terminal_on_life_loss=False,
-            grayscale_obs=True,
-            scale_obs=False,
+        skiing_stall_protocol = (
+            atari_env_protocol == "skiing-stall-actionfix-v1"
+            and env_id == SKIING_STALL_ENV_ID
         )
-        env = _flicker(env, gym, flicker_prob, seed + idx)
-        env = _frame_stack(env, gym, frame_stack)
+        if not skiing_stall_protocol:
+            env = gym.wrappers.RecordEpisodeStatistics(env)
+            if capture_video and idx == 0:
+                if video_dir is None:
+                    raise ValueError("video_dir must be set when capture_video=True")
+                env = gym.wrappers.RecordVideo(env, video_dir)
+            env = gym.wrappers.AtariPreprocessing(
+                env,
+                noop_max=30,
+                frame_skip=frame_skip,
+                screen_size=84,
+                terminal_on_life_loss=False,
+                grayscale_obs=True,
+                scale_obs=False,
+            )
+            env = _flicker(env, gym, flicker_prob, seed + idx)
+            env = _frame_stack(env, gym, frame_stack)
+        else:
+            env = gym.wrappers.AtariPreprocessing(
+                env,
+                noop_max=30,
+                frame_skip=frame_skip,
+                screen_size=84,
+                terminal_on_life_loss=False,
+                grayscale_obs=True,
+                scale_obs=False,
+            )
+            env = _flicker(env, gym, flicker_prob, seed + idx)
+            env = _frame_stack(env, gym, frame_stack)
+            env = _skiing_stall_boundary(env, gym)
+            env = gym.wrappers.RecordEpisodeStatistics(env)
+            if capture_video and idx == 0:
+                if video_dir is None:
+                    raise ValueError("video_dir must be set when capture_video=True")
+                env = gym.wrappers.RecordVideo(env, video_dir)
         env.action_space.seed(seed + idx)
         env.observation_space.seed(seed + idx)
         return env
@@ -243,6 +341,7 @@ def make_vector_atari_env(
     video_dir: str | None = None,
     full_action_space: bool = False,
     render_mode: str | None = None,
+    atari_env_protocol: str = "baseline",
 ) -> Any:
     """Create a synchronous vector Atari environment."""
     try:
@@ -266,6 +365,7 @@ def make_vector_atari_env(
             video_dir,
             full_action_space,
             render_mode,
+            atari_env_protocol,
         )
         for idx in range(num_envs)
     ]
@@ -281,6 +381,7 @@ def make_multitask_atari_env(
     flicker_prob: float = 0.0,
     task_schedule: str = "transition_balanced",
     scheduler_state: dict[str, Any] | None = None,
+    atari_env_protocol: str = "baseline",
 ) -> Callable[[], object]:
     """Return one task-blind Atari env that switches games at episode resets.
 
@@ -294,6 +395,8 @@ def make_multitask_atari_env(
         raise ValueError("Multi-task env_ids must be unique")
     if task_schedule not in ATARI_TASK_SCHEDULES:
         raise ValueError(f"Unsupported Phase0 task_schedule: {task_schedule}")
+    if atari_env_protocol not in ATARI_ENV_PROTOCOLS:
+        raise ValueError(f"Unsupported Atari environment protocol: {atari_env_protocol}")
 
     def thunk():
         try:
@@ -305,21 +408,23 @@ def make_multitask_atari_env(
             ) from exc
         _register_ale_envs(gym)
 
-        component_envs = [
-            _canonical_18_action_space(
-                make_atari_env(
-                    env_id=env_id,
-                    seed=seed + task_idx * 10_000,
-                    idx=idx,
-                    frame_stack=frame_stack,
-                    frame_skip=frame_skip,
-                    flicker_prob=flicker_prob,
-                    full_action_space=True,
-                )(),
-                gym,
-            )
-            for task_idx, env_id in enumerate(env_ids)
-        ]
+        component_envs = []
+        for task_idx, env_id in enumerate(env_ids):
+            component_env = make_atari_env(
+                env_id=env_id,
+                seed=seed + task_idx * 10_000,
+                idx=idx,
+                frame_stack=frame_stack,
+                frame_skip=frame_skip,
+                flicker_prob=flicker_prob,
+                full_action_space=True,
+                atari_env_protocol=atari_env_protocol,
+            )()
+            # Preserve the historical formal protocol exactly. The versioned
+            # actionfix protocol removes this redundant second canonical map.
+            if atari_env_protocol == "baseline":
+                component_env = _canonical_18_action_space(component_env, gym)
+            component_envs.append(component_env)
 
         class _EpisodeSwitchAtariEnv(gym.Env):
             metadata = component_envs[0].metadata
@@ -418,6 +523,7 @@ def make_multitask_vector_atari_env(
     flicker_prob: float = 0.0,
     task_schedule: str = "transition_balanced",
     scheduler_states: tuple[dict[str, Any], ...] | None = None,
+    atari_env_protocol: str = "baseline",
 ) -> Any:
     """Create task-blind Atari envs that select tasks only at episode boundaries."""
     if scheduler_states is not None and len(scheduler_states) != num_envs:
@@ -442,6 +548,7 @@ def make_multitask_vector_atari_env(
             flicker_prob=flicker_prob,
             task_schedule=task_schedule,
             scheduler_state=None if scheduler_states is None else scheduler_states[idx],
+            atari_env_protocol=atari_env_protocol,
         )
         for idx in range(num_envs)
     ]

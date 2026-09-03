@@ -9,7 +9,9 @@ from __future__ import annotations
 import os as _anal_os
 import sys as _anal_sys
 
-_ANAL_PROJECT_ROOT = _anal_os.path.dirname(_anal_os.path.dirname(_anal_os.path.dirname(_anal_os.path.abspath(__file__))))
+_ANAL_PROJECT_ROOT = _anal_os.path.dirname(
+    _anal_os.path.dirname(_anal_os.path.dirname(_anal_os.path.abspath(__file__)))
+)
 if _ANAL_PROJECT_ROOT not in _anal_sys.path:
     _anal_sys.path.insert(0, _ANAL_PROJECT_ROOT)
 
@@ -60,11 +62,26 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Ten per-seed Fig6 NPZ files; their point maps are averaged before plotting.",
     )
+    parser.add_argument(
+        "--point_keys",
+        nargs="+",
+        choices=("point_included", "point_excluded"),
+        default=("point_included", "point_excluded"),
+    )
+    parser.add_argument("--delta", action="store_true")
+    parser.add_argument("--pdf_only", action="store_true")
     return parser.parse_args()
 
 
 def plot_sector_grid(
-    maps: np.ndarray, point_key: str, fig_dir: str, dpi: int, stem_prefix: str
+    maps: np.ndarray,
+    point_key: str,
+    fig_dir: str,
+    dpi: int,
+    stem_prefix: str,
+    *,
+    delta: bool = False,
+    pdf_only: bool = False,
 ) -> tuple[str, str]:
     """Write one sector-only 3x3 raw gate-mean grid as PNG and PDF."""
 
@@ -74,7 +91,13 @@ def plot_sector_grid(
     if point_key not in ("point_included", "point_excluded"):
         raise ValueError("point_key must be point_included or point_excluded")
     suffix = "included" if point_key == "point_included" else "excluded"
-    norm = TwoSlopeNorm(vmin=0.0, vcenter=0.5, vmax=1.0)
+    if delta:
+        limit = float(np.abs(values).max())
+        if limit <= 0.0:
+            raise RuntimeError("Delta gate maps have zero range.")
+        norm = TwoSlopeNorm(vmin=-limit, vcenter=0.0, vmax=limit)
+    else:
+        norm = TwoSlopeNorm(vmin=0.0, vcenter=0.5, vmax=1.0)
     fig, axes = plt.subplots(3, 3, figsize=(7.2, 6.8), constrained_layout=True)
     image = None
     for sector, axis in enumerate(axes.flat):
@@ -98,15 +121,18 @@ def plot_sector_grid(
         axis.set_xticks([])
         axis.set_yticks([])
     assert image is not None
-    fig.suptitle("Sequential input-gate mean (equal-n sectors)\n" f"0.5 point mass {suffix}")
+    measure = "delta input-gate mean" if delta else "input-gate mean"
+    fig.suptitle(f"Sequential {measure} (equal-n sectors)\n0.5 point mass {suffix}")
     fig.colorbar(image, ax=axes.ravel().tolist(), shrink=0.82)
     stem = f"{stem_prefix}_{point_key}"
     png_path = os.path.join(fig_dir, f"{stem}.png")
     pdf_path = os.path.join(fig_dir, f"{stem}.pdf")
-    fig.savefig(png_path, dpi=dpi, bbox_inches="tight", pad_inches=0.06)
+    if not pdf_only:
+        fig.savefig(png_path, dpi=dpi, bbox_inches="tight", pad_inches=0.06)
     fig.savefig(pdf_path, dpi=dpi, bbox_inches="tight", pad_inches=0.06)
     plt.close(fig)
-    print(f"Saved {png_path}")
+    if not pdf_only:
+        print(f"Saved {png_path}")
     print(f"Saved {pdf_path}")
     return png_path, pdf_path
 
@@ -125,17 +151,31 @@ def main() -> None:
         per_seed = []
         for path in args.seed_data:
             with np.load(path, allow_pickle=False) as loaded:
-                per_seed.append({key: np.asarray(loaded[key], dtype=np.float32) for key in loaded.files})
+                per_seed.append(
+                    {key: np.asarray(loaded[key], dtype=np.float32) for key in loaded.files}
+                )
         required = ("point_included", "point_excluded")
         if any(any(key not in item for key in required) for item in per_seed):
             raise ValueError("Every --seed_data file must contain both point maps")
         maps = {
-            key: np.mean(np.stack([item[key] for item in per_seed], axis=0), axis=0, dtype=np.float64)
-            .astype(np.float32)
+            key: np.mean(
+                np.stack([item[key] for item in per_seed], axis=0), axis=0, dtype=np.float64
+            ).astype(np.float32)
             for key in required
         }
-    for point_key in ("point_included", "point_excluded"):
-        plot_sector_grid(maps[point_key], point_key, args.fig_dir, args.dpi, args.stem)
+    for point_key in args.point_keys:
+        values = maps[point_key]
+        if args.delta:
+            values = values - values.mean(axis=0, keepdims=True)
+        plot_sector_grid(
+            values,
+            point_key,
+            args.fig_dir,
+            args.dpi,
+            args.stem,
+            delta=args.delta,
+            pdf_only=args.pdf_only,
+        )
 
 
 if __name__ == "__main__":

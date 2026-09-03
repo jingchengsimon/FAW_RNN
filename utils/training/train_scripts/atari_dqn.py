@@ -9,10 +9,12 @@ Q-values as gate feedback.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import math
 import os
+from pathlib import Path
 import shutil
 import signal
 import time
@@ -25,6 +27,7 @@ from torch import optim
 
 from utils.training.atari.atari_dqn_models import AtariQNetwork, AtariQNetworkState
 from utils.training.atari.atari_envs import (
+    ATARI_ENV_PROTOCOLS,
     ATARI_PILOT_ENVS,
     ATARI_TASK_SCHEDULES,
     make_multitask_vector_atari_env,
@@ -99,6 +102,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default="transition_balanced",
         choices=ATARI_TASK_SCHEDULES,
         help="Phase0 episode-boundary scheduler; default balances collected transitions.",
+    )
+    parser.add_argument(
+        "--atari_env_protocol",
+        choices=ATARI_ENV_PROTOCOLS,
+        default="baseline",
+        help="Versioned Atari environment boundary and action-mapping protocol.",
     )
     parser.add_argument("--algo", type=str, default="dqn", choices=["dqn"])
     parser.add_argument(
@@ -264,9 +273,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Resume model, optimizer, replay position, counters, and RNG from a checkpoint.",
     )
     parser.add_argument(
+        "--init_weights_from",
+        default=None,
+        help="Initialize only model weights from a completed final state_dict.",
+    )
+    parser.add_argument(
         "--auto_resume",
         action="store_true",
         help="Resume from <save_dir>/checkpoint.pth when it exists.",
+    )
+    parser.add_argument(
+        "--allow_total_timesteps_extension",
+        action="store_true",
+        help=(
+            "Allow a resumable checkpoint target to increase while every other protocol "
+            "field remains identical."
+        ),
     )
     parser.add_argument(
         "--replay_backing",
@@ -294,6 +316,7 @@ RESUME_ARG_KEYS = (
     "env_ids",
     "action_space_mode",
     "task_schedule",
+    "atari_env_protocol",
     "algo",
     "model_type",
     "feedback_mode",
@@ -344,6 +367,32 @@ SequenceForward = Callable[
     [torch.Tensor, torch.Tensor, AtariQNetworkState | None, bool | None],
     tuple[torch.Tensor, AtariQNetworkState | None],
 ]
+
+
+def _resume_validation_keys(
+    checkpoint: dict[str, Any], args: argparse.Namespace
+) -> tuple[tuple[str, ...], int | None]:
+    """Return protocol keys and the original budget for an explicit extension resume."""
+
+    previous_origin = checkpoint.get("extended_from_total_timesteps")
+    if not args.allow_total_timesteps_extension:
+        return RESUME_ARG_KEYS, int(previous_origin) if previous_origin is not None else None
+    saved_args = checkpoint.get("args")
+    if not isinstance(saved_args, dict) or "total_timesteps" not in saved_args:
+        raise ValueError("Checkpoint is missing saved total_timesteps")
+    saved_total = int(saved_args["total_timesteps"])
+    requested_total = int(args.total_timesteps)
+    if requested_total < saved_total:
+        raise ValueError(
+            "A total-timestep extension cannot reduce the checkpoint target: "
+            f"saved={saved_total} requested={requested_total}"
+        )
+    if requested_total == saved_total and previous_origin is None:
+        raise ValueError(
+            "--allow_total_timesteps_extension requires a larger target on first use"
+        )
+    origin = int(previous_origin) if previous_origin is not None else saved_total
+    return tuple(key for key in RESUME_ARG_KEYS if key != "total_timesteps"), origin
 
 
 def _step_with_sequence_forward(
@@ -417,6 +466,55 @@ def _supports_fused_adam_params(model: torch.nn.Module) -> bool:
     return all(param.is_floating_point() for param in model.parameters())
 
 
+def _checkpoint_sha256(path: Path) -> str:
+    """Return the SHA256 digest of one immutable initialization checkpoint."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _load_initial_weights(
+    model: AtariQNetwork,
+    checkpoint_path: str,
+    device: torch.device,
+) -> dict[str, str]:
+    """Load only a completed model state_dict and return immutable provenance."""
+    path = Path(checkpoint_path).resolve()
+    if not path.is_file():
+        raise FileNotFoundError(f"Initial model weights not found: {path}")
+    state_dict = torch.load(path, map_location=device)
+    if not isinstance(state_dict, dict) or not state_dict:
+        raise TypeError(f"Expected a non-empty final model state_dict: {path}")
+    if "model" in state_dict or "optimizer" in state_dict or "replay" in state_dict:
+        raise ValueError(
+            "--init_weights_from requires the completed final model state_dict, "
+            f"not a resumable training checkpoint: {path}"
+        )
+    filtered = {
+        str(key): value
+        for key, value in state_dict.items()
+        if not str(key).endswith("prev_feedback")
+    }
+    incompatible = model.load_state_dict(filtered, strict=False)
+    logger = logging.getLogger("train_atari_dqn")
+    logger.info(
+        "initialized model weights=%s missing_keys=%s unexpected_keys=%s",
+        path,
+        incompatible.missing_keys,
+        incompatible.unexpected_keys,
+    )
+    if incompatible.missing_keys or incompatible.unexpected_keys:
+        raise RuntimeError(f"Initial checkpoint is incompatible with the requested model: {path}")
+    return {
+        "mode": "weights_only",
+        "source_checkpoint": str(path),
+        "source_checkpoint_name": path.name,
+        "source_checkpoint_sha256": _checkpoint_sha256(path),
+    }
+
+
 def _resolve_task_config(args: argparse.Namespace) -> tuple[tuple[str, ...], str]:
     env_ids = tuple(args.env_ids) if args.env_ids is not None else (args.env_id,)
     if len(set(env_ids)) != len(env_ids):
@@ -456,9 +554,12 @@ def _extract_episode_returns(infos) -> list[float]:
     return returns
 
 
-def _extract_episode_records(infos: Any) -> list[tuple[str, float]]:
-    """Extract ``(env_id, return)`` pairs from current Gymnasium vector formats."""
-    records: list[tuple[str, float]] = []
+def _extract_episode_records(
+    infos: Any,
+    default_env_id: str | None = None,
+) -> list[tuple[str, float, int, str | None]]:
+    """Extract per-environment return, length, and end reason records."""
+    records: list[tuple[str, float, int, str | None]] = []
     if not isinstance(infos, dict):
         return records
 
@@ -472,12 +573,35 @@ def _extract_episode_records(infos: Any) -> list[tuple[str, float]]:
             else np.asarray(mask_value).reshape(-1).astype(bool)
         )
         env_values = np.asarray(
-            infos.get("env_id", np.full(raw_returns.shape, "unknown", dtype=object))
+            infos.get(
+                "env_id",
+                np.full(raw_returns.shape, default_env_id or "unknown", dtype=object),
+            )
         ).reshape(-1)
+        raw_lengths = np.asarray(
+            episode.get("l", np.zeros(raw_returns.shape, dtype=np.int64))
+        ).reshape(-1)
+        reason_values = np.asarray(
+            infos.get("end_reason", np.full(raw_returns.shape, None, dtype=object)),
+            dtype=object,
+        ).reshape(-1)
+        reason_mask_value = infos.get("_end_reason")
+        reason_mask = (
+            np.ones(reason_values.shape, dtype=bool)
+            if reason_mask_value is None
+            else np.asarray(reason_mask_value).reshape(-1).astype(bool)
+        )
         for index, (episode_return, keep) in enumerate(zip(raw_returns, mask)):
             if keep:
                 env_id = str(env_values[index]) if index < env_values.size else "unknown"
-                records.append((env_id, float(episode_return)))
+                length = int(raw_lengths[index]) if index < raw_lengths.size else 0
+                raw_reason = reason_values[index] if index < reason_values.size else None
+                reason = (
+                    str(raw_reason)
+                    if raw_reason is not None and reason_mask[index]
+                    else None
+                )
+                records.append((env_id, float(episode_return), length, reason))
 
     final_infos = infos.get("final_info")
     if final_infos is None:
@@ -485,7 +609,19 @@ def _extract_episode_records(infos: Any) -> list[tuple[str, float]]:
     for final_info in final_infos:
         if final_info and "episode" in final_info:
             episode_return = np.asarray(final_info["episode"]["r"]).reshape(-1)[0]
-            records.append((str(final_info.get("env_id", "unknown")), float(episode_return)))
+            episode_length = np.asarray(final_info["episode"].get("l", [0])).reshape(-1)[0]
+            records.append(
+                (
+                    str(final_info.get("env_id", default_env_id or "unknown")),
+                    float(episode_return),
+                    int(episode_length),
+                    (
+                        str(final_info["end_reason"])
+                        if "end_reason" in final_info
+                        else None
+                    ),
+                )
+            )
     return records
 
 
@@ -496,6 +632,24 @@ def _extract_step_env_ids(infos: Any, num_envs: int) -> list[str | None]:
         return result
     values = np.asarray(infos["env_id"], dtype=object).reshape(-1)
     mask_value = infos.get("_env_id")
+    mask = (
+        np.ones(values.shape, dtype=bool)
+        if mask_value is None
+        else np.asarray(mask_value).reshape(-1).astype(bool)
+    )
+    for index, (value, keep) in enumerate(zip(values, mask)):
+        if index < num_envs and keep and value is not None:
+            result[index] = str(value)
+    return result
+
+
+def _extract_step_end_reasons(infos: Any, num_envs: int) -> list[str | None]:
+    """Return any end reason associated with each current vector transition."""
+    result: list[str | None] = [None] * num_envs
+    if not isinstance(infos, dict) or "end_reason" not in infos:
+        return result
+    values = np.asarray(infos["end_reason"], dtype=object).reshape(-1)
+    mask_value = infos.get("_end_reason")
     mask = (
         np.ones(values.shape, dtype=bool)
         if mask_value is None
@@ -630,7 +784,9 @@ def _checkpoint_payload(
     elapsed_seconds: float,
     rolling_returns: list[float],
     rolling_returns_by_env: dict[str, list[float]],
+    rolling_lengths_by_env: dict[str, list[int]],
     episode_counts: dict[str, int],
+    end_reason_counts_by_env: dict[str, dict[str, int]],
     environment_steps: dict[str, int],
     task_scheduler_states: tuple[dict[str, Any], ...] | None,
     learning_started_at_step: int | None,
@@ -639,6 +795,8 @@ def _checkpoint_payload(
     last_q_mean: float,
     resume_count: int,
     resumed_at_steps: list[int],
+    initialization: dict[str, str] | None,
+    extended_from_total_timesteps: int | None,
 ) -> dict[str, Any]:
     return {
         "format_version": CHECKPOINT_FORMAT_VERSION,
@@ -653,7 +811,13 @@ def _checkpoint_payload(
         "rolling_returns_by_env": {
             env_id: list(returns) for env_id, returns in rolling_returns_by_env.items()
         },
+        "rolling_lengths_by_env": {
+            env_id: list(lengths) for env_id, lengths in rolling_lengths_by_env.items()
+        },
         "episode_counts": dict(episode_counts),
+        "end_reason_counts_by_env": {
+            env_id: dict(counts) for env_id, counts in end_reason_counts_by_env.items()
+        },
         "environment_steps": dict(environment_steps),
         "task_scheduler_states": task_scheduler_states,
         "learning_started_at_step": learning_started_at_step,
@@ -662,6 +826,8 @@ def _checkpoint_payload(
         "last_q_mean": float(last_q_mean),
         "resume_count": resume_count,
         "resumed_at_steps": list(resumed_at_steps),
+        "initialization": initialization,
+        "extended_from_total_timesteps": extended_from_total_timesteps,
         "rng_state": rng_state(),
         "learning_rate": float(args.learning_rate),
         "args": vars(args),
@@ -675,6 +841,23 @@ def _checkpoint_payload(
 def _next_state_reset_flags(dones: np.ndarray, autoreset_rows: np.ndarray) -> np.ndarray:
     """Reset on terminal rows and again after NEXT_STEP's ignored autoreset row."""
     return np.logical_or(dones, autoreset_rows).astype(np.uint8)
+
+
+def _replay_boundary_flags(
+    terminated: np.ndarray,
+    truncated: np.ndarray,
+    end_reasons: list[str | None],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return episode-reset and TD-bootstrap-stop flags for collected transitions."""
+    episode_ends = np.logical_or(terminated, truncated).astype(np.uint8)
+    stalled = np.asarray([reason == "stalled" for reason in end_reasons], dtype=bool)
+    if np.any(stalled & np.asarray(terminated, dtype=bool)):
+        raise RuntimeError("A stalled Skiing boundary must truncate, not terminate")
+    if np.any(stalled & ~np.asarray(truncated, dtype=bool)):
+        raise RuntimeError("A stalled Skiing boundary is missing truncated=True")
+    bootstrap_stops = episode_ends.copy()
+    bootstrap_stops[stalled] = 0
+    return episode_ends, bootstrap_stops
 
 
 def _aggregate_td_loss(
@@ -815,6 +998,10 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("diagnostic checkpoint steps must be within (0, total_timesteps]")
     if args.resume_from and args.auto_resume:
         raise ValueError("--resume_from and --auto_resume are mutually exclusive")
+    if args.init_weights_from and (args.resume_from or args.auto_resume):
+        raise ValueError(
+            "--init_weights_from is mutually exclusive with --resume_from/--auto_resume"
+        )
     set_atari_seed(args.seed)
     device = select_device(args.device)
     acceleration = AtariAcceleration(
@@ -840,12 +1027,14 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
     if args.auto_resume and os.path.isfile(checkpoint_path):
         resume_path = checkpoint_path
     resume_checkpoint = None
+    extended_from_total_timesteps: int | None = None
     if resume_path:
         if not os.path.isfile(resume_path):
             raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
         resume_checkpoint = load_checkpoint(resume_path, device)
         saved_args = resume_checkpoint.get("args")
         if isinstance(saved_args, dict):
+            saved_args.setdefault("atari_env_protocol", "baseline")
             # Checkpoints created before the per-task gate retain historical semantics.
             saved_args.setdefault("learning_starts_per_task", 0)
             # Historical checkpoints parameterized epsilon decay as a fraction.
@@ -855,10 +1044,13 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                     saved_args["exploration_steps"] = int(
                         float(fraction) * int(saved_args["total_timesteps"])
                     )
+        resume_keys, extended_from_total_timesteps = _resume_validation_keys(
+            resume_checkpoint, args
+        )
         validate_resume_protocol(
             resume_checkpoint,
             args,
-            RESUME_ARG_KEYS,
+            resume_keys,
             expected_format_version=CHECKPOINT_FORMAT_VERSION,
             learning_rate=float(args.learning_rate),
         )
@@ -905,6 +1097,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             flicker_prob=args.flicker_prob,
             task_schedule=args.task_schedule,
             scheduler_states=restored_scheduler_states,
+            atari_env_protocol=args.atari_env_protocol,
         )
     else:
         envs = make_vector_atari_env(
@@ -917,6 +1110,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             capture_video=args.capture_video,
             video_dir=video_dir,
             full_action_space=action_space_mode == "full18",
+            atari_env_protocol=args.atari_env_protocol,
         )
     try:
         assert envs.single_action_space.__class__.__name__ == "Discrete"
@@ -943,6 +1137,11 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         )
         model = AtariQNetwork(**model_kwargs).to(device)
         target_net = AtariQNetwork(**model_kwargs).to(device)
+        initialization = (
+            _load_initial_weights(model, args.init_weights_from, device)
+            if args.init_weights_from
+            else None
+        )
         target_net.load_state_dict(model.state_dict())
         target_net.eval()
         target_net.requires_grad_(False)
@@ -1021,7 +1220,11 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         resumed_at_steps: list[int] = []
         rolling_returns: list[float] = []
         rolling_returns_by_env: dict[str, list[float]] = {env_id: [] for env_id in env_ids}
+        rolling_lengths_by_env: dict[str, list[int]] = {env_id: [] for env_id in env_ids}
         episode_counts = {env_id: 0 for env_id in env_ids}
+        end_reason_counts_by_env: dict[str, dict[str, int]] = {
+            env_id: {} for env_id in env_ids
+        }
         environment_steps = {env_id: 0 for env_id in env_ids}
         env_id_to_task = {env_id: task_id for task_id, env_id in enumerate(env_ids)}
         last_loss_tensor: torch.Tensor | None = None
@@ -1055,9 +1258,21 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             ).items():
                 if env_id in rolling_returns_by_env:
                     rolling_returns_by_env[env_id] = [float(value) for value in returns]
+            for env_id, lengths in resume_checkpoint.get(
+                "rolling_lengths_by_env", {}
+            ).items():
+                if env_id in rolling_lengths_by_env:
+                    rolling_lengths_by_env[env_id] = [int(value) for value in lengths]
             for env_id, count in resume_checkpoint.get("episode_counts", {}).items():
                 if env_id in episode_counts:
                     episode_counts[env_id] = int(count)
+            for env_id, counts in resume_checkpoint.get(
+                "end_reason_counts_by_env", {}
+            ).items():
+                if env_id in end_reason_counts_by_env:
+                    end_reason_counts_by_env[env_id] = {
+                        str(reason): int(count) for reason, count in counts.items()
+                    }
             for env_id, steps in resume_checkpoint.get("environment_steps", {}).items():
                 if env_id in environment_steps:
                     environment_steps[env_id] = int(steps)
@@ -1077,6 +1292,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                 int(step) for step in resume_checkpoint.get("resumed_at_steps", [])
             ]
             resumed_at_steps.append(global_step)
+            initialization = resume_checkpoint.get("initialization")
             restore_rng_state(resume_checkpoint["rng_state"])
             history_archive = reconcile_history(history_path, global_step)
             logger.info(
@@ -1116,7 +1332,9 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                     elapsed_seconds=elapsed_before_resume + (time.time() - start_time),
                     rolling_returns=rolling_returns,
                     rolling_returns_by_env=rolling_returns_by_env,
+                    rolling_lengths_by_env=rolling_lengths_by_env,
                     episode_counts=episode_counts,
+                    end_reason_counts_by_env=end_reason_counts_by_env,
                     environment_steps=environment_steps,
                     task_scheduler_states=(
                         multitask_scheduler_states(envs) if is_multitask else None
@@ -1127,6 +1345,8 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                     last_q_mean=last_q_mean_value,
                     resume_count=resume_count,
                     resumed_at_steps=resumed_at_steps,
+                    initialization=initialization,
+                    extended_from_total_timesteps=extended_from_total_timesteps,
                 ),
                 checkpoint_path,
             )
@@ -1164,13 +1384,22 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             next_obs_np, reward_np, terminated_np, truncated_np, infos = envs.step(action_np)
             if args.record_timing:
                 timing["environment_seconds"] += time.perf_counter() - environment_start
-            done_np = np.logical_or(terminated_np, truncated_np).astype(np.uint8)
+            end_reasons = _extract_step_end_reasons(infos, args.num_envs)
+            episode_end_np, bootstrap_stop_np = _replay_boundary_flags(
+                terminated_np,
+                truncated_np,
+                end_reasons,
+            )
+            # A stall is an artificial time limit: reset the episode/recurrent
+            # state, but keep TD bootstrap from its final observation.
             # NEXT_STEP autoreset consumes one ignored action after a terminal
             # row. Reset before that invalid row and again before the first
             # valid observation of the newly selected episode/task.
-            state_reset_np = _next_state_reset_flags(done_np, prev_done_np)
+            state_reset_np = _next_state_reset_flags(episode_end_np, prev_done_np)
 
             step_env_ids = _extract_step_env_ids(infos, args.num_envs)
+            if not is_multitask:
+                step_env_ids = [env_ids[0]] * args.num_envs
             task_ids_np = np.zeros(args.num_envs, dtype=np.int16)
             for slot, env_id in enumerate(step_env_ids):
                 if is_multitask and env_id not in env_id_to_task:
@@ -1187,13 +1416,13 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                 obs=current_obs_np,
                 actions=action_np,
                 rewards=np.asarray(reward_np, dtype=np.float32),
-                dones=done_np,
+                dones=bootstrap_stop_np,
                 resets=prev_done_np,
                 task_ids=task_ids_np,
             )
             if args.record_timing:
                 timing["replay_io_seconds"] += time.perf_counter() - replay_io_start
-            prev_done_np = done_np
+            prev_done_np = episode_end_np
             current_obs_np = to_channel_first_obs(next_obs_np)
             next_obs = torch.as_tensor(current_obs_np, device=device)
             next_done = torch.as_tensor(state_reset_np, device=device, dtype=torch.float32)
@@ -1201,12 +1430,21 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             rolling_returns.extend(_extract_episode_returns(infos))
             if len(rolling_returns) > 100:
                 rolling_returns = rolling_returns[-100:]
-            for env_id, episode_return in _extract_episode_records(infos):
+            for env_id, episode_return, episode_length, end_reason in _extract_episode_records(
+                infos,
+                env_ids[0] if not is_multitask else None,
+            ):
                 if env_id not in rolling_returns_by_env:
                     continue
                 rolling_returns_by_env[env_id].append(episode_return)
                 rolling_returns_by_env[env_id] = rolling_returns_by_env[env_id][-100:]
+                rolling_lengths_by_env[env_id].append(episode_length)
+                rolling_lengths_by_env[env_id] = rolling_lengths_by_env[env_id][-100:]
                 episode_counts[env_id] += 1
+                reason = end_reason or "natural"
+                end_reason_counts_by_env[env_id][reason] = (
+                    end_reason_counts_by_env[env_id].get(reason, 0) + 1
+                )
 
             if _learning_ready(args, global_step, environment_steps) and (
                 global_step % args.train_frequency == 0
@@ -1290,6 +1528,12 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                         ),
                         "episodes": episode_counts[env_id],
                         "environment_steps": environment_steps[env_id],
+                        "episode_length_100": (
+                            float(np.mean(rolling_lengths_by_env[env_id]))
+                            if rolling_lengths_by_env[env_id]
+                            else float("nan")
+                        ),
+                        "end_reason_counts": dict(end_reason_counts_by_env[env_id]),
                     }
                     for env_id, returns in rolling_returns_by_env.items()
                 }
@@ -1377,6 +1621,18 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                 ),
                 "episodes": episode_counts[env_id],
                 "environment_steps": environment_steps[env_id],
+                "episode_length_100": (
+                    float(np.mean(rolling_lengths_by_env[env_id]))
+                    if rolling_lengths_by_env[env_id]
+                    else float("nan")
+                ),
+                "end_reason_counts": dict(end_reason_counts_by_env[env_id]),
+                "stall_rate": (
+                    end_reason_counts_by_env[env_id].get("stalled", 0)
+                    / episode_counts[env_id]
+                    if episode_counts[env_id]
+                    else 0.0
+                ),
             }
             for env_id, returns in rolling_returns_by_env.items()
         }
@@ -1386,6 +1642,28 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "multitask": is_multitask,
             "action_space_mode": action_space_mode,
             "num_actions": num_actions,
+            "atari_env_protocol": args.atari_env_protocol,
+            "action_mapping_protocol": (
+                "single_canonical_full18"
+                if args.atari_env_protocol == "skiing-stall-actionfix-v1"
+                else "baseline"
+            ),
+            "skiing_progress_signal": (
+                "ale_ram_course_object_y_86_94_change"
+                if args.atari_env_protocol == "skiing-stall-actionfix-v1"
+                else None
+            ),
+            "skiing_stall_steps": (
+                450 if args.atari_env_protocol == "skiing-stall-actionfix-v1" else None
+            ),
+            "skiing_stall_return_floor": (
+                -30_000.0
+                if args.atari_env_protocol == "skiing-stall-actionfix-v1"
+                else None
+            ),
+            "stalled_truncation_bootstrap": (
+                True if args.atari_env_protocol == "skiing-stall-actionfix-v1" else None
+            ),
             "task_schedule": args.task_schedule if is_multitask else None,
             "replay_sampling": args.replay_sampling,
             "replay_layout": args.replay_layout,
@@ -1435,6 +1713,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "raw_ale_frames": global_step * args.frame_skip,
             "flicker_prob": args.flicker_prob,
             "global_step": global_step,
+            "seed": args.seed,
             "timing": timing_metrics,
             "episodic_return_100": rolling_return,
             "fps": fps,
@@ -1455,6 +1734,8 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "checkpoint_interval_steps": args.checkpoint_interval_steps,
             "resume_count": resume_count,
             "resumed_at_steps": resumed_at_steps,
+            "initialization": initialization,
+            "extended_from_total_timesteps": extended_from_total_timesteps,
         }
         layer_suffix = f"_L{args.num_layers}" if args.num_layers > 1 else ""
         env_tag = "__".join(env_id.replace("/", "_") for env_id in env_ids)

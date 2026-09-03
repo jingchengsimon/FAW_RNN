@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "id": "clutter-supple2-input-gate-sign-magnitude-9sector-gawf-10seeds",
+  "description": "Supplementary 2 all-nine-sector input-gate sign/magnitude curves and seed-level overlap-gap and slope summaries.",
+  "host": "sjc-remote",
+  "status": "completed",
+  "created_at": "2026-08-16T17:00:00-04:00",
+  "updated_at": "2026-08-16T20:21:14-04:00",
+  "completed_at": "2026-08-16T20:21:14-04:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": [
+      "sjc_supple2_input_gate_sign_mag_9sector_10seed_20260816"
+    ],
+    "tmux_session": "sjc_supple2_input_gate_sign_mag_9sector_10seed_20260816",
+    "process_patterns": [
+      "utils.analysis.clutter.supple2_input_gate_sign_magnitude_sector"
+    ],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": [
+      "results/run_supple2_input_gate_sign_mag_9sector_10seed_20260816.log"
+    ],
+    "status_dir": "results/data/analysis/supple2_input_gate_sign_magnitude_9sector_10seed/final",
+    "result_paths": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/supple2_input_gate_sign_magnitude_9sector_10seed",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/save/Supple2_input_gate_sign_vs_mag_sector_delta_zoom.png"
+    ]
+  },
+  "tracking": {
+    "expected_units": 10,
+    "auto_complete": true,
+    "result_globs": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/supple2_input_gate_sign_magnitude_9sector_10seed/seed*/input_gate_sign_magnitude_9sector.npz"
+    ]
+  },
+  "notes": [
+    "Each seed reuses its saved Figure 3 sequential-feedback trajectory and original equal-n sector selection.",
+    "Every sector contributes 128 spatially matching encoder sources and 1024 other sources.",
+    "Seed-level inference reports W-positive minus W-negative overlap gaps and separate OLS delta-g versus absolute-weight slopes inside the shared magnitude band."
+  ]
+}

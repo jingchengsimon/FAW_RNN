@@ -8,18 +8,116 @@
   ],
   "jobs": [
     {
-      "id": "atari5-l3-eps500k-lrpertask-20m-lstm-gru-gawf-s1-2",
-      "description": "Five-task full18 L3 formal 20M run: LSTM/GRU/GaWF, two seeds, per-task 500K replay, per-task 1M LR decay, and fixed 500K global epsilon decay.",
+      "id": "clutter-jointbalanced-dynamics-descriptive-gawf-10seeds",
+      "description": "Ten-seed descriptive GaWF Jacobian and effective-connectivity analysis on balanced clean joint-switch CM-MNIST events.",
       "host": "sjc-remote",
       "status": "running",
       "job_ids": [],
       "run_ids": [
+        "clutter-gawf-dynamics-formal-v1-820525f",
+        "clutter-gawf-dynamics-formal-v2-ddc822b"
+      ],
+      "tmux_session": "clutter-gawf-dynamics-formal-v2-ddc822b",
+      "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+      "updated_at": "2026-09-02T17:50:10-04:00"
+    },
+    {
+      "id": "rl-atari-skiing-full18-stall-actionfix-v1-total4m-lstm-gru-gawf-s1",
+      "description": "Seed-1 single-Skiing exposure extended from cumulative 2M to 4M with fresh 2M weights-only phases for LSTM, GRU, and GaWF.",
+      "host": "sjc-remote",
+      "status": "running",
+      "job_ids": [],
+      "run_ids": [
+        "sjc_skiing_actionfix_extend2mto4m_gawf_s1_20260828",
+        "sjc_skiing_actionfix_extend2mto4m_gru_lstm_s1_20260828"
+      ],
+      "tmux_session": "sjc_skiing_actionfix_extend2mto4m_gru_lstm_s1_20260828",
+      "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn_snapshot_skiing_64c9f1c7",
+      "updated_at": "2026-08-28T00:58:53-04:00"
+    },
+    {
+      "id": "rl-atari-skiing-full18-stall-actionfix-v1-total2m-lstm-gru-gawf-s1",
+      "description": "Seed-1 single-Skiing exposure extended to cumulative 2M: continuous GaWF resume plus fresh terminal-schedule 1M phases for GRU and LSTM.",
+      "host": "sjc-remote",
+      "status": "running",
+      "job_ids": [],
+      "run_ids": [
+        "sjc_skiing_actionfix_total2m_gawf_s1_20260827",
+        "sjc_skiing_actionfix_extend1mto2m_gru_lstm_s1_20260827"
+      ],
+      "tmux_session": "sjc_skiing_actionfix_extend1mto2m_gru_lstm_s1_20260827",
+      "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn_snapshot_skiing_15682aff",
+      "updated_at": "2026-08-27T01:05:03-04:00"
+    },
+    {
+      "id": "clutter-residual-anova-resetexcluded-best6-6models-10seeds",
+      "description": "Reset-excluded trial-level residual ANOVA for Figure 4 six-model activations and Figure 5 unit gates, plus the three residual-bar renderings.",
+      "host": "sjc-remote",
+      "status": "running",
+      "job_ids": [],
+      "run_ids": [
+        "sjc_residual_components_20260818"
+      ],
+      "tmux_session": "sjc_residual_components_20260818",
+      "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+      "updated_at": "2026-08-18T21:00:00-04:00"
+    },
+    {
+      "id": "rl-atari-multitask-5task18-l3-eps500k-lrpertask-20m-lstm-gru-gawf-s3-5",
+      "description": "Five-task full18 L3 formal 20M Amarel extension: LSTM/GRU/GaWF, seeds 3-5, per-task 500K replay, per-task 1M LR decay, and fixed 500K global epsilon decay.",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "60561566",
+        "60561658",
+        "60656109",
+        "60656112",
+        "60686224",
+        "60686225",
+        "60739444",
+        "60787710",
+        "60835981",
+        "60835982",
+        "60835983"
+      ],
+      "run_ids": [],
+      "tmux_session": null,
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn_snapshot_ed1f038",
+      "updated_at": "2026-08-26T12:06:37-04:00"
+    },
+    {
+      "id": "rl-atari-multitask-5task18-l3-eps500k-lrpertask-20m-gawf-s1-2",
+      "description": "Five-task full18 L3 formal 20M GaWF restart on Amarel: two seeds, per-task 500K replay, per-task 1M LR decay, and fixed 500K global epsilon decay.",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "60536204",
+        "60637596",
+        "60686223",
+        "60835981"
+      ],
+      "run_ids": [],
+      "tmux_session": null,
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn_snapshot_5a1594f",
+      "updated_at": "2026-08-25T11:39:12-04:00"
+    },
+    {
+      "id": "rl-atari-multitask-5task18-l3-eps500k-lrpertask-20m-lstm-gru-s1-2",
+      "description": "Five-task full18 L3 formal 20M LSTM/GRU seeds 1-2: SJC-origin results resumed on Amarel, per-task 500K replay, per-task 1M LR decay, and fixed 500K global epsilon decay.",
+      "host": "amarel",
+      "status": "queued",
+      "job_ids": [
+        "60561827",
+        "60656110",
+        "60686222"
+      ],
+      "run_ids": [
         "sjc_5task_l3_20m_seed1_20260812",
         "sjc_5task_l3_20m_seed2_20260812"
       ],
-      "tmux_session": "sjc_5task_l3_20m_seed1_20260812",
-      "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
-      "updated_at": "2026-08-12T23:30:00-04:00"
+      "tmux_session": null,
+      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn_sjc_resume_5c08adea",
+      "updated_at": "2026-08-20T09:06:07-04:00"
     }
   ]
 }

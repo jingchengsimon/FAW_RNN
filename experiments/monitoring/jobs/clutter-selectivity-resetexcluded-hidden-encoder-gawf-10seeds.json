@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "id": "clutter-selectivity-resetexcluded-hidden-encoder-gawf-10seeds",
+  "description": "Reset-excluded validation FDR selectivity for hidden and encoder units, used by formal tuned-set analyses.",
+  "host": "sjc-remote",
+  "status": "completed",
+  "created_at": "2026-08-20T01:00:00-04:00",
+  "updated_at": "2026-08-20T09:59:04-04:00",
+  "completed_at": "2026-08-20T09:59:04-04:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+  "environment": {"name": "aim3_rnn", "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"},
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": ["sjc_selectivity_resetexcluded_hidden_encoder_20260820"],
+    "tmux_session": "sjc_selectivity_resetexcluded_hidden_encoder_20260820",
+    "process_patterns": ["fig7_hidden_selectivity_collect_resetexcluded_20260820.py"],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": ["results/run_selectivity_resetexcluded_hidden_encoder_20260820/*.log"],
+    "status_dir": "results/data/analysis/fig7_hidden_encoder_selectivity_resetexcluded_10seed",
+    "result_paths": ["/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig7_hidden_encoder_selectivity_resetexcluded_10seed"]
+  },
+  "tracking": {
+    "expected_units": 10,
+    "auto_complete": true,
+    "result_globs": ["/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig7_hidden_encoder_selectivity_resetexcluded_10seed/seed*/part1_selectivity.npz"]
+  },
+  "notes": [
+    "Validation selectivity removes every t=0 recurrent reset frame before two-way decomposition, stratified-label permutation inference, BH-FDR, interaction exclusion, and top-10% tuned masks.",
+    "Each seed retains both primary_hidden and primary_encoder selectivity, so recurrent and input analyses can use one consistent formal source."
+  ]
+}

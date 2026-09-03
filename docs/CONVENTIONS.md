@@ -78,8 +78,24 @@ encode the seed even though checkpoint stems retain the standard model naming co
 Atari DQN additionally uses `--frame_skip`, `--frame_stack`, `--task_schedule`,
 `--replay_sampling`, `--replay_layout`, `--learning_starts_per_task`,
 `--learning_rate_decay_per_task_steps`, `--amp_dtype`, `--allow_tf32`, `--compile_model`, and
-`--feedback_mode`. Multi-task `--replay_layout per_task` creates one independent replay partition
+`--feedback_mode`. `--atari_env_protocol` selects the versioned environment boundary/action
+mapping contract; its default `baseline` retains historical behavior.
+`--init_weights_from` accepts only a pure model `state_dict` and starts with a fresh
+optimizer, replay, global step, RNG trajectory, epsilon schedule, and LR schedule. It is mutually
+exclusive with `--resume_from` and `--auto_resume`. The SJC Skiing launcher requires a completed
+20M final source by default; its diagnostic-only `--allow-incomplete-source` path may use a model
+`state_dict` extracted from a stable copied resumable checkpoint, with the exact positive source
+step encoded in metadata and the result leaf. Multi-task `--replay_layout per_task` creates one independent replay partition
 per task; `--buffer_size` is the capacity of each partition, rather than a global shared capacity.
+`--allow_total_timesteps_extension` applies only to resumable checkpoints and may only increase
+the saved target while every other `RESUME_ARG_KEYS` field remains identical. The original target
+must persist in later checkpoints and final metrics. A completed-run weights-only extension is a
+new phase with fresh training state and must be named and documented separately from continuous
+resume.
+A finalized cumulative-2M Skiing model extends to cumulative 4M only through the fixed
+`--extend-from-skiing-2m` weights-only phase. Its additional 2M uses a distinct
+`extend2mto4m_2m_<model>_seed1` leaf and fresh optimizer/replay/global step; analysis adds a 2M
+x-axis offset rather than describing the phase-local step as a strict continuation counter.
 Atari DQN epsilon linearly decays over fixed `--exploration_steps` global steps (default
 `500000`), independent of `--total_timesteps`. Historical `--exploration_fraction` remains
 available only as an explicit compatibility option and cannot be combined with
@@ -155,7 +171,8 @@ another internal representation.
 | `results/data/rl/{atari,minigrid}/parameter_match/` | task-specific recurrent-core parameter-match tables |
 | `results/figs/rl/{atari,minigrid}/` | curated RL learning curves |
 | `results/figs/<CATEGORY>/` | analysis and development figures |
-| `results/save/` | human-curated final figure files (`Fig*` and `Supple*`) |
+| `results/save/` | human-curated final figure files: `Fig*` as PDF only; `Supple*` as PNG only |
+| `results/save/iclr_figs/` | ICLR-width alternate layouts; canonical saved figures stay unchanged |
 | `results/save_data/<figure>/` | minimum numeric inputs for one saved figure; shared inputs have one owner |
 | `../../6-Writing/Aim3/Figures/` | official publication PDFs |
 | `experiments/clutter/artifacts/` | aggregated experiment tables/configs |
@@ -169,6 +186,9 @@ Analysis data remains grouped by producing script basename below
 `results/save_data/` is a publication-curation boundary rather than an active analysis-output
 directory. Fig1 consumes the single GaWF ablation copy owned by `save_data/fig2/`; Supple3
 consumes the cache collection owned by `save_data/fig7/`. Do not duplicate either shared input.
+
+Within `results/save/`, use the filename prefix to select exactly one output format: `Fig*` files
+are PDFs and `Supple*` files are PNGs. Do not create a same-basename companion in the other format.
 
 Development PNGs remain in their canonical result directories. Official publication PDFs are
 written to `../../6-Writing/Aim3/Figures/`; set `AIM3_PUBLICATION_FIGURES_DIR` to override this
@@ -194,6 +214,11 @@ The distinct `5task_18action` namespace is reserved for the fixed
 Pong/Breakout/Assault/Seaquest/Skiing L3 protocol and must never overwrite
 `multitask_18action`. Its `smoke/`, `pilot/`, `parameter_match/`, and `figs/` leaves remain
 separate.
+Weights-only, single-Skiing adaptations from five-task seed snapshots use
+`5task_18action/formal_20m_4mpertask_raw_seeds/`. Smoke and formal runs must use distinct leaves
+inside this one parent; they must not create another sibling result parent or write back into the
+source `formal_20m_4mpertask` leaves. An incomplete diagnostic source must include its exact source
+step in both metadata and leaf naming and must not be described as a resume.
 Do not relabel mismatched or ambiguous historical results. Retain them only when explicitly
 curated into a task-specific `results/data/` path; otherwise remove them through the confirmed
 cleanup workflow.
@@ -280,6 +305,25 @@ derived GaWF `destination-unit projection` and from GaWF connection-level gate m
 individual diagnostic figures. The compact poster summary uses the shorter panel titles
 `GaWF afferent gates`, `LSTM gates`, and `GRU gates`; its caption or surrounding text carries the
 unit-projection distinction.
+
+The ICLR gate-specialization summary is generated by
+`utils.analysis.clutter.fig4_combined_gate_specialization`. It combines the reset-excluded
+ten-seed GaWF synapse-gate/activation decomposition in a centered two-panel top row with the
+GaWF/LSTM/GRU unit-gate comparison in a centered three-panel bottom row. The development PNG is
+`results/figs/D_variance_decomposition/Fig4_gate_task_variable_specialization_2x3_10seed.png`;
+the 5.5-inch-wide manuscript PDF is
+`results/save/iclr_figs/Fig4_gate_task_variable_specialization_2x3_10seed.pdf`. The retained
+standalone Figure 4 and Figure 5 outputs remain unchanged.
+
+The combined ICLR recurrent-gating summary is generated by
+`utils.analysis.clutter.fig7_combined_recurrent_gate_and_current`. Its centered three-block top
+row contains the Digit and Sector recurrent delta-g bars plus the stacked Digit/Sector T-to-T
+sign-magnitude curves; its centered two-panel bottom row contains the connection-normalized
+Digit and Sector gate-dependent-current bars. The development PNG is
+`results/figs/E_relevance_alignment/Fig7_recurrent_gate_disinhibition_and_current_2x3_10seed.png`;
+the 5.5-inch-wide manuscript PDF is
+`results/save/iclr_figs/Fig7_recurrent_gate_disinhibition_and_current_2x3_10seed.pdf`. The retained
+standalone Figure 7 and Figure 8 outputs remain unchanged.
 
 The GaWF gate-distribution summary writes `gawf_gate_histogram_summary_2x4.png` and
 `01_pooled_all_gate_histogram.png` directly below `results/figs/A_raw_gate/`; only the

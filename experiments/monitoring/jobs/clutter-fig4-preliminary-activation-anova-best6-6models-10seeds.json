@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "id": "clutter-fig4-preliminary-activation-anova-best6-6models-10seeds",
+  "description": "Figure 4 preliminary activation ANOVA: six Clutter models across ten seeds, with balanced condition-mean Sector/Digit/Interaction fractions for encoder and hidden activations.",
+  "host": "sjc-remote",
+  "status": "completed",
+  "created_at": "2026-08-15T17:31:00-04:00",
+  "updated_at": "2026-08-15T21:49:50+00:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": [
+      "sjc_fig4_activation_anova_6model_10seed_20260815"
+    ],
+    "tmux_session": "sjc_fig4_activation_anova_6model_10seed_20260815",
+    "process_patterns": [
+      "utils.analysis.clutter.fig4_activation_anova"
+    ],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": [
+      "results/run_*.log"
+    ],
+    "status_dir": "results/data/analysis/fig4_activation_anova_6model_10seed/final",
+    "result_paths": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig4_activation_anova_6model_10seed"
+    ]
+  },
+  "tracking": {
+    "expected_units": 60,
+    "auto_complete": true,
+    "result_globs": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig4_activation_anova_6model_10seed/*-seed*/activation_anova.npz"
+    ]
+  },
+  "notes": [
+    "Amarel array 60603527 and dependent aggregate 60603528 were cancelled at the user's request after 20 completed bundles were retained.",
+    "The retained 20 Amarel bundles and all 60 checkpoints were streamed directly to SJC; SJC already owns the Clutter stimuli.",
+    "The SJC tmux session uses both RTX A6000 GPUs and skips every existing compact bundle.",
+    "Every worker streams the test split once and saves compact aggregate condition-mean ANOVA draws only; no raw activation mmap is retained.",
+    "Aggregate job 60603528 depends on successful completion of array 60603527 and renders activation_anova_1x2_6model_10seed.pdf."
+  ],
+  "completed_at": "2026-08-15T21:49:50+00:00"
+}

@@ -159,6 +159,16 @@ The shared output remains 18-dimensional even when ALE exposes fewer legal actio
 unsupported fire variants map to the corresponding legal non-fire movement, and unsupported
 standalone FIRE maps to NOOP. No task-specific action mask is given to the model.
 
+The historical `baseline` environment protocol retains its original wrapper order and
+multi-task action mapping for exact reproduction. `skiing-stall-actionfix-v1` is a distinct MDP:
+each task receives exactly one canonical full-18 wrapper, so the four games with all 18 ALE
+actions are identity mappings while Skiing maps the 18 Q outputs once onto its nine legal
+non-FIRE actions. Skiing course progress is the change in ALE RAM course-object y slots 86:94,
+not score, clock, or lateral motion. After 450 agent steps without such progress, the wrapper
+sets `truncated=True`, reports `end_reason=stalled`, and adjusts total raw return to at most
+-30,000. Training resets recurrent/episode state at this artificial boundary but keeps the TD
+bootstrap from its final observation; natural termination still stops bootstrap.
+
 CUDA autocast, TF32, gradient scaling, compilation configuration, cuDNN benchmarking, and fused
 Adam live in `utils/atari_train_acceleration.py`. The current Amarel PyTorch build compiles ANN
 only; recurrent-state dataclasses are not passed through Dynamo. Replay reset detection remains

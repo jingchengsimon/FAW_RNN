@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "id": "clutter-fig3-gate-half-mass-gawf-10seeds",
+  "description": "Figure 3 exact 0.5 point-mass, reset-source, point-excluded middle-mass, and inactive-U-row audit for ten GaWF seeds.",
+  "host": "sjc-remote",
+  "status": "completed",
+  "created_at": "2026-08-17T00:51:35-04:00",
+  "updated_at": "2026-08-17T00:51:35-04:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "process",
+    "job_ids": [],
+    "run_ids": [
+      "foreground-fig3-gate-half-mass-20260817"
+    ],
+    "process_patterns": [
+      "utils.analysis.clutter.fig3_gate_half_mass"
+    ],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": [],
+    "status_dir": "results/data/analysis/fig3_gate_half_mass_10seed",
+    "result_paths": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig3_gate_half_mass_10seed"
+    ]
+  },
+  "tracking": {
+    "expected_units": 1,
+    "auto_complete": true,
+    "result_globs": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig3_gate_half_mass_10seed/fig3_gate_half_mass.json"
+    ]
+  },
+  "notes": [
+    "The analysis reads the registered Figure 6 copies of all ten retained Figure 3 trajectories directly on sjc-remote; numeric files were not synchronized locally.",
+    "The half-mass criterion is abs(g - 0.5) < 1e-6; inactive destination rows use max_r abs(U[j,r]) < 1e-6.",
+    "All dense gates are reconstructed and counted in float32 on GPU but are never saved.",
+    "The completed JSON contains ten per-seed records and seed-level mean with 95% Student-t confidence intervals."
+  ],
+  "completed_at": "2026-08-17T00:51:35-04:00"
+}

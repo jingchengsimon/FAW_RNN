@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "id": "rl-atari-skiing-full18-stall-actionfix-v1-extend2m-to4m-smoke25k-gru-s1",
+  "description": "SJC 25K smoke for the fresh GRU 2M-to-4M Skiing extension phase.",
+  "host": "sjc-remote",
+  "status": "completed",
+  "created_at": "2026-08-28T00:42:44-04:00",
+  "updated_at": "2026-08-28T00:51:01-04:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn_snapshot_skiing_64c9f1c7",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": [
+      "sjc_skiing_actionfix_extend2mto4m_smoke25k_gru_s1_20260828"
+    ],
+    "tmux_session": "sjc_skiing_actionfix_extend2mto4m_smoke25k_gru_s1_20260828",
+    "process_patterns": [
+      "stallactionfix_v1_extend2mto4m_smoke25k_gru_seed1"
+    ],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_smoke25k_gru_seed1/run.log"
+    ],
+    "status_dir": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_smoke25k_gru_seed1/status",
+    "result_paths": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_smoke25k_gru_seed1"
+    ]
+  },
+  "tracking": {
+    "expected_units": 1,
+    "auto_complete": true,
+    "validation_mode": "strict",
+    "defaults": {
+      "metrics_file": "metrics.json",
+      "history_file": "metrics_history.jsonl",
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1,
+      "expected": {
+        "global_step": 25000,
+        "model_type": "gru",
+        "num_layers": 3,
+        "hidden_size": 458,
+        "env_id": "ALE/Skiing-v5",
+        "action_space_mode": "full18",
+        "num_actions": 18,
+        "atari_env_protocol": "skiing-stall-actionfix-v1",
+        "action_mapping_protocol": "single_canonical_full18",
+        "stalled_truncation_bootstrap": true,
+        "learning_rate": 0.00001,
+        "learning_rate_decay_step": 0,
+        "epsilon": 0.01,
+        "effective_learning_rate": 0.00001
+      }
+    },
+    "units": [
+      {
+        "id": "gru-seed1-extension-smoke25k",
+        "result_dir": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_smoke25k_gru_seed1",
+        "done_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_smoke25k_gru_seed1/status/done",
+        "fail_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend2mto4m_smoke25k_gru_seed1/status/fail"
+      }
+    ]
+  },
+  "notes": [
+    "The source is the completed cumulative-2M GRU final state_dict, SHA256=ee41cd6642eadc4a3fa44b05ce24e11543a4d3ef31fd4d95242c9dffed9d7d26.",
+    "This is weights-only initialization with fresh optimizer/replay/global step and terminal epsilon/LR schedules; it is not a strict resume.",
+    "Formal code uses read-only snapshot /G/MIMOlab/Codes/aim3_gawf_rnn_snapshot_skiing_64c9f1c7.",
+    "Accepted at 2026-08-28T00:51:01-04:00: global_step=25000, finite loss=0.04301802068948746, epsilon=0.01, learning_rate=effective_learning_rate=1e-5, and learning_rate_decay_step=0.",
+    "Greedy evaluation returns were -30000/-30000/-9365 with lengths 1207/1207/581 and end reasons stalled/stalled/natural; selected return=-9365 and stall_rate=2/3.",
+    "Final model SHA256=9c5f37261cf72188c0ac6661f3150ccf81f23034e1085c8197ca6ef8f486517a (30217649 bytes); MP4 SHA256=7577a97005e3316461fb3c4aa0f16ad4d72ffa647bae226d86a44022b74d1957 (482086 bytes).",
+    "The accepted smoke result leaf is removed after this evidence is recorded; it is not a formal result."
+  ]
+}

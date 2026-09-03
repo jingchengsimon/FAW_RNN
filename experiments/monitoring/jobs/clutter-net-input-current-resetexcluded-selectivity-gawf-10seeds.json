@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "clutter-net-input-current-resetexcluded-selectivity-gawf-10seeds",
+  "description": "Digit and Sector input-gate net-current analyses using reset-excluded test frames and validation selectivity.",
+  "host": "sjc-remote",
+  "status": "completed",
+  "created_at": "2026-08-20T10:10:00-04:00",
+  "updated_at": "2026-08-20T10:23:00-04:00",
+  "completed_at": "2026-08-20T10:23:00-04:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+  "environment": {"name": "aim3_rnn", "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"},
+  "scheduler": {"type": "tmux", "job_ids": [], "run_ids": ["sjc_net_input_current_resetexcluded_selectivity_20260820"], "tmux_session": "sjc_net_input_current_resetexcluded_selectivity_20260820", "process_patterns": ["fig6_net_input_current"], "collect_gpu": true},
+  "paths": {
+    "log_globs": ["results/run_net_input_current_resetexcluded_selectivity_20260820.log"],
+    "status_dir": "results/data/analysis/net_input_current_resetexcluded_selectivity_10seed",
+    "result_paths": ["/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/net_input_current_resetexcluded_selectivity_10seed"]
+  },
+  "tracking": {
+    "expected_units": 20,
+    "auto_complete": true,
+    "result_globs": ["/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/net_input_current_resetexcluded_selectivity_10seed/*/seed*/net_input_current.npz"]
+  },
+  "notes": [
+    "Sector matching sources are the fixed 128-feature receptive-field block; Digit matching sources are the top 10% reset-excluded validation-FDR eligible encoder units for that digit.",
+    "Each current is normalized by 256 destination units and decomposed as I, context-centered delta-I, and instantaneous delta-I-gate."
+  ]
+}

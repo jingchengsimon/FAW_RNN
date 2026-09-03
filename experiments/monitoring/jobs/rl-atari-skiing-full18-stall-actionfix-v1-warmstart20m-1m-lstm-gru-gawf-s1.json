@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "id": "rl-atari-skiing-full18-stall-actionfix-v1-warmstart20m-1m-lstm-gru-gawf-s1",
+  "description": "Seed-1 weights-only single-Skiing 1M adaptations from completed 20M LSTM/GRU and a 19.45M GaWF snapshot, using one full18-to-9 mapping and a 450-step no-course-progress truncation.",
+  "host": "sjc-remote",
+  "status": "completed",
+  "created_at": "2026-08-26T17:57:52-04:00",
+  "updated_at": "2026-08-27T01:00:50-04:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn_snapshot_skiing_3548970e",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": [
+      "sjc_skiing_actionfix_1m_gru_s1_20260826",
+      "sjc_skiing_actionfix_1m_lstm_s1_20260826"
+    ],
+    "tmux_session": "sjc_skiing_actionfix_1m_lstm_s1_20260826",
+    "process_patterns": [
+      "stallactionfix_v1_warmstart20m_1m_lstm_seed1",
+      "stallactionfix_v1_warmstart20m_1m_gru_seed1"
+    ],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart20m_1m_lstm_seed1/run.log",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart20m_1m_gru_seed1/run.log"
+    ],
+    "result_paths": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart20m_1m_lstm_seed1",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart20m_1m_gru_seed1"
+    ]
+  },
+  "tracking": {
+    "expected_units": 2,
+    "auto_complete": true,
+    "validation_mode": "strict",
+    "defaults": {
+      "metrics_file": "metrics.json",
+      "history_file": "metrics_history.jsonl",
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1,
+      "expected": {
+        "global_step": 1000000,
+        "seed": 1,
+        "num_layers": 3,
+        "env_id": "ALE/Skiing-v5",
+        "action_space_mode": "full18",
+        "num_actions": 18,
+        "atari_env_protocol": "skiing-stall-actionfix-v1",
+        "action_mapping_protocol": "single_canonical_full18",
+        "stalled_truncation_bootstrap": true,
+        "buffer_size": 500000,
+        "learning_starts": 20000,
+        "exploration_steps": 500000
+      }
+    },
+    "units": [
+      {
+        "id": "lstm-seed1",
+        "result_dir": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart20m_1m_lstm_seed1",
+        "done_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart20m_1m_lstm_seed1/status/done",
+        "fail_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart20m_1m_lstm_seed1/status/fail",
+        "expected": {"model_type": "lstm", "hidden_size": 373}
+      },
+      {
+        "id": "gru-seed1",
+        "result_dir": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart20m_1m_gru_seed1",
+        "done_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart20m_1m_gru_seed1/status/done",
+        "fail_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_warmstart20m_1m_gru_seed1/status/fail",
+        "expected": {"model_type": "gru", "hidden_size": 458}
+      }
+    ]
+  },
+  "notes": [
+    "LSTM/GaWF formal code uses read-only snapshot 3548970e and GRU uses read-only snapshot 5ad4de5f, both based on local 11cac19; the dirty SJC main checkout and both active Amarel code snapshots remain unchanged.",
+    "Every unit is a derived single-task adaptation: only model weights load from its completed 20M seed1 final state_dict; optimizer, replay, global step, RNG trajectory, epsilon, and LR schedule start fresh.",
+    "GRU seed1 started from the completed 20M final state already present in the isolated SJC input leaf. LSTM seed1 uses the completed 20M final state copied read-only from Amarel (SHA256 0c06301675543c5c559951d4c42e96082989ea1dbcab3057d7189c6a2b268e76).",
+    "GaWF seed1 intentionally uses only model weights extracted from a stable copied 19,450,000-step resumable checkpoint: raw SHA256 529d7d0bca6c2161fb731b6ecba6f6ddc22de4c84e9aead83c42a5208a4517d8 and extracted model SHA256 1aa6217322270bf62382912caaecaa1f28d6c7846bb3e2ea676420ed82abfcd8. Optimizer, replay, counters, RNG trajectory, epsilon, and LR schedule are not loaded.",
+    "LSTM remains on SJC GPU0. After GRU completed and released GPU1, GaWF was checkpointed at adaptation step 98,884 (replay_size 98,884) and resumed from the same result leaf on GPU1 with resume_count=1; optimizer, replay, counters, RNG, epsilon, and LR state were preserved by the resumable checkpoint.",
+    "All result leaves share the single required parent formal_20m_4mpertask_raw_seeds; no parallel result parent is used.",
+    "The completed GRU/LSTM 1M units remain the finalized scope of this manifest. The still-running GaWF unit was transferred without changing its result leaf to rl-atari-skiing-full18-stall-actionfix-v1-total2m-lstm-gru-gawf-s1 when its authorized target increased to 2M; that new manifest is its sole active fact source."
+  ]
+}

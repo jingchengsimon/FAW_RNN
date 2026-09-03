@@ -36,6 +36,7 @@ Outputs (in --save_dir):
 - ablation_metrics.csv   — flat table with one row per condition
 - frame_predictions.npz  — compressed per-frame predictions/labels for reproducibility
 """
+
 from __future__ import annotations
 
 import argparse
@@ -98,7 +99,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--save_dir",
         type=str,
-        default=str(output_dir("G_behaviour", "feedback_ablation", "data")),
+        default=None,
         help="Directory for analysis outputs.",
     )
     parser.add_argument("--data_dir", type=str, default="")
@@ -115,6 +116,12 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--exclude_window_initial_frame",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Exclude timestep 0 of each recurrent window from accuracy and recovery metrics.",
+    )
     parser.add_argument("--use_mmap", action="store_true", default=True)
     parser.add_argument("--use_sector_mode", action="store_true", default=True)
     parser.add_argument("--predict_all_chars", action="store_true", default=False)
@@ -248,12 +255,8 @@ def _rollout_condition(
 
     shuffled_schedule = None
     if condition in ("shuffle_digit", "shuffle_sector", "shuffle_all"):
-        base_schedule = _run_baseline_feedback_schedule(
-            model, seq, num_pos=num_pos, device=device
-        )
-        shuffled_schedule = _shuffled_schedule_slice(
-            base_schedule, condition, rng, num_pos
-        )
+        base_schedule = _run_baseline_feedback_schedule(model, seq, num_pos=num_pos, device=device)
+        shuffled_schedule = _shuffled_schedule_slice(base_schedule, condition, rng, num_pos)
 
     hidden_size = int(model.rnn.hidden_size)
     feedback_dim = int(model.feedback_dim)
@@ -277,13 +280,9 @@ def _rollout_condition(
                 if condition == "shuffle_digit":
                     fb_next[:, DIGIT_SLICE] = shuffled_schedule[:, t, DIGIT_SLICE]
                 elif condition == "shuffle_sector":
-                    fb_next[:, 10 : 10 + num_pos] = shuffled_schedule[
-                        :, t, 10 : 10 + num_pos
-                    ]
+                    fb_next[:, 10 : 10 + num_pos] = shuffled_schedule[:, t, 10 : 10 + num_pos]
                 else:  # shuffle_all
-                    fb_next[:, 0 : 10 + num_pos] = shuffled_schedule[
-                        :, t, 0 : 10 + num_pos
-                    ]
+                    fb_next[:, 0 : 10 + num_pos] = shuffled_schedule[:, t, 0 : 10 + num_pos]
             fb = fb_next
             h = gated
 
@@ -397,21 +396,25 @@ def _update_state(
     labels_np: np.ndarray,
     global_frames: np.ndarray,
     offset_targets: np.ndarray,
+    exclude_window_initial_frame: bool,
 ) -> None:
     true_char = labels_np[:, :, 0].astype(np.int64, copy=False)
     true_sector = labels_np[:, :, 1].astype(np.int64, copy=False)
     char_ok = pred_char == true_char
     sector_ok = pred_sector == true_sector
-    state["char_correct"] += int(char_ok.sum())
-    state["sector_correct"] += int(sector_ok.sum())
-    state["n_frames"] += int(true_char.size)
+    valid = np.ones(char_ok.shape, dtype=bool)
+    if exclude_window_initial_frame:
+        valid[:, 0] = False
+    state["char_correct"] += int((char_ok & valid).sum())
+    state["sector_correct"] += int((sector_ok & valid).sum())
+    state["n_frames"] += int(valid.sum())
     state["pred_char"].append(pred_char.reshape(-1).astype(np.int16, copy=False))
     state["pred_sector"].append(pred_sector.reshape(-1).astype(np.int16, copy=False))
 
     offsets = offset_targets[global_frames]
     for i, off_value in enumerate(state["offset_values"]):
         off = int(off_value)
-        mask = offsets == off
+        mask = (offsets == off) & valid
         n = int(mask.sum())
         if n == 0:
             continue
@@ -479,6 +482,8 @@ def _concat_state_arrays(state: Dict[str, Any]) -> Tuple[np.ndarray, np.ndarray]
 
 def main() -> None:
     args = parse_args()
+    if args.save_dir is None:
+        args.save_dir = str(output_dir("G_behaviour", "feedback_ablation", "data"))
     set_seed(args.seed)
     rng = np.random.default_rng(args.seed)
     os.makedirs(args.save_dir, exist_ok=True)
@@ -505,9 +510,7 @@ def main() -> None:
     if getattr(model, "proj_out", None) is not None:
         raise RuntimeError("Feedback slice ablation expects legacy direct 19-d feedback.")
     if int(model.feedback_dim) != 10 + num_pos:
-        raise RuntimeError(
-            f"Expected feedback_dim={10 + num_pos}; got {int(model.feedback_dim)}."
-        )
+        raise RuntimeError(f"Expected feedback_dim={10 + num_pos}; got {int(model.feedback_dim)}.")
 
     frame_num = int(getattr(test_ds, "frame_num", 32))
     chan_num = int(getattr(test_ds, "chan_num", 2))
@@ -539,9 +542,7 @@ def main() -> None:
         num_workers=0 if args.use_mmap else 4,
         pin_memory=False,
     )
-    states = {
-        condition: _empty_condition_state(offset_values) for condition in conditions
-    }
+    states = {condition: _empty_condition_state(offset_values) for condition in conditions}
     true_char_all = []
     true_sector_all = []
     global_frames_all = []
@@ -581,6 +582,7 @@ def main() -> None:
                     labels_np,
                     global_frames,
                     offset_targets,
+                    args.exclude_window_initial_frame,
                 )
 
             seq_base += bs
@@ -606,6 +608,7 @@ def main() -> None:
             "clear_all sets the recurrent feedback vector to zero at every step after "
             "readout, so GaWF gates are sigmoid(0)=0.5; it is not an RNN baseline."
         ),
+        "exclude_window_initial_frame": bool(args.exclude_window_initial_frame),
         "conditions": {},
     }
     if device.type == "cuda":

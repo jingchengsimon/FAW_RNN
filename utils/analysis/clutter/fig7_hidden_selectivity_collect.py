@@ -1,8 +1,8 @@
-"""Collect only the hidden-unit selectivity masks needed by ten-seed Figure 7.
+"""Collect reset-excluded hidden or encoder selectivity masks for GaWF analyses.
 
 Inputs are one GaWF checkpoint and the Clutter validation split. The output is a compact
-``part1_selectivity.npz`` containing the primary hidden tuning, FDR masks, and interaction mask;
-no test gates, timing events, or connection-level arrays are retained.
+``part1_selectivity.npz`` containing requested primary-population tuning, FDR masks, and
+interaction masks; no test gates, timing events, or connection-level arrays are retained.
 """
 
 from __future__ import annotations
@@ -22,6 +22,9 @@ from utils.analysis.clutter.fig7_relevance_stats import (
 from utils.analysis.clutter.fig7_relevance_timing import collect_split, _selectivity_payload
 
 
+POPULATIONS = ("hidden", "encoder")
+
+
 def parse_args() -> argparse.Namespace:
     """Parse one-checkpoint compact selectivity collection arguments."""
 
@@ -37,11 +40,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--permutation_batch_size", type=int, default=10)
     parser.add_argument("--fdr_alpha", type=float, default=0.05)
     parser.add_argument("--seed", required=True, type=int)
+    parser.add_argument(
+        "--populations",
+        nargs="+",
+        choices=POPULATIONS,
+        default=("hidden",),
+        help="Activation populations to test; the historical default preserves hidden-only use.",
+    )
     return parser.parse_args()
 
 
+def _reset_excluded_mask(frame_count: int, frame_num: int) -> np.ndarray:
+    """Return the flattened held-out-frame mask after dropping each recurrent reset step."""
+
+    if frame_count <= 0 or frame_num <= 1 or frame_count % frame_num != 0:
+        raise ValueError("Validation frames must contain complete recurrent windows.")
+    return np.arange(frame_count, dtype=np.int64) % frame_num != 0
+
+
 def main() -> None:
-    """Run validation-hidden selectivity and save the compact primary payload."""
+    """Run reset-excluded validation selectivity and save the requested compact payload."""
 
     args = parse_args()
     if args.output_dir.exists():
@@ -56,23 +74,34 @@ def main() -> None:
     collected = collect_split(
         validation, model, device, args.batch_size, args.num_workers, record_gates=False
     )
-    labels = collected["labels"].astype(np.int64, copy=False)
-    hidden = collected["hidden"].astype(np.float32, copy=False)
-    result = two_way_decomposition(hidden, labels)
-    inference = permutation_selectivity(
-        hidden,
-        labels,
-        result,
-        resamples=args.resamples,
-        seed=args.seed + 10_000,
-        device=device,
-        permutation_batch_size=args.permutation_batch_size,
-        fdr_alpha=args.fdr_alpha,
-    )
-    payload = {
-        f"primary_hidden_{key}": value
-        for key, value in _selectivity_payload(result, inference).items()
-    }
+    raw_labels = collected["labels"].astype(np.int64, copy=False)
+    keep = _reset_excluded_mask(raw_labels.shape[0], int(validation.frame_num))
+    labels = raw_labels[keep]
+    payload: dict[str, np.ndarray] = {}
+    population_metadata: dict[str, object] = {}
+    for population_index, population in enumerate(args.populations):
+        activations = collected[population].astype(np.float32, copy=False)[keep]
+        result = two_way_decomposition(activations, labels)
+        inference = permutation_selectivity(
+            activations,
+            labels,
+            result,
+            resamples=args.resamples,
+            seed=args.seed + 10_000 + population_index * 10_000,
+            device=device,
+            permutation_batch_size=args.permutation_batch_size,
+            fdr_alpha=args.fdr_alpha,
+        )
+        payload.update(
+            {
+                f"primary_{population}_{key}": value
+                for key, value in _selectivity_payload(result, inference).items()
+            }
+        )
+        population_metadata[population] = {
+            "units": int(activations.shape[1]),
+            "interaction_dominant": int(interaction_dominant(result).sum()),
+        }
     args.output_dir.mkdir(parents=True)
     np.savez_compressed(args.output_dir / "part1_selectivity.npz", **payload)
     (args.output_dir / "metadata.json").write_text(
@@ -80,12 +109,13 @@ def main() -> None:
             {
                 "checkpoint": str(args.ckpt.resolve()),
                 "seed": args.seed,
+                "validation_frames_before_reset_exclusion": int(raw_labels.shape[0]),
+                "reset_frames_excluded": int((~keep).sum()),
                 "validation_frames": int(labels.shape[0]),
-                "hidden_units": int(hidden.shape[1]),
                 "resamples": args.resamples,
                 "fdr_alpha": args.fdr_alpha,
-                "interaction_dominant": int(interaction_dominant(result).sum()),
-                "scope": "primary hidden selectivity only",
+                "populations": population_metadata,
+                "scope": "reset-excluded primary selectivity",
             },
             indent=2,
         ) + "\n",

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "clutter-net-recurrent-current-resetexcluded-selectivity-gawf-10seeds",
+  "description": "Digit and Sector net recurrent-current rerun using reset-excluded hidden tuned-unit masks.",
+  "host": "sjc-remote",
+  "status": "completed",
+  "created_at": "2026-08-20T10:04:00-04:00",
+  "updated_at": "2026-08-20T10:15:00-04:00",
+  "completed_at": "2026-08-20T10:15:00-04:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+  "environment": {"name": "aim3_rnn", "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"},
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": ["sjc_net_recurrent_current_resetexcluded_selectivity_20260820", "sjc_net_recurrent_current_resetexcluded_selectivity_20260820_r2"],
+    "tmux_session": "sjc_net_recurrent_current_resetexcluded_selectivity_20260820_r2",
+    "process_patterns": ["run_sjc_clutter_net_current_resetexcluded.sh"],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": ["results/run_net_recurrent_current_resetexcluded_selectivity_20260820.log"],
+    "status_dir": "results/data/analysis/net_recurrent_current_resetexcluded_selectivity_10seed",
+    "result_paths": ["/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/net_recurrent_current_resetexcluded_selectivity_10seed"]
+  },
+  "tracking": {
+    "expected_units": 20,
+    "auto_complete": true,
+    "result_globs": ["/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/net_recurrent_current_resetexcluded_selectivity_10seed/*/seed*/net_recurrent_current.npz"]
+  },
+  "notes": ["Each seed runs Digit and Sector collectors after reset-excluded frame selection; outputs overwrite only the existing two Supplementary 4 recurrent-current PNG filenames."]
+}

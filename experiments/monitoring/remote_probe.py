@@ -90,13 +90,18 @@ def _resolve(root: Path, value: str | None) -> Path | None:
     return path if path.is_absolute() else root / path
 
 
-def _unit_from_result_dir(path: Path, root: Path, defaults: dict[str, Any]) -> dict[str, Any]:
+def _unit_from_result_path(path: Path, root: Path, defaults: dict[str, Any]) -> dict[str, Any]:
+    """Create one monitor unit from a matched result directory or exact result file."""
+
+    result_dir = path if path.is_dir() else path.parent
     unit = dict(defaults)
-    unit.setdefault("id", path.name)
+    unit.setdefault("id", result_dir.name)
     try:
-        unit["result_dir"] = str(path.relative_to(root))
+        unit["result_dir"] = str(result_dir.relative_to(root))
     except ValueError:
-        unit["result_dir"] = str(path)
+        unit["result_dir"] = str(result_dir)
+    if path.is_file():
+        unit["artifact_file"] = path.name
     return unit
 
 
@@ -112,10 +117,10 @@ def _expand_units(root: Path, tracking: dict[str, Any]) -> list[dict[str, Any]]:
         absolute_pattern = str(_resolve(root, pattern))
         for value in sorted(glob.glob(absolute_pattern)):
             path = Path(value)
-            if not path.is_dir() or str(path) in seen:
+            if not (path.is_dir() or path.is_file()) or str(path) in seen:
                 continue
             seen.add(str(path))
-            units.append(_unit_from_result_dir(path, root, defaults))
+            units.append(_unit_from_result_path(path, root, defaults))
     return units
 
 
@@ -125,6 +130,9 @@ def _check_unit(root: Path, unit: dict[str, Any]) -> dict[str, Any]:
         result_dir = root
     metrics_path = result_dir / unit.get("metrics_file", "metrics.json")
     history_path = result_dir / unit.get("history_file", "metrics_history.jsonl")
+    artifact_file = unit.get("artifact_file")
+    artifact_path = result_dir / artifact_file if artifact_file else None
+    artifact_exists = artifact_path.is_file() if artifact_path is not None else False
     metrics = _read_json(metrics_path)
     history = _last_history_record(history_path)
     done_path = _resolve(root, unit.get("done_file"))
@@ -152,20 +160,22 @@ def _check_unit(root: Path, unit: dict[str, Any]) -> dict[str, Any]:
     metrics_readable = metrics_path.is_file() and bool(metrics)
     if metrics_path.is_file() and not metrics_readable:
         mismatches["metrics_json"] = {"expected": "readable JSON object", "actual": False}
+    required_artifact_exists = artifact_exists if artifact_path is not None else metrics_readable
     if validation_mode == "strict":
-        valid = metrics_readable and not failed and not mismatches
+        valid = required_artifact_exists and not failed and not mismatches
         effective_failed = failed
     else:
-        # Artifact mode treats metadata and marker mismatches as diagnostics. A readable final
-        # metrics file plus explicitly requested checkpoints is sufficient result evidence, even
-        # if a stale fail marker from an earlier attempt was not removed.
-        valid = metrics_readable and checkpoint_ok
+        # Artifact mode accepts either a readable metrics file or an exact matched result file.
+        # Metadata/marker mismatches remain diagnostic, and a stale fail marker does not override
+        # complete result evidence.
+        valid = required_artifact_exists and checkpoint_ok
         effective_failed = failed and not valid
     return {
         "id": unit.get("id", result_dir.name),
         "result_dir": str(result_dir),
         "metrics_exists": metrics_path.is_file(),
         "history_exists": history_path.is_file(),
+        "artifact_exists": artifact_exists,
         "done": done,
         "failed": effective_failed,
         "fail_marker_exists": failed,

@@ -17,6 +17,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import shutil
 import sys
 from typing import Any, ContextManager
@@ -80,7 +81,8 @@ def load_metrics(path: Path, task_env_id: str | None) -> tuple[dict[str, Any], s
     metrics = json.loads(path.read_text(encoding="utf-8"))
     is_multitask = bool(metrics.get("multitask"))
     expected = {"frame_skip": 4, "frame_stack": 4, "flicker_prob": 0.0}
-    if is_multitask:
+    skiing_protocol = metrics.get("atari_env_protocol") == "skiing-stall-actionfix-v1"
+    if is_multitask or skiing_protocol:
         expected.update({"action_space_mode": "full18", "num_actions": 18})
     else:
         expected.update({"action_space_mode": "minimal"})
@@ -101,9 +103,16 @@ def load_metrics(path: Path, task_env_id: str | None) -> tuple[dict[str, Any], s
     else:
         expected_actions = {"ALE/Pong-v5": 6, "ALE/Breakout-v5": 4}
         selected_env_id = str(metrics.get("env_id"))
-        if selected_env_id not in expected_actions:
+        if skiing_protocol:
+            if selected_env_id != "ALE/Skiing-v5":
+                raise ValueError(
+                    "skiing-stall-actionfix-v1 is valid only for ALE/Skiing-v5"
+                )
+        elif selected_env_id not in expected_actions:
             raise ValueError(f"Unsupported Atari video environment: {selected_env_id}")
-        if int(metrics.get("num_actions", -1)) != expected_actions[selected_env_id]:
+        if not skiing_protocol and int(metrics.get("num_actions", -1)) != expected_actions[
+            selected_env_id
+        ]:
             raise ValueError(
                 f"Unexpected action count for {selected_env_id}: {metrics.get('num_actions')} "
                 f"(expected {expected_actions[selected_env_id]})"
@@ -117,6 +126,16 @@ def load_metrics(path: Path, task_env_id: str | None) -> tuple[dict[str, Any], s
     if int(metrics.get("global_step", 0)) < 1:
         raise ValueError("metrics.json does not describe a completed training run")
     return metrics, selected_env_id
+
+
+def training_seed_from_metrics(metrics: dict[str, Any], metrics_path: Path) -> int:
+    """Resolve the recorded seed, with a leaf-name fallback for historical metrics."""
+    if metrics.get("seed") is not None:
+        return int(metrics["seed"])
+    match = re.search(r"(?:^|_)seed([0-9]+)(?:_|$)", metrics_path.parent.name)
+    if match is None:
+        raise ValueError(f"Cannot resolve training seed from {metrics_path}")
+    return int(match.group(1))
 
 
 def build_model(metrics: dict[str, Any], device: torch.device) -> AtariQNetwork:
@@ -202,7 +221,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     metrics_path = Path(args.metrics_path).resolve()
     metrics, task_env_id = load_metrics(metrics_path, args.task_env_id)
     checkpoint = Path(args.checkpoint or metrics["checkpoint"]).resolve()
-    training_seed = int(metrics_path.parent.name.rsplit("seed", 1)[-1])
+    training_seed = training_seed_from_metrics(metrics, metrics_path)
     env_slug = "".join(
         character.lower() if character.isalnum() else "_" for character in task_env_id
     )
@@ -247,11 +266,13 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         capture_video=False,
         full_action_space=str(metrics["action_space_mode"]) == "full18",
         render_mode="rgb_array",
+        atari_env_protocol=str(metrics.get("atari_env_protocol", "baseline")),
     )()
     returns: list[float] = []
     episode_lengths: list[int] = []
     episode_terminated: list[bool] = []
     episode_truncated: list[bool] = []
+    episode_end_reasons: list[str] = []
     videos: list[Path] = []
     try:
         if int(env.action_space.n) != int(metrics["num_actions"]):
@@ -271,6 +292,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
             episode_return = 0.0
             episode_length = 0
             terminated = truncated = False
+            end_reason = "natural"
             try:
                 while not (terminated or truncated):
                     obs_batch = to_channel_first_obs(np.expand_dims(np.asarray(obs), axis=0))
@@ -279,6 +301,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
                         q_values, state = model.step(obs_tensor, prev_done, state)
                     action = int(q_values.argmax(dim=-1).item())
                     obs, reward, terminated, truncated, _info = env.step(action)
+                    end_reason = str(_info.get("end_reason", "natural"))
                     if episode_video is not None:
                         frame = np.asarray(env.render(), dtype=np.uint8)
                         if writer is None:
@@ -303,6 +326,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
             episode_lengths.append(episode_length)
             episode_terminated.append(bool(terminated))
             episode_truncated.append(bool(truncated))
+            episode_end_reasons.append(end_reason)
             print(
                 f"episode={episode} return={episode_return:.1f} "
                 f"environment_steps={episode_length}"
@@ -335,6 +359,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         "frame_stack": int(metrics["frame_stack"]),
         "action_space_mode": metrics["action_space_mode"],
         "num_actions": int(metrics["num_actions"]),
+        "atari_env_protocol": metrics.get("atari_env_protocol", "baseline"),
         "training_seed": training_seed,
         "eval_seed": int(args.eval_seed),
         "num_episodes": int(args.num_episodes),
@@ -344,6 +369,8 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         "episode_lengths": episode_lengths,
         "episode_terminated": episode_terminated,
         "episode_truncated": episode_truncated,
+        "episode_end_reasons": episode_end_reasons,
+        "stall_rate": episode_end_reasons.count("stalled") / len(episode_end_reasons),
         "episode_selection": args.episode_selection,
         "selected_episode": selected_episode,
         "selected_return": returns[selected_episode],

@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "id": "clutter-fig6-net-recurrent-current-resetexcluded-gawf-10seeds",
+  "description": "Session 6 per-destination net recurrent-current decomposition, split by TT/TR/RT/RR and recurrent-weight sign after excluding reset t=0 frames.",
+  "host": "sjc-remote",
+  "status": "completed",
+  "created_at": "2026-08-19T22:38:04-04:00",
+  "updated_at": "2026-08-19T22:47:22-04:00",
+  "completed_at": "2026-08-19T22:47:22-04:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": ["sjc_fig6_net_recurrent_current_resetexcluded_20260819_r2"],
+    "tmux_session": "sjc_fig6_net_recurrent_current_resetexcluded_20260819_r2",
+    "process_patterns": ["fig6_net_recurrent_current_20260819.py"],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": ["results/run_fig6_net_recurrent_current_20260819/*.log"],
+    "status_dir": "results/data/analysis/fig6_net_recurrent_current_resetexcluded_10seed_r2/final",
+    "result_paths": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig6_net_recurrent_current_resetexcluded_10seed_r2"
+    ]
+  },
+  "tracking": {
+    "expected_units": 10,
+    "auto_complete": true,
+    "result_globs": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig6_net_recurrent_current_resetexcluded_10seed_r2/seed*/net_recurrent_current.npz"
+    ]
+  },
+  "notes": [
+    "Every selected frame computes the instantaneous recurrent product g_ij(t) * W_ij * h_j(t-1), rather than multiplying separately averaged gate and activity terms.",
+    "TT/TR/RT/RR are digit-context-specific and each positive/negative/total contribution is divided by its destination-unit count.",
+    "The gate component uses the equal-weight cross-digit mean gate while retaining actual h_j(t-1); it is not a frozen-gate counterfactual.",
+    "Supplementary 4 renders the digit-wise ΔI and gate-only contributions with seed mean ± SEM.",
+    "The first attempt wrote no units because its one-digit seed path omitted leading zeros; recovery r2 uses a new result leaf and explicit two-digit paths."
+  ]
+}

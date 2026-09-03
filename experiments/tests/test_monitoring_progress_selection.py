@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from subprocess import CompletedProcess
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from experiments.monitoring.job_registry import RegistryError
-from experiments.monitoring.progress import collect_remote_jobs, select_job
+from experiments.monitoring.progress import collect_remote_jobs, format_report, select_job
+from experiments.monitoring.remote_probe import collect
 
 
 def _manifest(job_id: str, *, status: str = "running") -> dict[str, object]:
@@ -65,3 +67,27 @@ def test_socket_check_failure_does_not_open_a_remote_ssh_connection() -> None:
     assert reports[0]["probe_error"] == "SSH socket unavailable: Control socket missing"
     assert run.call_count == 1
     assert run.call_args.args[0] == ["ssh", "-O", "check", "sjc-remote"]
+
+
+def test_file_result_glob_counts_complete_analysis_units() -> None:
+    """An NPZ result glob is valid completion evidence without a metrics.json sidecar."""
+
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        for seed in ("seed01", "seed02"):
+            destination = root / "results" / seed
+            destination.mkdir(parents=True)
+            (destination / "summary.npz").write_bytes(b"npz")
+        job = _manifest("analysis-files")
+        job["remote_root"] = str(root)
+        job["tracking"] = {
+            "expected_units": 2,
+            "result_globs": ["results/seed*/summary.npz"],
+        }
+
+        report = collect(job)
+
+    assert report["discovered_units"] == 2
+    assert report["valid_units"] == 2
+    assert all(unit["artifact_exists"] for unit in report["units"])
+    assert "status=completed (verified)" in format_report(report, job)

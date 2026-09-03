@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "id": "clutter-fig6-encoder-digit-patterns-gawf-10seeds",
+  "description": "Figure 6 prerequisite: compare ten digit-conditioned encoder activation patterns in 6-by-6 spatial and 32-channel views.",
+  "host": "sjc-remote",
+  "status": "completed",
+  "created_at": "2026-08-15T21:22:57-04:00",
+  "updated_at": "2026-08-16T01:24:55+00:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": [
+      "sjc_fig6_encoder_digit_patterns_gawf_10seed_20260815"
+    ],
+    "tmux_session": "sjc_fig6_encoder_digit_patterns_gawf_10seed_20260815",
+    "process_patterns": [
+      "utils.analysis.clutter.fig6_encoder_sector_patterns"
+    ],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": [
+      "results/run_fig6_encoder_digit_patterns_gawf_10seed_20260815.log"
+    ],
+    "status_dir": "results/data/analysis/fig6_encoder_digit_patterns_gawf_10seed/final",
+    "result_paths": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig6_encoder_digit_patterns_gawf_10seed"
+    ]
+  },
+  "tracking": {
+    "expected_units": 10,
+    "auto_complete": true,
+    "result_globs": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig6_encoder_digit_patterns_gawf_10seed/gawf-seed*/encoder_digit_patterns.npz"
+    ]
+  },
+  "notes": [
+    "Each seed retains only equal-n held-out Digit condition means with shape (10, 32, 6, 6); frame-level activations are not saved.",
+    "The final output contains a 2-by-5 spatial map grid and a 3-by-4 channel grid with ten digit patterns plus their 10-by-10 similarity matrix."
+  ],
+  "completed_at": "2026-08-16T01:24:55+00:00"
+}

@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "id": "clutter-fig7-supple3-resetexcluded-selectivity-gawf-10seeds",
+  "description": "Formal ten-seed recurrent-gate Figure 7 and Supplementary 3 rerun using reset-excluded validation selectivity masks.",
+  "host": "sjc-remote",
+  "status": "completed",
+  "created_at": "2026-08-20T09:59:04-04:00",
+  "updated_at": "2026-08-20T10:03:00-04:00",
+  "completed_at": "2026-08-20T10:03:00-04:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+  "environment": {"name": "aim3_rnn", "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"},
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": ["sjc_fig7_resetexcluded_selectivity_20260820"],
+    "tmux_session": "sjc_fig7_resetexcluded_selectivity_20260820",
+    "process_patterns": ["run_sjc_clutter_fig7_supple3_multiseed.sh"],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": ["results/run_fig7_resetexcluded_selectivity_20260820.log"],
+    "status_dir": "results/data/analysis/fig7_recurrent_gate_resetexcluded_selectivity_10seed/final",
+    "result_paths": ["/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig7_recurrent_gate_resetexcluded_selectivity_10seed"]
+  },
+  "tracking": {
+    "expected_units": 10,
+    "auto_complete": true,
+    "result_globs": ["/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig7_recurrent_gate_resetexcluded_selectivity_10seed/seed*/compact/recurrent_gate_condition_means.npz"]
+  },
+  "notes": [
+    "The compact output is regenerated from reset-excluded trajectory frames and from reset-excluded validation selectivity masks for hidden tuned-unit assignment.",
+    "On success it overwrites only the established Figure 7 and Supplementary 3 filenames in results/save; the former compact result leaf remains intact."
+  ]
+}

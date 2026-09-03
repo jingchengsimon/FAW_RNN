@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "id": "clutter-residual-anova-resetexcluded-best6-6models-10seeds",
+  "description": "Reset-excluded trial-level residual ANOVA for Figure 4 six-model activations and Figure 5 unit gates, plus the three residual-bar renderings.",
+  "host": "sjc-remote",
+  "status": "running",
+  "created_at": "2026-08-18T21:00:00-04:00",
+  "updated_at": "2026-08-18T21:00:00-04:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": [
+      "sjc_residual_components_20260818"
+    ],
+    "tmux_session": "sjc_residual_components_20260818",
+    "process_patterns": [
+      "fig4_activation_anova",
+      "fig5_unit_gate_context_multiseed"
+    ],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": [
+      "results/run_sjc_residual_components_20260818.log"
+    ],
+    "status_dir": "results/data/analysis/fig5_unit_gate_context_residual_resetexcluded_10seed/final",
+    "result_paths": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig4_activation_anova_6model_10seed_residual_resetexcluded/final",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig5_unit_gate_context_residual_resetexcluded_10seed/final"
+    ]
+  },
+  "tracking": {
+    "expected_units": 2,
+    "auto_complete": true,
+    "result_globs": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig4_activation_anova_6model_10seed_residual_resetexcluded/final/.complete",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig5_unit_gate_context_residual_resetexcluded_10seed/final/.complete"
+    ]
+  },
+  "notes": [
+    "All collectors exclude every sequence t=0 reset frame.",
+    "The first three bars use the condition-mean denominator; Residual uses the trial-level total-variance denominator and is explicitly labelled as such.",
+    "Collectors retain aggregate sufficient statistics only, never dense activation or gate arrays."
+  ]
+}

@@ -50,7 +50,7 @@ class TransitionBatch:
     obs: torch.Tensor  # (B, C, H, W) uint8
     actions: torch.Tensor  # (B,) long
     rewards: torch.Tensor  # (B,) float32
-    dones: torch.Tensor  # (B,) float32
+    dones: torch.Tensor  # (B,) float32; 1 stops TD bootstrap
     next_obs: torch.Tensor  # (B, C, H, W) uint8
     task_ids: torch.Tensor  # (B,) long; sampling/loss metadata only
 
@@ -66,7 +66,7 @@ class SequenceBatch:
     obs: torch.Tensor  # (B, L+1, C, H, W) uint8
     actions: torch.Tensor  # (B, L+1) long
     rewards: torch.Tensor  # (B, L+1) float32
-    dones: torch.Tensor  # (B, L+1) float32
+    dones: torch.Tensor  # (B, L+1) float32; 1 stops TD bootstrap
     prev_dones: torch.Tensor  # (B, L+1) float32
     loss_mask: torch.Tensor  # (B, L+1) float32
     task_ids: torch.Tensor  # (B, L+1) long; sampling/loss metadata only
@@ -419,11 +419,15 @@ class AtariReplayBuffer:
         env_col = env_idx[:, None]
 
         resets = self._resets[phys, env_col].astype(np.float32)
-        prev_dones = resets.copy()
-        # NEXT_STEP autoreset first returns one invalid row containing the old
-        # terminal observation. Reset again on the following valid row so that
-        # this ignored observation cannot leak state into the new episode/task.
-        prev_dones[:, 1:] = np.maximum(prev_dones[:, 1:], resets[:, :-1])
+        bootstrap_stops = self._dones[phys, env_col].astype(np.float32)
+        prev_dones = np.zeros_like(resets)
+        # A true terminal resets before its terminal observation is unrolled. A
+        # truncation that bootstraps keeps that state for one masked autoreset row,
+        # then resets before the first observation of the new episode/task.
+        prev_dones[:, 1:] = np.maximum(
+            bootstrap_stops[:, :-1],
+            resets[:, :-1],
+        )
         prev_dones[:, 0] = 1.0
         loss_mask = 1.0 - resets
         has_internal_reset = bool(np.any(prev_dones[:, 1:] != 0))
@@ -432,9 +436,7 @@ class AtariReplayBuffer:
             obs=torch.as_tensor(self._obs[phys, env_col], device=self.device),
             actions=torch.as_tensor(self._actions[phys, env_col], device=self.device),
             rewards=torch.as_tensor(self._rewards[phys, env_col], device=self.device),
-            dones=torch.as_tensor(
-                self._dones[phys, env_col].astype(np.float32), device=self.device
-            ),
+            dones=torch.as_tensor(bootstrap_stops, device=self.device),
             prev_dones=torch.as_tensor(prev_dones, device=self.device),
             loss_mask=torch.as_tensor(loss_mask, device=self.device),
             task_ids=torch.as_tensor(

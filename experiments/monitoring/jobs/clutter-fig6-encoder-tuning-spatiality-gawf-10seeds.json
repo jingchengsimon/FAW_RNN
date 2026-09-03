@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "id": "clutter-fig6-encoder-tuning-spatiality-gawf-10seeds",
+  "description": "Figure 6 prerequisite: test whether GaWF encoder Sector/Digit tuning is predominantly 6-by-6 spatial rather than 32-channel, and whether Sector-tuned units align with input-gate Sector modulation.",
+  "host": "sjc-remote",
+  "status": "completed",
+  "created_at": "2026-08-15T18:30:44-04:00",
+  "updated_at": "2026-08-15T22:45:51+00:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": [
+      "sjc_fig6_encoder_tuning_gawf_10seed_20260815"
+    ],
+    "tmux_session": "sjc_fig6_encoder_tuning_gawf_10seed_20260815",
+    "process_patterns": [
+      "utils.analysis.clutter.fig6_encoder_tuning"
+    ],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": [
+      "results/run_20260815_183134.log"
+    ],
+    "status_dir": "results/data/analysis/fig6_encoder_tuning_gawf_10seed/final",
+    "result_paths": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig6_encoder_tuning_gawf_10seed"
+    ]
+  },
+  "tracking": {
+    "expected_units": 10,
+    "auto_complete": true,
+    "result_globs": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig6_encoder_tuning_gawf_10seed/gawf-seed*/encoder_tuning.npz"
+    ]
+  },
+  "notes": [
+    "Each seed streams balanced 90-cell condition means for 20 fixed draws; no raw activation or gate arrays are retained.",
+    "Validation encoder activations estimate tuning, while held-out test input-gate columns estimate gate modulation.",
+    "The final panel contains Sector and Digit 6-by-6 tuning maps, spatial/channel/interaction structure fractions, and tuning-to-gate alignment controls.",
+    "This completed per-unit ANOVA-style attempt was superseded before Fig6 interpretation; retain it for provenance, but do not use it as the Fig6 prerequisite."
+  ],
+  "completed_at": "2026-08-15T22:45:51+00:00"
+}

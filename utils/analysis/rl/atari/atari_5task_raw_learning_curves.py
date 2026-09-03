@@ -3,7 +3,8 @@
 Inputs are one or more explicitly supplied five-task result directories.  Each directory must
 contain ``metrics_history.jsonl``; ``metrics.json`` is optional so running experiments can be
 rendered.  The module writes a shared-loss panel plus five return panels for the requested
-x-axes, defaulting to both ``environment_steps`` and ``global_step``.  It can overlay raw runs
+x-axes, defaulting to both ``environment_steps`` and ``global_step``.  ``--task-only`` instead
+writes one task-return panel without shared TD loss.  It can overlay raw runs
 or aggregate each model's available or completed seed curves as mean plus sample SD while retaining
 running seeds as raw curves.  The script also writes
 auditable ``figure_inputs`` CSV/JSON files and a manifest in the requested output directory.
@@ -54,6 +55,7 @@ class RunHistory:
     history: list[dict[str, Any]]
     has_metrics: bool
     is_completed: bool
+    step_offset: int = 0
 
 
 def parse_args() -> argparse.Namespace:
@@ -71,6 +73,12 @@ def parse_args() -> argparse.Namespace:
         "--label",
         action="append",
         help="Optional display label; repeat once per --run-dir in the same order.",
+    )
+    parser.add_argument(
+        "--step-offset",
+        action="append",
+        type=int,
+        help="Optional x-axis offset; repeat once per --run-dir in the same order.",
     )
     parser.add_argument(
         "--output-dir", type=Path, required=True, help="Destination for PNGs and inputs."
@@ -92,9 +100,16 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Aggregate completed formal seeds per model; retain running seeds as raw curves.",
     )
+    parser.add_argument(
+        "--task-only",
+        choices=TASKS,
+        help="Render only this task's episodic-return panel; omit shared TD loss.",
+    )
     args = parser.parse_args()
     if args.label is not None and len(args.label) != len(args.run_dir):
         parser.error("--label must be supplied once for every --run-dir.")
+    if args.step_offset is not None and len(args.step_offset) != len(args.run_dir):
+        parser.error("--step-offset must be supplied once for every --run-dir.")
     if args.model_mean_std and args.completed_mean_std:
         parser.error("--model-mean-std and --completed-mean-std are mutually exclusive.")
     return args
@@ -130,7 +145,9 @@ def _is_completed_run(directory: Path) -> bool:
 
 
 def load_run_histories(
-    run_dirs: list[Path], display_labels: list[str] | None = None
+    run_dirs: list[Path],
+    display_labels: list[str] | None = None,
+    step_offsets: list[int] | None = None,
 ) -> list[RunHistory]:
     """Read histories from the user-selected directories without requiring final metrics."""
 
@@ -167,6 +184,7 @@ def load_run_histories(
                 history=history,
                 has_metrics=(resolved / "metrics.json").is_file(),
                 is_completed=_is_completed_run(resolved),
+                step_offset=step_offsets[index - 1] if step_offsets is not None else 0,
             )
         )
     return runs
@@ -189,7 +207,8 @@ def curve_for_task(
         values = per_env.get(environment_key)
         if not isinstance(values, dict):
             continue
-        x_value = record.get("global_step") if x_key == "global_step" else values.get(x_key)
+        raw_x = record.get("global_step") if x_key == "global_step" else values.get(x_key)
+        x_value = raw_x + run.step_offset if raw_x is not None else None
         y_value = values.get("episodic_return_100")
         try:
             x, y = float(x_value), float(y_value)
@@ -212,7 +231,7 @@ def curve_for_shared_loss(run: RunHistory, x_key: str) -> tuple[np.ndarray, np.n
         if not isinstance(per_env, dict):
             continue
         if x_key == "global_step":
-            x_value = record.get("global_step")
+            raw_x = record.get("global_step")
         else:
             task_steps = [
                 values.get("environment_steps")
@@ -221,7 +240,8 @@ def curve_for_shared_loss(run: RunHistory, x_key: str) -> tuple[np.ndarray, np.n
             ]
             if len(task_steps) != len(TASKS):
                 continue
-            x_value = np.mean(task_steps)
+            raw_x = np.mean(task_steps)
+        x_value = raw_x + run.step_offset if raw_x is not None else None
         try:
             x, y = float(x_value), float(record.get("loss"))
         except (TypeError, ValueError):
@@ -300,6 +320,7 @@ def _plot_curves(
             has_data = True
     if not model_mean_std:
         duplicate_indices: defaultdict[tuple[str | None, int], int] = defaultdict(int)
+        style_indices: dict[tuple[str | None, int, str], int] = {}
         line_styles = ("-", "--", ":", "-.", (0, (5, 1, 1, 1, 1, 1)))
         for run in runs:
             if completed_mean_std and run.is_completed:
@@ -309,8 +330,11 @@ def _plot_curves(
                 continue
             model, seed = _model_seed(run.directory)
             key = (model, seed)
-            duplicate_index = duplicate_indices[key]
-            duplicate_indices[key] += 1
+            style_key = (model, seed, run.display_label)
+            if style_key not in style_indices:
+                style_indices[style_key] = duplicate_indices[key]
+                duplicate_indices[key] += 1
+            duplicate_index = style_indices[style_key]
             axis.plot(
                 x_values / 1_000_000.0,
                 y_values,
@@ -368,10 +392,64 @@ def render_learning_curves(
         _style_axis(axis)
     task_axes[0].set_ylabel("episodic return (last 100 episodes)")
     handles, labels = loss_axis.get_legend_handles_labels()
-    figure.legend(handles, labels, loc="upper center", ncol=max(1, len(handles)), frameon=False,
-                 bbox_to_anchor=(0.5, 1.11))
+    unique = dict(zip(labels, handles))
+    figure.legend(
+        unique.values(),
+        unique,
+        loc="upper center",
+        ncol=max(1, len(unique)),
+        frameon=False,
+        bbox_to_anchor=(0.5, 1.11),
+    )
     figure.subplots_adjust(left=0.05, right=0.995, bottom=0.19, top=0.79, wspace=0.28)
     output_path = output_dir / f"01_learning_curves_{x_key}.png"
+    figure.savefig(output_path, dpi=150, bbox_inches="tight", pad_inches=0.06)
+    plt.close(figure)
+    return output_path
+
+
+def render_task_learning_curves(
+    runs: list[RunHistory],
+    output_dir: Path,
+    task: str,
+    x_key: str,
+    model_mean_std: bool = False,
+    completed_mean_std: bool = False,
+) -> Path:
+    """Write one task-return panel without shared TD loss and return the PNG path."""
+
+    if task not in TASKS:
+        raise ValueError(f"Unsupported Atari task: {task}")
+    if x_key not in {"environment_steps", "global_step"}:
+        raise ValueError(f"Unsupported x-axis key: {x_key}")
+    figure, axis = plt.subplots(figsize=(6.2, 4.0))
+    has_data = _plot_curves(
+        axis,
+        runs,
+        lambda run: curve_for_task(run, task, x_key),
+        model_mean_std=model_mean_std,
+        completed_mean_std=completed_mean_std,
+    )
+    if not has_data:
+        axis.text(0.5, 0.5, "no finite data", ha="center", va="center", transform=axis.transAxes)
+    axis.set_title(task)
+    axis.set_xlabel(
+        "global steps (M)" if x_key == "global_step" else "environment steps (M)"
+    )
+    axis.set_ylabel("episodic return (last 100 episodes)")
+    _style_axis(axis)
+    handles, labels = axis.get_legend_handles_labels()
+    unique = dict(zip(labels, handles))
+    figure.legend(
+        unique.values(),
+        unique,
+        loc="upper center",
+        ncol=max(1, len(handles)),
+        frameon=False,
+        bbox_to_anchor=(0.5, 1.02),
+    )
+    figure.subplots_adjust(left=0.16, right=0.98, bottom=0.16, top=0.82)
+    output_path = output_dir / f"01_{task.lower()}_learning_curves_{x_key}.png"
     figure.savefig(output_path, dpi=150, bbox_inches="tight", pad_inches=0.06)
     plt.close(figure)
     return output_path
@@ -396,6 +474,7 @@ def write_inputs_and_manifest(
     figures: list[Path],
     model_mean_std: bool = False,
     completed_mean_std: bool = False,
+    task_only: str | None = None,
 ) -> None:
     """Write auditable selected-run records and a manifest for the rendered PNGs."""
 
@@ -410,6 +489,7 @@ def write_inputs_and_manifest(
             "metrics_present": run.has_metrics,
             "completed": run.is_completed,
             "history_records": len(run.history),
+            "step_offset": run.step_offset,
         }
         for run in runs
     ]
@@ -430,6 +510,7 @@ def write_inputs_and_manifest(
             "run_count": len(runs),
             "figure_count": len(figures),
             "history_record_count": sum(len(run.history) for run in runs),
+            "task_only": task_only,
             "aggregation": (
                 "mean_sample_std"
                 if model_mean_std
@@ -449,24 +530,39 @@ def main() -> None:
 
     args = parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    runs = load_run_histories(args.run_dir, args.label)
+    runs = load_run_histories(args.run_dir, args.label, args.step_offset)
     x_axes = args.x_axes or ["environment_steps", "global_step"]
-    figures = [
-        render_learning_curves(
-            runs,
-            args.output_dir,
-            x_key,
-            args.model_mean_std,
-            args.completed_mean_std,
-        )
-        for x_key in x_axes
-    ]
+    renderer = render_task_learning_curves if args.task_only else render_learning_curves
+    figures = []
+    for x_key in x_axes:
+        if args.task_only:
+            figures.append(
+                renderer(
+                    runs,
+                    args.output_dir,
+                    args.task_only,
+                    x_key,
+                    args.model_mean_std,
+                    args.completed_mean_std,
+                )
+            )
+        else:
+            figures.append(
+                renderer(
+                    runs,
+                    args.output_dir,
+                    x_key,
+                    args.model_mean_std,
+                    args.completed_mean_std,
+                )
+            )
     write_inputs_and_manifest(
         runs,
         args.output_dir,
         figures,
         args.model_mean_std,
         args.completed_mean_std,
+        args.task_only,
     )
     print(f"Rendered {len(figures)} raw learning-curve figures to {args.output_dir}")
 

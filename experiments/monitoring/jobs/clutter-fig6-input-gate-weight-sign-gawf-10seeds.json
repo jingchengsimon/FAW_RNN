@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "id": "clutter-fig6-input-gate-weight-sign-gawf-10seeds",
+  "description": "Figure 6 point-excluded sequential input-gate maps split by the corresponding positive versus negative static input weights.",
+  "host": "sjc-remote",
+  "status": "completed",
+  "created_at": "2026-08-16T01:33:22-04:00",
+  "updated_at": "2026-08-16T11:10:04-04:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": [
+      "sjc_fig6_weight_sign_10seed_20260816"
+    ],
+    "tmux_session": "sjc_fig6_weight_sign_10seed_20260816",
+    "process_patterns": [
+      "utils.analysis.clutter.fig6_sector_gate_weight_sign"
+    ],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": [
+      "results/run_20260816_013414.log"
+    ],
+    "status_dir": "results/data/analysis/fig6_sector_gate_weight_sign_10seed/final",
+    "result_paths": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig6_sector_gate_weight_sign_10seed"
+    ]
+  },
+  "tracking": {
+    "expected_units": 10,
+    "auto_complete": true,
+    "result_globs": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig6_sector_gate_weight_sign_10seed/seed*/sector_gate_mean_sequential_equal_n_weight_sign.npz"
+    ]
+  },
+  "notes": [
+    "The source trajectories are copied one exact file per seed from the local retained Figure 3 trajectories.",
+    "Each map reuses the seed's original equal-n sector sample and only excludes the 0.5 point mass.",
+    "Positive and negative groups are defined as static weight_ih > 0 and weight_ih < 0, respectively.",
+    "All ten compact maps and the original sign-split Figure 6 PNG/PDF were verified on SJC and synchronized locally."
+  ],
+  "completed_at": "2026-08-16T11:10:04-04:00"
+}

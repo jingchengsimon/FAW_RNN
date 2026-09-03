@@ -64,6 +64,12 @@ def parse_args() -> argparse.Namespace:
         help="Filename stem used with --only_gate_weight_2x2.",
     )
     parser.add_argument(
+        "--gate_weight_layout",
+        choices=("2x2", "1x4"),
+        default="2x2",
+        help="Panel layout used with --only_gate_weight_2x2.",
+    )
+    parser.add_argument(
         "--metadata_path",
         default=None,
         help="Optional JSON destination for multi-seed aggregation provenance.",
@@ -215,6 +221,47 @@ def _weight_probability_axes(axes: np.ndarray, arrays: dict[str, np.ndarray]) ->
         if effective_edges.size <= 1001:
             axis.set_yticks(WEIGHT_YTICKS[kind])
         _style_probability_axis(axis)
+
+
+def _gate_weight_summary(
+    edges: np.ndarray,
+    arrays: dict[str, np.ndarray],
+    metadata: dict[str, object],
+    layout: str,
+) -> plt.Figure:
+    """Return the gate/weight probability summary in the requested panel layout."""
+
+    if layout == "1x4":
+        figure, axes = plt.subplots(1, 4, figsize=(0.7 * 4 * 5.05, 4.6))
+        gate_axes, weight_axes = axes[:2], axes[2:]
+    else:
+        figure, axes = plt.subplots(2, 2, figsize=(0.7 * 2 * 5.05, 2 * 4.1))
+        gate_axes, weight_axes = axes[0], axes[1]
+    _pooled_gate_probability_axes(gate_axes, edges, arrays, metadata)
+    _weight_probability_axes(weight_axes, arrays)
+    handles = gate_axes[0].get_legend_handles_labels()[0]
+    handles += weight_axes[0].get_legend_handles_labels()[0]
+    labels = gate_axes[0].get_legend_handles_labels()[1]
+    labels += weight_axes[0].get_legend_handles_labels()[1]
+    if layout == "1x4":
+        for axis in axes:
+            axis.set_ylabel("")
+        figure.supylabel("Probability (%)", x=0.005)
+        figure.tight_layout(rect=(0.025, 0.0, 1.0, 0.82), w_pad=1.2)
+        legend_y = 0.965
+    else:
+        figure.tight_layout(rect=(0.0, 0.0, 1.0, 0.88))
+        char_height_frac = (16.0 / 72.0) / (2 * 4.1)
+        legend_y = 0.965 - 0.4 * char_height_frac
+    figure.legend(
+        handles,
+        labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, legend_y),
+        ncol=len(labels),
+        frameon=False,
+    )
+    return figure
 
 
 def _histogram_median(counts: np.ndarray, edges: np.ndarray) -> float:
@@ -425,21 +472,20 @@ def main() -> None:
     if args.only_gate_weight_2x2:
         with plt.rc_context(
             {
-                "font.size": 16,
-                "axes.labelsize": 16,
-                "axes.titlesize": 16,
-                "xtick.labelsize": 16,
-                "ytick.labelsize": 16,
-                "legend.fontsize": 16,
+                "font.size": 18 if args.gate_weight_layout == "1x4" else 16,
+                "axes.labelsize": 18 if args.gate_weight_layout == "1x4" else 16,
+                "axes.titlesize": 18 if args.gate_weight_layout == "1x4" else 16,
+                "xtick.labelsize": 18 if args.gate_weight_layout == "1x4" else 16,
+                "ytick.labelsize": 18 if args.gate_weight_layout == "1x4" else 16,
+                "legend.fontsize": 18 if args.gate_weight_layout == "1x4" else 16,
             }
         ):
-            fig, axes = plt.subplots(2, 2, figsize=(0.7 * 2 * 5.05, 2 * 4.1))
-            _pooled_gate_probability_axes(axes[0], edges, arrays, metadata)
-            _weight_probability_axes(axes[1], arrays)
-            fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.88))
-            handles = axes[0, 0].get_legend_handles_labels()[0] + axes[1, 0].get_legend_handles_labels()[0]
-            labels = axes[0, 0].get_legend_handles_labels()[1] + axes[1, 0].get_legend_handles_labels()[1]
-            fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.954), ncol=4, frameon=False)
+            fig = _gate_weight_summary(
+                edges,
+                arrays,
+                metadata,
+                args.gate_weight_layout,
+            )
             stem = args.gate_weight_stem
             extensions = ("png", "pdf") if args.format == "png" else (args.format,)
             for extension in extensions:
@@ -639,29 +685,7 @@ def main() -> None:
             "legend.fontsize": 16,
         }
     ):
-        fig, axes = plt.subplots(2, 2, figsize=(0.7 * 2 * 5.05, 2 * 4.1))
-        _pooled_gate_probability_axes(axes[0], edges, arrays, metadata)
-        _weight_probability_axes(axes[1], arrays)
-        fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.88))
-        handles = (
-            axes[0, 0].get_legend_handles_labels()[0] + axes[1, 0].get_legend_handles_labels()[0]
-        )
-        labels = (
-            axes[0, 0].get_legend_handles_labels()[1] + axes[1, 0].get_legend_handles_labels()[1]
-        )
-        # One text-line height (16pt, matching the rc override above) as a fraction of this
-        # figure's fixed 8.2-inch height; the legend drops by 0.4 of that unit below its prior
-        # position.
-        char_height_frac = (16.0 / 72.0) / (2 * 4.1)
-        legend_y = 0.965 - 0.4 * char_height_frac
-        fig.legend(
-            handles,
-            labels,
-            loc="upper center",
-            bbox_to_anchor=(0.5, legend_y),
-            ncol=4,
-            frameon=False,
-        )
+        fig = _gate_weight_summary(edges, arrays, metadata, "2x2")
         gate_weight_png = os.path.join(args.raw_dir, "07_gate_and_weight_distributions_2x2.png")
         gate_weight_pdf = os.path.join(args.raw_dir, "07_gate_and_weight_distributions_2x2.pdf")
         fig.savefig(gate_weight_png, dpi=150, bbox_inches="tight", pad_inches=0.06)

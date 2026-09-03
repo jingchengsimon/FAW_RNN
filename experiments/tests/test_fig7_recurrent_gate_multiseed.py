@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 
 torch = pytest.importorskip("torch")
@@ -12,6 +13,7 @@ from utils.analysis.clutter.fig7_recurrent_gate_multiseed import (
     RESULT_NAME,
     _compact_paths,
     _recurrent_gate_chunks,
+    _sign_magnitude_seed_metrics,
 )
 
 
@@ -44,3 +46,24 @@ def test_recurrent_only_chunks_match_full_gate_reconstruction() -> None:
             0.5,
         )
     np.testing.assert_allclose(reconstructed, expected.numpy(), rtol=0.0, atol=0.0)
+
+
+def test_sign_magnitude_metrics_split_slopes_and_keep_overall_level() -> None:
+    rows = []
+    for signpos, slope in ((1, 2.0), (0, -1.0)):
+        for abs_weight in (1.0, 2.0, 3.0):
+            rows.append(
+                {
+                    "absW": abs_weight,
+                    "signpos": signpos,
+                    "delta_of": 0.5 + slope * abs_weight,
+                }
+            )
+    frame = pd.DataFrame(rows)
+    metrics = _sign_magnitude_seed_metrics(
+        {group: frame.copy() for group in ("TT", "TR", "RT", "RR")}
+    )
+    for group in metrics.values():
+        assert group["positive_overlap_slope"] == pytest.approx(2.0)
+        assert group["negative_overlap_slope"] == pytest.approx(-1.0)
+        assert group["overall_delta_level"] == pytest.approx(1.5)

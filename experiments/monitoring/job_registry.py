@@ -299,6 +299,9 @@ def _new_manifest_from_args(args: argparse.Namespace) -> dict[str, Any]:
         defaults["checkpoint_glob"] = args.checkpoint_glob
     if args.checkpoint_count is not None:
         defaults["checkpoint_count"] = args.checkpoint_count
+    auto_complete = args.auto_complete
+    if auto_complete is None:
+        auto_complete = args.expected_units > 0 and bool(args.result_path)
     return {
         "schema_version": SCHEMA_VERSION,
         "id": args.id,
@@ -320,7 +323,7 @@ def _new_manifest_from_args(args: argparse.Namespace) -> dict[str, Any]:
         },
         "tracking": {
             "expected_units": args.expected_units,
-            "auto_complete": args.auto_complete,
+            "auto_complete": auto_complete,
             "result_globs": args.result_path,
             "done_glob": args.done_glob,
             "fail_glob": args.fail_glob,
@@ -366,7 +369,10 @@ def parse_args() -> argparse.Namespace:
     new.add_argument("--expected-global-step", type=int)
     new.add_argument("--checkpoint-glob")
     new.add_argument("--checkpoint-count", type=int)
-    new.add_argument("--auto-complete", action="store_true")
+    completion = new.add_mutually_exclusive_group()
+    completion.add_argument("--auto-complete", dest="auto_complete", action="store_true")
+    completion.add_argument("--no-auto-complete", dest="auto_complete", action="store_false")
+    new.set_defaults(auto_complete=None)
     new.add_argument("--note", action="append", default=[])
 
     show = subparsers.add_parser("show", help="Print one retained manifest.")

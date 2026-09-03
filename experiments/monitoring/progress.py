@@ -184,9 +184,12 @@ def format_report(report: dict[str, Any], job: dict[str, Any]) -> str:
     header = f"[{job['id']}] {job['description']}"
     if report.get("probe_error"):
         return f"{header}\n  {job['host']}: 连接/检查失败：{report['probe_error']}"
+    expected = report.get("expected_units", 0)
+    verified_complete = expected > 0 and report.get("valid_units") == expected
+    observed_status = "completed (verified)" if verified_complete else job["status"]
     lines = [
         header,
-        f"  host={job['host']} status={job['status']} root={report['remote_root']}",
+        f"  host={job['host']} status={observed_status} root={report['remote_root']}",
         "  progress={}/{} valid, {} done, {} failed, {} discovered".format(
             report["valid_units"],
             report["expected_units"],

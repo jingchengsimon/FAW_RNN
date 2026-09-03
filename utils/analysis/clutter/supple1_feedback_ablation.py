@@ -42,13 +42,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--data_dir",
         type=str,
-        default=str(output_dir("G_behaviour", "feedback_ablation", "data")),
+        default=None,
         help="Directory containing ablation_metrics.json.",
     )
     parser.add_argument(
         "--save_dir",
         type=str,
-        default=str(output_dir("G_behaviour", "viz_feedback_ablation", "figs")),
+        default=None,
         help="Directory for PNG outputs.",
     )
     parser.add_argument(
@@ -306,6 +306,10 @@ def _plot_recovery(metrics: List[Dict[str, Any]], conds: List[str], out_path: st
 
 def main() -> None:
     args = parse_args()
+    if args.data_dir is None:
+        args.data_dir = str(output_dir("G_behaviour", "feedback_ablation", "data"))
+    if args.save_dir is None:
+        args.save_dir = str(output_dir("G_behaviour", "viz_feedback_ablation", "figs"))
     data_dir = os.path.abspath(args.data_dir)
     save_dir = os.path.abspath(args.save_dir)
     os.makedirs(save_dir, exist_ok=True)

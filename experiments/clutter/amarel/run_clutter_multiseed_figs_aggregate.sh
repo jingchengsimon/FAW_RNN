@@ -57,4 +57,7 @@ cp "$FINAL/fig6/sector_gate_mean_sequential_equal_n_10seed_point_excluded.pdf" \
 python -m utils.analysis.clutter.fig7_recurrent_gate_disinhibition \
   --cache_dirs "${CACHE_DIRS[@]}" --fig_dir "$FINAL/fig7" \
   --output_stem recurrent_gate_disinhibition_poster_10seed
+python -m utils.analysis.clutter.fig7_recurrent_gate_disinhibition_delta \
+  --cache_dirs "${CACHE_DIRS[@]}" --fig_dir "$FINAL/fig7" \
+  --output_stem recurrent_gate_disinhibition_poster_delta_10seed
 touch "$FINAL/.complete"

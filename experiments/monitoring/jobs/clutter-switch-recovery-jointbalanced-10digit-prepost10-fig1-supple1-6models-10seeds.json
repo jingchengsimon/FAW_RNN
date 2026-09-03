@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "id": "clutter-switch-recovery-jointbalanced-10digit-prepost10-fig1-supple1-6models-10seeds",
+  "description": "Fig1 six-model and Supplementary 1 GaWF recovery on the joint-balanced, ten-unique-digit test protocol, with ten-seed 95% t-CI.",
+  "host": "sjc-remote",
+  "status": "completed",
+  "created_at": "2026-08-16T23:01:51-04:00",
+  "updated_at": "2026-08-17T03:07:56+00:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": [
+      "sjc_clutter_recovery_jointbalanced_10seed_20260816"
+    ],
+    "tmux_session": "sjc_clutter_recovery_jointbalanced_10seed_20260816",
+    "process_patterns": [
+      "utils.analysis.clutter.fig1_target_switch_recovery",
+      "utils.analysis.clutter.fig2_feedback_ablation"
+    ],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": [
+      "results/run_clutter_recovery_jointbalanced_10seed_20260816.log"
+    ],
+    "status_dir": "results/data/analysis/fig1_target_switch_recovery_jointbalanced_6model_10seed/final",
+    "result_paths": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig1_target_switch_recovery_jointbalanced_6model_10seed",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/supple1_feedback_ablation_recovery_jointbalanced_10seed",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/save/Fig1_best6_multiseed_shuffle_2x4_seq512.pdf",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/save/Supple1_jointswitch_balanced_10digit_unique_sector_covered_prepost10_fig_ablation_switch_recovery.pdf"
+    ]
+  },
+  "tracking": {
+    "expected_units": 70,
+    "auto_complete": true,
+    "result_globs": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/fig1_target_switch_recovery_jointbalanced_6model_10seed/*-seed*/fg_switch_offset_acc_*.npz",
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/analysis/supple1_feedback_ablation_recovery_jointbalanced_10seed/gawf-seed*/ablation_metrics.json"
+    ]
+  },
+  "notes": [
+    "Dataset suffix is 40h-float32-jointswitch-balanced-10digit-unique; metadata records 2430 joint switches and exactly 27 events in each of the 90 foreground digit-by-sector cells.",
+    "Every frame contains digits 0-9 once; every clutter onset covers all nine sectors with one independently uniform duplicate sector.",
+    "Fig1 evaluates six models by ten training seeds over pre10-pre1 and post1-post10; Supplementary 1 evaluates four feedback conditions for ten GaWF seeds.",
+    "Both recovery visualizations retain seed-level 95% t-CI but omit the phrase '10-seed mean' from their titles.",
+    "Numeric outputs stay on SJC; only the two curated PDF visualizations are synchronized locally."
+  ],
+  "completed_at": "2026-08-17T03:07:56+00:00"
+}

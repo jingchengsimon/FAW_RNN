@@ -1,7 +1,8 @@
 """Plot encoder activation patterns for the Clutter Sector or Digit conditions.
 
-``collect`` streams one GaWF checkpoint over the held-out split and saves only equal-n condition
-means with shape ``(classes, 32, 6, 6)``.  ``plot`` averages ten seed files and writes the
+``collect`` removes the first (zero-feedback reset) frame of every held-out rollout, then streams
+one GaWF checkpoint and saves only equal-n condition means with shape ``(classes, 32, 6, 6)``.
+``plot`` averages ten seed files and writes the
 condition-specific spatial and feature-channel pattern grids plus a similarity matrix.
 """
 
@@ -64,6 +65,11 @@ def parse_args() -> argparse.Namespace:
     plot_parser.add_argument("--data_root", required=True, type=Path)
     plot_parser.add_argument("--figure_dir", required=True, type=Path)
     plot_parser.add_argument("--condition", choices=tuple(CONDITIONS), default="sector")
+    spatial_parser = commands.add_parser("plot-spatial")
+    spatial_parser.add_argument("--summary", required=True, type=Path)
+    spatial_parser.add_argument("--figure_dir", required=True, type=Path)
+    spatial_parser.add_argument("--condition", choices=tuple(CONDITIONS), default="sector")
+    spatial_parser.add_argument("--stem", default="encoder_sector_spatial_patterns_3x3_10seed")
     return parser.parse_args()
 
 
@@ -124,9 +130,13 @@ def collect(args: argparse.Namespace) -> Path:
     labels = np.asarray(
         dataset.labels_sector[args.chan_num : args.chan_num + total_frames], dtype=np.int64
     ).reshape(total_frames, 2)
-    selected, target, original_counts = _equal_n_condition_mask(
-        labels[:, config.label_column], config.count, args.selection_seed
+    reset_mask = np.arange(total_frames) % int(dataset.frame_num) == 0
+    valid_indices = np.flatnonzero(~reset_mask)
+    selected_valid, target, original_counts = _equal_n_condition_mask(
+        labels[valid_indices, config.label_column], config.count, args.selection_seed
     )
+    selected = np.zeros(total_frames, dtype=bool)
+    selected[valid_indices[selected_valid]] = True
     sums = np.zeros((config.count, int(np.prod(ENCODER_SHAPE))), dtype=np.float64)
     counts = np.zeros(config.count, dtype=np.int64)
     loader = DataLoader(
@@ -175,6 +185,8 @@ def collect(args: argparse.Namespace) -> Path:
                 "activation": "CNN encoder output before recurrent input gates",
                 "selection": "equal-n random subsample independently within each condition",
                 "selection_seed": args.selection_seed,
+                "reset_frames_excluded": int(reset_mask.sum()),
+                "analysis_frames": int(valid_indices.size),
                 "original_frames_by_condition": original_counts.astype(int).tolist(),
                 "selected_frames_per_condition": target,
                 "pattern_shape": list(patterns.shape),
@@ -298,6 +310,76 @@ def _draw_combined(
     return png, pdf, similarity
 
 
+def _spatial_activation_limits(
+    spatial_maps: np.ndarray, config: ConditionConfig
+) -> tuple[float, float]:
+    """Validate condition spatial maps and return their own sequential colour limits."""
+
+    values = np.asarray(spatial_maps, dtype=np.float64)
+    expected = (config.count, *ENCODER_SHAPE[1:])
+    if values.shape != expected or not np.isfinite(values).all():
+        raise ValueError(f"Expected finite spatial maps with shape {expected}, got {values.shape}.")
+    vmin, vmax = float(values.min()), float(values.max())
+    if vmin >= vmax:
+        raise ValueError("Spatial activation maps must have a nonzero value range.")
+    return vmin, vmax
+
+
+def plot_spatial(args: argparse.Namespace) -> tuple[Path, Path]:
+    """Render a standalone condition spatial grid from the saved ten-seed summary."""
+
+    config = _condition_config(args.condition)
+    with np.load(args.summary, allow_pickle=False) as arrays:
+        spatial_maps = np.asarray(arrays["spatial_maps"], dtype=np.float32)
+    vmin, vmax = _spatial_activation_limits(spatial_maps, config)
+    rows, columns = config.spatial_grid
+    if rows * columns < config.count:
+        raise RuntimeError(
+            f"Spatial grid {rows}x{columns} cannot contain {config.count} conditions."
+        )
+    args.figure_dir.mkdir(parents=True, exist_ok=True)
+    with plt.rc_context({"font.size": 13, "axes.titlesize": 16}):
+        fig, axes = plt.subplots(rows, columns, figsize=(7.2, 6.8), constrained_layout=True)
+        image = None
+        for value, axis in enumerate(np.ravel(axes)):
+            if value >= config.count:
+                axis.set_visible(False)
+                continue
+            image = axis.pcolormesh(
+                spatial_maps[value],
+                cmap="Reds",
+                vmin=vmin,
+                vmax=vmax,
+                shading="flat",
+                edgecolors="face",
+                linewidth=0.01,
+                antialiased=False,
+                rasterized=False,
+                snap=True,
+            )
+            axis.set_xlim(0, ENCODER_SHAPE[2])
+            axis.set_ylim(ENCODER_SHAPE[1], 0)
+            axis.set_aspect("equal")
+            axis.set_title(f"{config.label} {value}")
+            axis.set_xticks([])
+            axis.set_yticks([])
+        assert image is not None
+        fig.suptitle(f"Mean encoder activation (equal-n {config.name}s)")
+        fig.colorbar(
+            image,
+            ax=np.ravel(axes).tolist(),
+            shrink=0.82,
+            label="Mean encoder activation",
+        )
+        png, pdf = (args.figure_dir / args.stem).with_suffix(".png"), (
+            args.figure_dir / args.stem
+        ).with_suffix(".pdf")
+        fig.savefig(png, dpi=180, bbox_inches="tight", pad_inches=0.06)
+        fig.savefig(pdf, bbox_inches="tight", pad_inches=0.06)
+        plt.close(fig)
+    return png, pdf
+
+
 def plot(args: argparse.Namespace) -> tuple[Path, Path]:
     """Aggregate ten seeds and render one shared-scale condition-pattern visualisation."""
 
@@ -320,8 +402,11 @@ def main() -> None:
     args = parse_args()
     if args.command == "collect":
         print(f"Saved {collect(args)}")
-    else:
+    elif args.command == "plot":
         for path in plot(args):
+            print(f"Saved {path}")
+    else:
+        for path in plot_spatial(args):
             print(f"Saved {path}")
 
 

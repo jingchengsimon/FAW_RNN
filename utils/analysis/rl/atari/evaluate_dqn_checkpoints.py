@@ -20,7 +20,11 @@ from utils.analysis.rl.atari.evaluate_dqn_video import (
     load_metrics,
 )
 from utils.training.atari.atari_envs import make_atari_env
-from utils.training.atari.atari_train_utils import select_device, set_atari_seed, to_channel_first_obs
+from utils.training.atari.atari_train_utils import (
+    select_device,
+    set_atari_seed,
+    to_channel_first_obs,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,7 +46,8 @@ def evaluate_episode(model: torch.nn.Module, metrics: dict[str, object], device:
         env_id=str(metrics["env_id"]), seed=seed, idx=0,
         frame_stack=int(metrics["frame_stack"]), frame_skip=int(metrics["frame_skip"]),
         flicker_prob=float(metrics["flicker_prob"]), capture_video=False,
-        full_action_space=False, render_mode=None,
+        full_action_space=str(metrics["action_space_mode"]) == "full18", render_mode=None,
+        atari_env_protocol=str(metrics.get("atari_env_protocol", "baseline")),
     )()
     try:
         observation, _ = env.reset(seed=seed)
@@ -56,7 +61,8 @@ def evaluate_episode(model: torch.nn.Module, metrics: dict[str, object], device:
             tensor = torch.as_tensor(batch, device=device)
             with torch.no_grad(), autocast_context(device, amp_dtype):
                 q_values, state = model.step(tensor, previous_done, state)
-            observation, reward, terminated, truncated, _ = env.step(int(q_values.argmax(-1).item()))
+            action = int(q_values.argmax(-1).item())
+            observation, reward, terminated, truncated, _ = env.step(action)
             previous_done.zero_()
             episode_return += float(reward)
             length += 1
@@ -71,7 +77,9 @@ def main() -> None:
     output = Path(args.output_json).resolve()
     if output.exists():
         raise FileExistsError(f"Refusing to overwrite {output}")
-    metrics = load_metrics(Path(args.metrics_path).resolve())
+    metrics, selected_env_id = load_metrics(Path(args.metrics_path).resolve(), None)
+    metrics = dict(metrics)
+    metrics["env_id"] = selected_env_id
     device = select_device(args.device)
     results: dict[str, object] = {"metrics_path": str(Path(args.metrics_path).resolve()),
                                   "eval_seeds": args.eval_seeds, "checkpoints": {}}

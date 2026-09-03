@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "id": "rl-atari-skiing-full18-stall-actionfix-v1-extend1m-to2m-smoke25k-gru-s1",
+  "description": "SJC 25K smoke for a fresh GRU extension phase from its completed 1M single-Skiing state, with terminal epsilon/LR schedules.",
+  "host": "sjc-remote",
+  "status": "completed",
+  "created_at": "2026-08-27T00:51:05-04:00",
+  "updated_at": "2026-08-27T01:00:50-04:00",
+  "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn_snapshot_skiing_15682aff",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/G/anaconda3/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "tmux",
+    "job_ids": [],
+    "run_ids": [
+      "sjc_skiing_actionfix_extend1mto2m_smoke25k_gru_s1_20260827"
+    ],
+    "tmux_session": "sjc_skiing_actionfix_extend1mto2m_smoke25k_gru_s1_20260827",
+    "process_patterns": ["stallactionfix_v1_extend1mto2m_smoke25k_gru_seed1"],
+    "collect_gpu": true
+  },
+  "paths": {
+    "log_globs": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend1mto2m_smoke25k_gru_seed1/run.log"
+    ],
+    "status_dir": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend1mto2m_smoke25k_gru_seed1/status",
+    "result_paths": [
+      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend1mto2m_smoke25k_gru_seed1"
+    ]
+  },
+  "tracking": {
+    "expected_units": 1,
+    "auto_complete": true,
+    "validation_mode": "strict",
+    "defaults": {
+      "metrics_file": "metrics.json",
+      "history_file": "metrics_history.jsonl",
+      "checkpoint_glob": "*.pth",
+      "checkpoint_count": 1,
+      "expected": {
+        "global_step": 25000,
+        "model_type": "gru",
+        "num_layers": 3,
+        "hidden_size": 458,
+        "env_id": "ALE/Skiing-v5",
+        "action_space_mode": "full18",
+        "num_actions": 18,
+        "atari_env_protocol": "skiing-stall-actionfix-v1",
+        "action_mapping_protocol": "single_canonical_full18",
+        "stalled_truncation_bootstrap": true,
+        "learning_rate": 1e-05,
+        "learning_rate_decay_step": 0,
+        "epsilon": 0.01,
+        "effective_learning_rate": 1e-05
+      }
+    },
+    "units": [
+      {
+        "id": "gru-seed1-extension-smoke25k",
+        "result_dir": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend1mto2m_smoke25k_gru_seed1",
+        "done_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend1mto2m_smoke25k_gru_seed1/status/done",
+        "fail_file": "/G/MIMOlab/Codes/aim3_gawf_rnn/results/data/rl/atari/5task_18action/formal_20m_4mpertask_raw_seeds/atari_dqn_skiing_fs4_stack4_l3_full18_stallactionfix_v1_extend1mto2m_smoke25k_gru_seed1/status/fail"
+      }
+    ]
+  },
+  "notes": [
+    "The read-only SJC snapshot is derived from snapshot 3548970e and changes only the DQN budget-extension logic and Skiing launcher; the dirty SJC checkout and Amarel snapshots remain untouched.",
+    "The source is the completed GRU seed1 1M single-Skiing final state_dict. This smoke starts fresh optimizer/replay/global step with epsilon=0.01 and LR=1e-5; it is not a strict resume.",
+    "Accepted at 2026-08-27T01:00:50-04:00: global_step=25000, loss=0.03759642690420151, epsilon=0.01, learning_rate=effective_learning_rate=1e-5, learning_rate_decay_step=0, 22 finite training episodes, one final state_dict, history, and a non-empty three-episode greedy video/metadata.",
+    "The smoke observed stall_rate=1.0: training return100=-30000 and length100=1127.636; greedy returns were all -30000, lengths were 859/859/896, and all episodes ended with truncated=true and end_reason=stalled.",
+    "Source model SHA256=52dbf53720cdc67776783ef15bc8669ee04a9aee7d1d8a68f3191f395653ea57; final model SHA256=8c613384d3c334c4a87bee3690488c373cc9a2e89adf8ea6fe37c9f7f13021c9; MP4 SHA256=c6876db063c8c2efe3e0f4ca6f9f195d8c7067f20589cf0d97aac74804788b6e.",
+    "The accepted smoke result leaf is removed after this evidence is recorded; it is not a formal result."
+  ]
+}

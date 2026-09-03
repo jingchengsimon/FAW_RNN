@@ -15,6 +15,7 @@ The repository trains and analyses recurrent models, especially GaWF
 | Any model or training change | `run_task.py`, `utils/training/` | `docs/ARCHITECTURE.md` |
 | CLI, filenames, saved results | all public scripts | `docs/CONVENTIONS.md` |
 | Analysis or visualisation | `utils/analysis/` | `docs/DEVELOPMENT_WORKFLOWS.md` |
+| ICLR paper prose or captions | manuscript drafts and figure captions | `docs/ICLR_PAPER_WRITING.md` |
 | Task experiment definitions | `experiments/{clutter,atari,minigrid,text}/` | `experiments/README.md` and the task README |
 | Generalization experiments | `experiments/clutter/` | `experiments/clutter/README.md` |
 | Amarel jobs | `experiments/<task>/amarel/` | `experiments/<task>/amarel/README.md` and `docs/operations/REMOTE_EXECUTION.md` |
@@ -80,42 +81,11 @@ is missing, copy `.agents/local.example.md` and fill it in. Do not guess remote 
 - Do not delete experiment results, checkpoints, or pending-cleanup records without explicit
   human confirmation. Completion, failure, timeout, or staleness is not deletion permission.
   An accepted smoke is the sole exception: its exact smoke result leaf and its exact smoke
-  artifact/log leaf are temporary validation outputs and must be deleted after acceptance under
-  the cleanup rules below. Failed, paused, or recovering smoke outputs remain protected.
-
-### 全局 smoke 验收
-
-- 每个大规模训练的 smoke 以“训练能在请求的 smoke budget 内正常结束、协议关键结构化结果
-  完整、没有明确训练/存储/数值错误”为通过条件。协议关键证据包括适用的最终 metrics/history、
-  预期 checkpoint 或可恢复 checkpoint，以及任务特定的帧/数据协议字段。
-- 不得把可选、历史上未保证持久化的 metadata（例如 final metrics 中的 `seed`）设为 smoke
-  成功的必要条件。seed、array task 与结果目录的对应关系应由 launcher 的确定性 mapping 和
-  路径命名追踪。
-- 正常的可恢复中断应保留 checkpoint 并 requeue 或报告为 paused/recovering，不得伪报为
-  训练失败；真实非零训练退出、缺少协议关键产物、非有限数值或明确 quota/I/O 错误才是失败。
-- 每个具体 launcher 可以增加与其任务协议直接相关的验证，但不得收紧上述规则为依赖可选
-  字段的 schema lock。
-- 通过验收的 smoke 只用于正式训练前的检验，不保留其文件。验收记录必要状态后，默认清理
-  该 smoke 的精确 result leaf（包括 metrics/history/checkpoint/replay）和精确 artifact/log
-  leaf；不得清理其父目录、正式训练 leaf 或其他 smoke。失败、paused、recovering smoke 的
-  结果和 checkpoint 必须保留，直到人类另行处置。
-
-## Remote synchronization safety
-
-- Never run `rsync --delete` against a repository root, `results/`, `source/clutter/stimuli/`, or another broad
-  ancestor, and never combine `--delete` with multiple sources.
-- Never flatten a trailing-slash source directory into a repository root. Sync one source to its
-  exact homologous leaf destination.
-- A deletion-enabled sync is allowed only for an explicitly requested generated-output leaf and
-  requires the exact command to pass `--dry-run --itemize-changes` inspection first.
-- Before `rm -rf`, `find -delete`, or equivalent cleanup, require non-empty variables, resolve the
-  target, and assert it is the exact human-authorized leaf with a verified recovery copy.
-- For an accepted smoke cleanup, the smoke-acceptance rule above is standing human authorization
-  for its exact result and artifact leaves; no recovery copy is required. Still require non-empty
-  resolved paths, an exact-leaf assertion, and a pre-delete itemized listing. Never use this
-  exception for a formal result, a failed/paused/recovering smoke, or any parent directory.
-- After synchronization, verify the destination, expected file count, and protected siblings.
-  Missing or unexpected paths are a stop condition, not permission for follow-up cleanup.
+  artifact/log leaf is temporary validation output handled under the global smoke-acceptance and
+  exact-target cleanup rules. Failed, paused, or recovering smoke outputs remain protected.
+- User-authorized data deletion must name exact target leaves. When the user explicitly authorizes
+  irreversible deletion, a recovery copy is not required; still resolve every target, inspect an
+  itemized pre-delete listing, and never delete a parent directory or unlisted sibling.
 
 ## Python and script baseline
 
@@ -170,22 +140,22 @@ is missing, copy `.agents/local.example.md` and fill it in. Do not guess remote 
   `AIM3_NUM_WORKERS=2`; both use `AIM3_PIN_MEMORY=1` on CUDA compute nodes.
 - After submission, report the job/run ID, remote root, result location, requested resources, and
   the status/check command, then register it in `experiments/monitoring/`.
-- For remote progress, `experiments/monitoring/jobs/<experiment-id>.json` is the only fact source.
-  Every new manifest uses a host-neutral concise ID in the form
-  `<domain>-<protocol>-<variant>-<budget>-<models>-<seeds>`.
-  Host and execution IDs remain separate (`host`, Slurm `job_ids`, SJC `run_ids`/tmux). Run
-  `job_registry rebuild`; `JOBS.md` is the human/agent search summary and `active_jobs.json` is a
-  lightweight active index, neither replaces the manifest. For a status-only check, pass exactly
-  one complete ID to `progress --no-update`; no alias, execution-ID, fuzzy-name, or historical-
-  manifest lookup is permitted. `progress`
-  performs `ssh -O check <alias>` and reports any local/socket/remote error explicitly; after a
-  successful check it makes one combined foreground SSH query. A local manifest error is not
-  evidence of an SSH or remote failure.
-- When a user describes a registered active run in prose (for example an `exploration_fraction`,
-  budget, and model pair), inspect only `JOBS.md` or `active_jobs.json`, map it to one displayed
-  complete experiment ID, and run the check in the same turn if the mapping is unique. Do not ask
-  for confirmation or pass natural language to the checker. If no unique row matches, report that
-  condition and request the complete ID; never guess a different budget, model set, host, or run.
+- Apply the global remote-experiment identity and SSH-socket workflow using
+  `experiments/monitoring/jobs/<experiment-id>.json` as AIM3's only per-run fact source,
+  `experiments/monitoring/JOBS.md` as the human/agent index, and
+  `experiments/monitoring/active_jobs.json` as the active index. After every submission, run
+  `PYTHONDONTWRITEBYTECODE=1 python -m experiments.monitoring.job_registry rebuild`.
+- AIM3 experiment IDs are host-neutral. Prefixes encode the applicable hierarchy exactly:
+  `clutter-...`, `text-...`, `rl-minigrid-...`, `rl-atari-multitask-...`,
+  `rl-atari-breakout-...`, or `rl-atari-pong-...`. Follow the prefix with protocol, variant,
+  budget, models, and seeds; never omit a required hierarchy level to create a shorter ambiguous
+  ID. Store host and execution identity separately: logical host in `host`, Amarel Slurm IDs in
+  `scheduler.job_ids`, and SJC tmux/run IDs in `scheduler.run_ids`.
+- For AIM3 status checks, invoke
+  `PYTHONDONTWRITEBYTECODE=1 python -m experiments.monitoring.progress` exactly once with
+  `<experiment-id> --timeout 30 --no-update`. Report `completed/expected`, latest step or unit
+  progress, ETA when supported, and any explicit failure reason. Do not use manual remote
+  diagnostics unless the user expands the scope after an explicit checker error.
 - Before resubmitting an existing experiment unit, query all active scheduler jobs and process
   commands for the exact result suffix across historical job IDs/worktrees. Final-result absence
   alone is not evidence that no older writer is still active.
