@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "id": "clutter-data-scale-fullgrid-4h10h20h40h-rnn-lstm-gru-gawf",
+  "description": "Summarize and render the retained Clutter 4h/10h/20h/40h full-grid comparison.",
+  "host": "amarel",
+  "status": "queued",
+  "created_at": "2026-09-03T17:20:00+00:00",
+  "updated_at": "2026-09-03T17:20:00+00:00",
+  "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
+  "environment": {
+    "name": "aim3_rnn",
+    "conda_init": "/home/js3269/enter/etc/profile.d/conda.sh"
+  },
+  "scheduler": {
+    "type": "slurm",
+    "job_ids": [
+      "61210496"
+    ],
+    "run_ids": [],
+    "tmux_session": null
+  },
+  "paths": {
+    "log_globs": [
+      "experiments/clutter/amarel/artifacts/data_scale_comparison_20260903/*.out",
+      "experiments/clutter/amarel/artifacts/data_scale_comparison_20260903/*.err"
+    ],
+    "status_dir": "/cache/home/js3269/projects/aim3_gawf_rnn/results/data/analysis/G_behaviour/data_scale_comparison",
+    "result_paths": [
+      "/cache/home/js3269/projects/aim3_gawf_rnn/results/data/analysis/G_behaviour/data_scale_comparison",
+      "/cache/home/js3269/projects/aim3_gawf_rnn/results/figs/G_behaviour/data_scale_validation_accuracy.png",
+      "/cache/home/js3269/projects/aim3_gawf_rnn/results/figs/G_behaviour/data_scale_training_accuracy.png",
+      "/cache/home/js3269/projects/aim3_gawf_rnn/results/figs/G_behaviour/data_scale_overfit_gap.png"
+    ]
+  },
+  "tracking": {
+    "expected_units": 1,
+    "auto_complete": true,
+    "result_globs": [
+      "/cache/home/js3269/projects/aim3_gawf_rnn/results/data/analysis/G_behaviour/data_scale_comparison/manifest.json"
+    ],
+    "done_glob": null,
+    "fail_glob": null,
+    "defaults": {
+      "expected": {}
+    },
+    "units": []
+  },
+  "notes": [
+    "Uses existing structured metrics only; no training or checkpoint mutation.",
+    "Job 61210496 requests gpu/Ada Lovelace, one GPU, 16 CPUs, 64G memory, and 20 minutes.",
+    "Structured data and figures intentionally use separate canonical result roots."
+  ]
+}
