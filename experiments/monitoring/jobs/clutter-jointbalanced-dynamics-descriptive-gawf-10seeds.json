@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "id": "clutter-jointbalanced-dynamics-descriptive-gawf-10seeds",
-  "description": "Ten-seed descriptive GaWF Jacobian and effective-connectivity analysis on balanced clean joint-switch CM-MNIST events.",
+  "description": "Ten-seed comparison of static recurrent weight, effective connectivity, and closed-loop Jacobian on balanced clean joint-switch CM-MNIST events.",
   "host": "sjc-remote",
   "status": "completed",
   "created_at": "2026-09-02T17:37:41-04:00",
-  "updated_at": "2026-09-02T19:43:20-04:00",
+  "updated_at": "2026-09-02T20:19:59-04:00",
   "completed_at": "2026-09-02T18:48:43-04:00",
   "remote_root": "/G/MIMOlab/Codes/aim3_gawf_rnn",
   "environment": {
@@ -37,7 +37,6 @@
       "/G/MIMOlab/Codes/aim3_gawf_rnn/results/figs/F_timing/gawf_static_recurrent_spectrum.pdf",
       "/G/MIMOlab/Codes/aim3_gawf_rnn/results/figs/F_timing/gawf_dynamic_landmark_spectra.pdf",
       "/G/MIMOlab/Codes/aim3_gawf_rnn/results/figs/F_timing/gawf_dynamics_switch_timecourses.pdf",
-      "/G/MIMOlab/Codes/aim3_gawf_rnn/results/figs/F_timing/gawf_closed_loop_feedback_contribution.pdf",
       "/G/MIMOlab/Codes/aim3_gawf_rnn/results/figs/F_timing/gawf_dynamics_digit_sector_interaction.pdf",
       "/G/MIMOlab/Codes/aim3_gawf_rnn/results/figs/F_timing/gawf_finite_time_gain.pdf"
     ]
@@ -50,19 +49,20 @@
     ]
   },
   "notes": [
-    "Current source commit is ddc822bfdb72865c69ea037ac1695ac94c3555b3.",
+    "The original numeric collection used commit ddc822bfdb72865c69ea037ac1695ac94c3555b3.",
     "Each seed uses six clean events from every one of the 90 new digit-by-sector cells, for 540 events per seed.",
     "The selected symmetric window is pre10 through post10 because larger candidate radii cannot retain all 90 cells.",
     "Every retained window excludes sequence boundaries and any additional joint switch.",
     "The scope is descriptive task-driven dynamics with no perturbation, intervention, or fixed-point search.",
-    "Completion requires ten seed artifacts, six regenerated PDFs, finite numeric outputs, and the final manifest and .complete marker.",
+    "Completion requires ten seed artifacts, five regenerated PDFs, finite numeric outputs, and the final manifest and .complete marker.",
     "Formal_v1 failed after 525 of 540 events because trailing frames outside the last complete 512-frame rollout were eligible; its partial output is retained.",
     "Formal_v2 excludes the 254-frame trailing remainder and passed six local and six remote direct checks before launch.",
     "Formal_v2 completed all ten seeds with exactly 540 events per seed and six events in each of the 90 new digit-by-sector cells.",
-    "Per seed, the finite outputs contain 32400 event-matrix rows, 10800 feedback-Jacobian rows, 345600 landmark eigenvalues, and 4320 finite-time-gain rows.",
+    "Per seed, the active outputs contain 32400 event-matrix rows, 345600 landmark eigenvalues, and 2160 closed-loop finite-time-gain rows.",
     "Two cuSOLVER SVD convergence warnings used PyTorch's more accurate fallback; the final numerical audit found no non-finite values.",
-    "Accepted visualizations are in results/figs/F_timing; visual QA passed and the initial figure set is retained there with a _v1 suffix.",
+    "Accepted visualizations are in results/figs/F_timing; superseded figures containing the realized-gate Jacobian were removed.",
     "Numeric collection used commit ddc822bfdb72865c69ea037ac1695ac94c3555b3; accepted plotting used commit 727e203349a376154e1d0afa5faefdd2bf99e5d9.",
-    "The visualization paths were corrected after completion: structured outputs remain under results/data/analysis, while rendered PDF and PNG files are flat under results/figs/F_timing."
+    "The visualization paths were corrected after completion: structured outputs remain under results/data/analysis, while rendered PDF and PNG files are flat under results/figs/F_timing.",
+    "The active analysis compares static recurrent weight, effective recurrent weight, and the closed-loop Jacobian; realized-gate Jacobian and feedback-contribution outputs were removed."
   ]
 }

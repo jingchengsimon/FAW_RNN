@@ -2,9 +2,9 @@
 
 ``collect`` loads one single-layer direct-feedback GaWF checkpoint, selects an equal number of
 events from every new digit-by-sector cell, and saves matrix descriptors for the static recurrent
-weight, realized effective weight, realized-gate Jacobian, and closed-loop Jacobian. ``plot``
-combines completed seed outputs into descriptive figures. Full event-by-matrix tensors are never
-written; only scalar descriptors and landmark eigenvalue samples are retained.
+weight, realized effective weight, and closed-loop Jacobian. ``plot`` combines completed seed
+outputs into descriptive figures. Full event-by-matrix tensors are never written; only scalar
+descriptors and landmark eigenvalue samples are retained.
 """
 
 from __future__ import annotations
@@ -26,19 +26,18 @@ from utils.analysis.anal_helpers import build_model_from_ckpt, build_test_datase
 from utils.analysis.anal_paths import output_dir
 
 
-OBJECTS = ("effective_weight", "realized_gate_jacobian", "closed_loop_jacobian")
+OBJECTS = ("static_weight", "effective_weight", "closed_loop_jacobian")
 METRICS = ("spectral_radius", "sigma_max", "frobenius_norm", "expansive_fraction")
 WINDOW_CANDIDATES = (10, 20, 32, 50)
 PLOT_COLORS = {
-    "effective_weight": "#6E6E6E",
-    "realized_gate_jacobian": "#2C7FB8",
+    "static_weight": "#6E6E6E",
+    "effective_weight": "#2C7FB8",
     "closed_loop_jacobian": "#D95F0E",
 }
 FIGURE_BASENAMES = (
     "gawf_static_recurrent_spectrum",
     "gawf_dynamic_landmark_spectra",
     "gawf_dynamics_switch_timecourses",
-    "gawf_closed_loop_feedback_contribution",
     "gawf_dynamics_digit_sector_interaction",
     "gawf_finite_time_gain",
 )
@@ -274,10 +273,9 @@ def gawf_jacobian_objects(
     closed = realized + feedback_term
     return {
         "hidden_next": hidden_next,
+        "static_weight": weight_hidden.unsqueeze(0).expand_as(effective),
         "effective_weight": effective,
-        "realized_gate_jacobian": realized,
         "closed_loop_jacobian": closed,
-        "feedback_jacobian": feedback_term,
     }
 
 
@@ -294,27 +292,6 @@ def _matrix_descriptors(matrix: torch.Tensor) -> tuple[dict[str, float], np.ndar
         "expansive_fraction": float((abs_eigenvalues > 1.0).to(torch.float64).mean().item()),
     }
     return values, eigenvalues.detach().cpu().numpy().astype(np.complex64)
-
-
-def _feedback_descriptors(
-    realized: torch.Tensor,
-    closed: torch.Tensor,
-    feedback_term: torch.Tensor,
-    sigma_realized: float,
-    sigma_closed: float,
-) -> dict[str, float]:
-    realized_norm = torch.linalg.vector_norm(realized)
-    closed_norm = torch.linalg.vector_norm(closed)
-    feedback_norm = torch.linalg.vector_norm(feedback_term)
-    denominator = realized_norm * feedback_norm
-    alignment = torch.sum(realized * feedback_term) / denominator if denominator > 0 else 0.0
-    return {
-        "feedback_norm_fraction": float((feedback_norm / (closed_norm + 1e-12)).item()),
-        "feedback_alignment": float(alignment.item() if torch.is_tensor(alignment) else alignment),
-        "delta_log_sigma_max": float(
-            math.log((sigma_closed + 1e-12) / (sigma_realized + 1e-12))
-        ),
-    }
 
 
 def _landmark_offsets(radius: int) -> dict[str, list[int]]:
@@ -340,7 +317,6 @@ def _event_measurements(
     list[dict[str, Any]],
     list[dict[str, Any]],
     list[dict[str, Any]],
-    list[dict[str, Any]],
 ]:
     """Run one complete rollout and measure one selected event window."""
 
@@ -355,7 +331,6 @@ def _event_measurements(
         _offset_to_time(event["center"], int(offset)): int(offset) for offset in offsets
     }
     rows: list[dict[str, Any]] = []
-    feedback_rows: list[dict[str, Any]] = []
     matrices: dict[int, dict[str, torch.Tensor]] = {}
     with torch.no_grad():
         for time_idx in range(encoded.shape[1]):
@@ -378,10 +353,8 @@ def _event_measurements(
     landmarks = _landmark_offsets(radius)
     for offset in offsets:
         current = matrices[int(offset)]
-        current_descriptors: dict[str, dict[str, float]] = {}
         for object_name in OBJECTS:
             descriptors, eigenvalues = _matrix_descriptors(current[object_name])
-            current_descriptors[object_name] = descriptors
             rows.append(
                 {
                     **event,
@@ -407,20 +380,6 @@ def _event_measurements(
                             "imag": float(eigenvalue.imag),
                         }
                     )
-        feedback_rows.append(
-            {
-                **event,
-                "offset": int(offset),
-                **_feedback_descriptors(
-                    current["realized_gate_jacobian"],
-                    current["closed_loop_jacobian"],
-                    current["feedback_jacobian"],
-                    current_descriptors["realized_gate_jacobian"]["sigma_max"],
-                    current_descriptors["closed_loop_jacobian"]["sigma_max"],
-                ),
-            }
-        )
-
     propagator_rows: list[dict[str, Any]] = []
     windows = {
         "post1_to_post3": list(range(2, 4)),
@@ -429,7 +388,7 @@ def _event_measurements(
         "post1_to_post_extended": list(range(2, radius + 1)),
     }
     hidden_size = int(model.rnn.hidden_size)
-    for object_name in ("realized_gate_jacobian", "closed_loop_jacobian"):
+    for object_name in ("closed_loop_jacobian",):
         for window_name, window_offsets in windows.items():
             propagator = torch.eye(hidden_size, device=device, dtype=spectrum_dtype)
             for offset in window_offsets:
@@ -444,7 +403,7 @@ def _event_measurements(
                     "maximum_log_gain": math.log(sigma_max + 1e-12) / len(window_offsets),
                 }
             )
-    return rows, feedback_rows, eigen_rows, propagator_rows
+    return rows, eigen_rows, propagator_rows
 
 
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -479,11 +438,10 @@ def collect(args: argparse.Namespace) -> None:
     spectrum_dtype = torch.float64 if args.spectrum_dtype == "float64" else torch.float32
 
     rows: list[dict[str, Any]] = []
-    feedback_rows: list[dict[str, Any]] = []
     eigen_rows: list[dict[str, Any]] = []
     propagator_rows: list[dict[str, Any]] = []
     for index, event in enumerate(events, start=1):
-        event_rows, event_feedback, event_eigen, event_propagator = _event_measurements(
+        event_rows, event_eigen, event_propagator = _event_measurements(
             dataset,
             model,
             device,
@@ -493,7 +451,6 @@ def collect(args: argparse.Namespace) -> None:
             args.spectrum_events_per_cell,
         )
         rows.extend(event_rows)
-        feedback_rows.extend(event_feedback)
         eigen_rows.extend(event_eigen)
         propagator_rows.extend(event_propagator)
         if index % 25 == 0 or index == len(events):
@@ -501,14 +458,11 @@ def collect(args: argparse.Namespace) -> None:
 
     for row in rows:
         row["seed"] = args.seed
-    for row in feedback_rows:
-        row["seed"] = args.seed
     for row in eigen_rows:
         row["seed"] = args.seed
     for row in propagator_rows:
         row["seed"] = args.seed
     _write_csv(save_dir / "event_matrix_metrics.csv", rows)
-    _write_csv(save_dir / "feedback_jacobian_metrics.csv", feedback_rows)
     _write_csv(save_dir / "landmark_eigenvalues.csv", eigen_rows)
     _write_csv(save_dir / "finite_time_gain.csv", propagator_rows)
 
@@ -531,11 +485,6 @@ def collect(args: argparse.Namespace) -> None:
         "gate_tau": float(model.gate_tau),
         "matrix_objects": list(OBJECTS),
         "matrix_metrics": list(METRICS),
-        "feedback_metrics": [
-            "feedback_norm_fraction",
-            "feedback_alignment",
-            "delta_log_sigma_max",
-        ],
         "event_selection": audit,
         "spectrum_events_per_cell": args.spectrum_events_per_cell,
         "old_to_new_transition_balance": "not_performed",
@@ -622,36 +571,6 @@ def _plot_timecourses(rows: list[dict[str, str]], figure_dir: Path) -> None:
     fig.tight_layout()
     fig.savefig(figure_dir / "gawf_dynamics_switch_timecourses.pdf", bbox_inches="tight")
     fig.savefig(figure_dir / "gawf_dynamics_switch_timecourses.png", dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-
-def _plot_feedback(rows: list[dict[str, str]], figure_dir: Path) -> None:
-    metrics = (
-        ("feedback_norm_fraction", "Feedback norm / closed-loop norm"),
-        ("feedback_alignment", "Frobenius alignment"),
-        ("delta_log_sigma_max", "Change in log largest singular value"),
-    )
-    fig, axes = plt.subplots(1, 3, figsize=(11.5, 3.2), sharex=True)
-    for ax, (metric, label) in zip(axes, metrics):
-        offsets, seed_values, mean, sem = _seed_time_summary(rows, None, metric)
-        ci = _ci95(sem, seed_values.shape[0])
-        for values in seed_values:
-            ax.plot(offsets, values, color="#7A0177", alpha=0.16, lw=0.7)
-        ax.plot(offsets, mean, color="#7A0177", lw=2.0)
-        ax.fill_between(offsets, mean - ci, mean + ci, color="#7A0177", alpha=0.22)
-        for marker in (1, 3, 4):
-            ax.axvline(marker, color="#999999", lw=0.7, ls="--")
-        ax.axhline(0.0, color="#333333", lw=0.7, ls=":")
-        ax.set_xlabel("Frames relative to joint switch")
-        ax.set_ylabel(label)
-        ax.spines[["top", "right"]].set_visible(False)
-    fig.tight_layout()
-    fig.savefig(figure_dir / "gawf_closed_loop_feedback_contribution.pdf", bbox_inches="tight")
-    fig.savefig(
-        figure_dir / "gawf_closed_loop_feedback_contribution.png",
-        dpi=300,
-        bbox_inches="tight",
-    )
     plt.close(fig)
 
 
@@ -764,40 +683,28 @@ def _plot_finite_time_gain(rows: list[dict[str, str]], figure_dir: Path) -> None
     if len(seeds) != 10:
         raise RuntimeError(f"Expected ten seeds for finite-time plot, found {len(seeds)}")
     fig, ax = plt.subplots(figsize=(7.8, 3.8))
-    width = 0.34
     x_values = np.arange(len(windows), dtype=np.float64)
-    for object_index, object_name in enumerate(
-        ("realized_gate_jacobian", "closed_loop_jacobian")
-    ):
-        seed_values = np.full((len(seeds), len(windows)), np.nan, dtype=np.float64)
-        for seed_index, seed in enumerate(seeds):
-            for window_index, window in enumerate(windows):
-                selected = [
-                    float(row["maximum_log_gain"])
-                    for row in rows
-                    if int(row["seed"]) == seed
-                    and row["object"] == object_name
-                    and row["window"] == window
-                ]
-                seed_values[seed_index, window_index] = np.mean(selected)
-        mean = np.mean(seed_values, axis=0)
-        sem = np.std(seed_values, axis=0, ddof=1) / math.sqrt(len(seeds))
-        positions = x_values + (object_index - 0.5) * width
-        ax.bar(
-            positions,
-            mean,
-            width=width,
-            color=PLOT_COLORS[object_name],
-            alpha=0.8,
-            label=object_name.replace("_", " ").title(),
-        )
-        ax.errorbar(positions, mean, yerr=_ci95(sem, len(seeds)), fmt="none", color="black")
-        for seed_index in range(len(seeds)):
-            ax.scatter(positions, seed_values[seed_index], color="black", s=8, alpha=0.45)
+    object_name = "closed_loop_jacobian"
+    seed_values = np.full((len(seeds), len(windows)), np.nan, dtype=np.float64)
+    for seed_index, seed in enumerate(seeds):
+        for window_index, window in enumerate(windows):
+            selected = [
+                float(row["maximum_log_gain"])
+                for row in rows
+                if int(row["seed"]) == seed
+                and row["object"] == object_name
+                and row["window"] == window
+            ]
+            seed_values[seed_index, window_index] = np.mean(selected)
+    mean = np.mean(seed_values, axis=0)
+    sem = np.std(seed_values, axis=0, ddof=1) / math.sqrt(len(seeds))
+    ax.bar(x_values, mean, color=PLOT_COLORS[object_name], alpha=0.8)
+    ax.errorbar(x_values, mean, yerr=_ci95(sem, len(seeds)), fmt="none", color="black")
+    for seed_index in range(len(seeds)):
+        ax.scatter(x_values, seed_values[seed_index], color="black", s=8, alpha=0.45)
     ax.axhline(0, color="#333333", lw=0.8, ls=":")
     ax.set_xticks(x_values, [value.replace("post1_to_", "to ") for value in windows])
     ax.set_ylabel("Maximum finite-time log gain per step")
-    ax.legend(frameon=False)
     ax.spines[["top", "right"]].set_visible(False)
     fig.tight_layout()
     fig.savefig(figure_dir / "gawf_finite_time_gain.pdf", bbox_inches="tight")
@@ -823,13 +730,11 @@ def plot(args: argparse.Namespace) -> None:
     if existing:
         raise FileExistsError(f"Refusing to overwrite existing figures: {existing}")
     matrix_rows = _load_seed_rows(args.input_root, "event_matrix_metrics.csv")
-    feedback_rows = _load_seed_rows(args.input_root, "feedback_jacobian_metrics.csv")
     eigen_rows = _load_seed_rows(args.input_root, "landmark_eigenvalues.csv")
     propagator_rows = _load_seed_rows(args.input_root, "finite_time_gain.csv")
     _plot_static_spectrum(args.input_root, figure_dir)
     _plot_landmark_spectra(eigen_rows, figure_dir)
     _plot_timecourses(matrix_rows, figure_dir)
-    _plot_feedback(feedback_rows, figure_dir)
     _plot_condition_heatmaps(matrix_rows, figure_dir)
     _plot_finite_time_gain(propagator_rows, figure_dir)
     commit = subprocess.run(

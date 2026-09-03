@@ -18,7 +18,7 @@ from utils.analysis.clutter.gawf_dynamics import (
 from utils.training.clutter.clutter_task_models import GaWFRNNConv
 
 
-def test_analytic_jacobians_match_autograd() -> None:
+def test_closed_loop_jacobian_matches_autograd() -> None:
     torch.manual_seed(7)
     model = GaWFRNNConv(
         num_classes=10,
@@ -43,10 +43,8 @@ def test_analytic_jacobians_match_autograd() -> None:
         current_feedback = model._compute_feedback(char, sector)
         return model.core.step(encoded, current, current_feedback).squeeze(0)
 
-    frozen = torch.autograd.functional.jacobian(frozen_map, hidden.squeeze(0))
     closed = torch.autograd.functional.jacobian(closed_map, hidden.squeeze(0))
     torch.testing.assert_close(objects["hidden_next"], frozen_map(hidden.squeeze(0)).unsqueeze(0))
-    torch.testing.assert_close(objects["realized_gate_jacobian"][0], frozen, atol=2e-5, rtol=2e-4)
     torch.testing.assert_close(objects["closed_loop_jacobian"][0], closed, atol=2e-5, rtol=2e-4)
 
 
@@ -147,13 +145,12 @@ def test_event_measurements_accept_numpy_frames() -> None:
         "digit": 0,
         "sector": 0,
     }
-    rows, feedback_rows, eigen_rows, propagator_rows = _event_measurements(
+    rows, eigen_rows, propagator_rows = _event_measurements(
         NumpyFrameDataset(), model, torch.device("cpu"), event, 10, torch.float32, 1
     )
     assert len(rows) == 60
-    assert len(feedback_rows) == 20
     assert len(eigen_rows) == 60
-    assert len(propagator_rows) == 8
+    assert len(propagator_rows) == 4
 
 
 def _write_rows(path, rows: list[dict[str, object]]) -> None:
@@ -164,7 +161,7 @@ def _write_rows(path, rows: list[dict[str, object]]) -> None:
 
 
 def test_plot_smoke(tmp_path) -> None:
-    objects = ("effective_weight", "realized_gate_jacobian", "closed_loop_jacobian")
+    objects = ("static_weight", "effective_weight", "closed_loop_jacobian")
     offsets = (-1, 1, 3, 4, 10)
     landmarks = ("post1", "post3", "post4", "post10", "post_extended")
     windows = (
@@ -177,17 +174,7 @@ def test_plot_smoke(tmp_path) -> None:
         seed_dir = tmp_path / f"gawf-seed{seed:02d}"
         seed_dir.mkdir()
         matrix_rows = []
-        feedback_rows = []
         for offset in offsets:
-            feedback_rows.append(
-                {
-                    "seed": seed,
-                    "offset": offset,
-                    "feedback_norm_fraction": 0.1 + seed / 100,
-                    "feedback_alignment": offset / 100,
-                    "delta_log_sigma_max": offset / 200,
-                }
-            )
             for digit in range(10):
                 for sector in range(9):
                     for object_index, object_name in enumerate(objects):
@@ -225,10 +212,9 @@ def test_plot_smoke(tmp_path) -> None:
                 "maximum_log_gain": 0.01 * seed,
             }
             for window in windows
-            for object_name in objects[1:]
+            for object_name in ("closed_loop_jacobian",)
         ]
         _write_rows(seed_dir / "event_matrix_metrics.csv", matrix_rows)
-        _write_rows(seed_dir / "feedback_jacobian_metrics.csv", feedback_rows)
         _write_rows(seed_dir / "landmark_eigenvalues.csv", eigen_rows)
         _write_rows(seed_dir / "finite_time_gain.csv", finite_rows)
         np.savez_compressed(
@@ -240,5 +226,5 @@ def test_plot_smoke(tmp_path) -> None:
     figure_dir.mkdir()
     (figure_dir / "unrelated.pdf").touch()
     plot(SimpleNamespace(input_root=tmp_path, figure_dir=figure_dir, expected_seeds=10))
-    assert len(list(figure_dir.glob("gawf_*.pdf"))) == 6
+    assert len(list(figure_dir.glob("gawf_*.pdf"))) == 5
     assert (tmp_path / "figure_manifest.json").is_file()
