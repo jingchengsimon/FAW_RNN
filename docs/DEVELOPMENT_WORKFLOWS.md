@@ -284,6 +284,12 @@ ambiguous mixed artifacts remain in place and appear in its migration report.
 Plotting belongs in `utils/analysis/` beside its owning analysis and reads saved result files rather
 than loading models independently.
 
+`utils.analysis.clutter.data_scale_comparison` restores the historical Clutter
+4h/10h/20h/40h full-grid comparison. It validates the fixed 40h-float32 evaluation protocol,
+writes the complete and best-run tables plus a JSON completeness summary to the canonical
+`G_behaviour` analysis-data leaf, then renders validation accuracy, training accuracy, and
+overfit-gap figures from the saved best-run CSV into the separate flat `G_behaviour` figure root.
+
 ### Remote-data-first result visualisation
 
 - For updates to an already completed experiment whose structured ten-seed results are retained on

@@ -251,6 +251,12 @@ and stack. `pong_fs1_stack1` and `pong_fs4_stack1` are valid protocol tags; `pon
 
 ## Analysis output names
 
+The Clutter data-scale comparison writes ``data_scale_{all,best}_runs.csv`` and
+``data_scale_summary.json`` below
+``results/data/analysis/G_behaviour/data_scale_comparison/``. Its validation, training, and
+overfit-gap figures are separate ``data_scale_*.{png,pdf}`` files directly below
+``results/figs/G_behaviour/``.
+
 ```text
 tag = f"{mode}{selected_idx}_{agg}"
 <descriptor>_<tag>.npy
