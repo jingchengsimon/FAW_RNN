@@ -3,9 +3,10 @@
   "id": "clutter-data-scale-fullgrid-4h10h20h40h-rnn-lstm-gru-gawf",
   "description": "Summarize and render the retained Clutter 4h/10h/20h/40h full-grid comparison.",
   "host": "amarel",
-  "status": "queued",
+  "status": "completed",
   "created_at": "2026-09-03T17:20:00+00:00",
-  "updated_at": "2026-09-03T17:20:00+00:00",
+  "updated_at": "2026-09-03T17:56:30+00:00",
+  "completed_at": "2026-09-03T17:56:30+00:00",
   "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
   "environment": {
     "name": "aim3_rnn",
@@ -48,6 +49,7 @@
   "notes": [
     "Uses existing structured metrics only; no training or checkpoint mutation.",
     "Job 61210496 requests gpu/Ada Lovelace, one GPU, 16 CPUs, 64G memory, and 20 minutes.",
-    "Structured data and figures intentionally use separate canonical result roots."
+    "Structured data and figures intentionally use separate canonical result roots.",
+    "Job 61210496 completed on gpuk011 with exit code 0 in 00:04:25; all 10 expected output files are non-empty."
   ]
 }

@@ -8,19 +8,6 @@
   ],
   "jobs": [
     {
-      "id": "clutter-data-scale-fullgrid-4h10h20h40h-rnn-lstm-gru-gawf",
-      "description": "Summarize and render the retained Clutter 4h/10h/20h/40h full-grid comparison.",
-      "host": "amarel",
-      "status": "queued",
-      "job_ids": [
-        "61210496"
-      ],
-      "run_ids": [],
-      "tmux_session": null,
-      "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
-      "updated_at": "2026-09-03T17:20:00+00:00"
-    },
-    {
       "id": "rl-atari-skiing-full18-stall-actionfix-v1-total4m-lstm-gru-gawf-s1",
       "description": "Seed-1 single-Skiing exposure extended from cumulative 2M to 4M with fresh 2M weights-only phases for LSTM, GRU, and GaWF.",
       "host": "sjc-remote",
