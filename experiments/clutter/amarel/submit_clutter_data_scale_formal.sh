@@ -81,6 +81,10 @@ for required in \
   "$AIM3_CLUTTER_DATA_DIR/stimulus_reg-validation-40h-uint8.tsv"; do
   [[ -s "$required" ]] || { echo "Missing required dataset file: $required" >&2; exit 1; }
 done
+if [[ "$SCALE" != "40h" ]]; then
+  manifest="$AIM3_CLUTTER_DATA_DIR/generation-$SCALE-uint8.json"
+  [[ -s "$manifest" ]] || { echo "Missing completed generation manifest: $manifest" >&2; exit 1; }
+fi
 
 RESULT_BASE="$AIM3_RESULTS_PATH/data/clutter/runs/data_scale/clutter_formal_4scale_ep150/$SCALE"
 for task_id in "${NORMALIZED_IDS[@]}"; do

@@ -15,10 +15,11 @@ import numpy.lib.format as npfmt
 import argparse
 import csv
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import List, Literal, Tuple
 from tqdm import tqdm
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # --- Configuration ---
 
@@ -49,6 +50,7 @@ class StimulusConfig:
     # "full": mp4 + stimulus npy/tsv + mnist_images/mnist_labels npy;
     # "simple": stimulus npy and tsv only.
     output_mode: Literal["full", "simple"] = "full"
+    mnist_root: str = str(PROJECT_ROOT / "data" / "clutter" / "mnist")
 
     # MNIST sample range (by index, not digit)
     mnist_sample_start: int = 0
@@ -115,12 +117,12 @@ class MovingCharacter:
         self.update_position(frame_dims)
 
 def load_mnist_data(config=None):
-    """Loads MNIST dataset using PyTorch/torchvision and organizes it by digit. Optionally restricts to a sample index range."""
+    """Load MNIST with torchvision and organize the selected samples by digit."""
     import torchvision
 
     print("Loading MNIST dataset using PyTorch/torchvision...")
     mnist_dataset = torchvision.datasets.MNIST(
-        root='./data/clutter/mnist',
+        root=config.mnist_root if config is not None else str(PROJECT_ROOT / "data/clutter/mnist"),
         train=True,
         download=True
     )
@@ -396,12 +398,26 @@ def parse_args() -> argparse.Namespace:
             "Default is '-jointswitch' for --switch-mode joint and empty otherwise."
         ),
     )
+    p.add_argument(
+        "--output-dir",
+        type=Path,
+        default=PROJECT_ROOT / "source" / "clutter" / "stimuli",
+        help="Destination directory for generated files.",
+    )
+    p.add_argument(
+        "--mnist-root",
+        type=Path,
+        default=PROJECT_ROOT / "data" / "clutter" / "mnist",
+        help="Torchvision MNIST cache directory.",
+    )
+    p.add_argument("--seed", type=int, default=42, help="NumPy generation seed.")
     return p.parse_args()
 
 
-def main():
+def main() -> None:
     """Main function to orchestrate stimulus generation."""
     args = parse_args()
+    np.random.seed(args.seed)
     ## Normal data
     data_hour_length = args.hour
     suffix_extra = args.suffix_extra
@@ -418,7 +434,8 @@ def main():
         bg_mean_speeds=[1.0, 2.0, 4.0, 6.0, 8.0], #[1.0, 2.0, 4.0],
         mean_switch_interval_seconds=1.0,
         switch_mode=args.switch_mode,
-        output_dir=os.path.join(PROJECT_ROOT, "source", "clutter", "stimuli"),
+        output_dir=str(args.output_dir.expanduser().resolve()),
+        mnist_root=str(args.mnist_root.expanduser().resolve()),
         mnist_sample_start=0,
         mnist_sample_end=40000,
         suffix="reg-train-" + data_suffix,
