@@ -25,14 +25,16 @@ EXPECTED_FRAMES=$(( HOUR * 3600 * 24 ))
 TARGET_NPY="$DATA_DIR/stimulus_reg-train-$SUFFIX.npy"
 TARGET_TSV="$DATA_DIR/stimulus_reg-train-$SUFFIX.tsv"
 TARGET_MANIFEST="$DATA_DIR/generation-$SUFFIX.json"
-STAGING="$DATA_DIR/.clutter_scale_generation/${SLURM_ARRAY_JOB_ID}/task_$TASK_ID"
+STAGING_JOB_ID="${AIM3_STAGING_JOB_ID:-$SLURM_ARRAY_JOB_ID}"
+STAGING="$DATA_DIR/.clutter_scale_generation/$STAGING_JOB_ID/task_$TASK_ID"
+STAGED_NPY="$STAGING/stimulus_reg-train-$SUFFIX.npy"
+STAGED_TSV="$STAGING/stimulus_reg-train-$SUFFIX.tsv"
 for target in "$TARGET_NPY" "$TARGET_TSV" "$TARGET_MANIFEST"; do
   [[ ! -e "$target" ]] || { echo "Refusing to overwrite existing target: $target" >&2; exit 1; }
 done
-[[ ! -e "$STAGING" ]] || { echo "Refusing to overwrite staging leaf: $STAGING" >&2; exit 1; }
-mkdir -p "$STAGING" "$STATUS_DIR"
+mkdir -p "$STATUS_DIR"
 
-FAIL_FILE="$STATUS_DIR/task_$TASK_ID.fail"
+FAIL_FILE="$STATUS_DIR/task_$TASK_ID.$SLURM_ARRAY_JOB_ID.fail"
 on_error() {
   status=$?
   trap - ERR
@@ -49,12 +51,19 @@ source "$CONDA_SH"
 conda activate "${AIM3_CONDA_ENV:-aim3_rnn}"
 set -u
 
-python -B source/clutter/generate_movies.py \
-  --hour "$HOUR" --storage-dtype uint8 --split train --output-mode simple \
-  --switch-mode exclusive --seed 42 --output-dir "$STAGING" --mnist-root "$MNIST_ROOT"
+if [[ -e "$STAGING" ]]; then
+  [[ -s "$STAGED_NPY" && -s "$STAGED_TSV" ]] || {
+    echo "Recovery staging leaf is incomplete: $STAGING" >&2
+    exit 1
+  }
+  printf 'Reusing completed staging output: %s\n' "$STAGING"
+else
+  mkdir -p "$STAGING"
+  python -B source/clutter/generate_movies.py \
+    --hour "$HOUR" --storage-dtype uint8 --split train --output-mode simple \
+    --switch-mode exclusive --seed 42 --output-dir "$STAGING" --mnist-root "$MNIST_ROOT"
+fi
 
-STAGED_NPY="$STAGING/stimulus_reg-train-$SUFFIX.npy"
-STAGED_TSV="$STAGING/stimulus_reg-train-$SUFFIX.tsv"
 python -B -c '
 import sys
 import numpy as np
@@ -68,7 +77,7 @@ TSV_ROWS="$(wc -l < "$STAGED_TSV")"
   exit 1
 }
 
-SOURCE_COMMIT="$(git rev-parse HEAD)"
+SOURCE_COMMIT="${AIM3_SOURCE_COMMIT:?AIM3_SOURCE_COMMIT is required}"
 NPY_BYTES="$(stat -c '%s' "$STAGED_NPY")"
 TSV_BYTES="$(stat -c '%s' "$STAGED_TSV")"
 {
@@ -91,5 +100,5 @@ mv "$STAGING/generation-$SUFFIX.json" "$TARGET_MANIFEST"
 rmdir "$STAGING"
 printf 'status=done task=%s scale=%s frames=%s timestamp=%s\n' \
   "$TASK_ID" "$SUFFIX" "$EXPECTED_FRAMES" "$(date -Is)" \
-  > "$STATUS_DIR/task_$TASK_ID.done"
+  > "$STATUS_DIR/task_$TASK_ID.$SLURM_ARRAY_JOB_ID.done"
 trap - ERR
