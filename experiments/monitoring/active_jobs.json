@@ -11,15 +11,16 @@
       "id": "clutter-data-scale-generate-uint8-4h10h20h-seed42",
       "description": "Generate formal 4h/10h/20h uint8 Clutter training datasets with seed 42.",
       "host": "amarel",
-      "status": "running",
+      "status": "queued",
       "job_ids": [
         "61220716",
-        "61220717"
+        "61220717",
+        "61225664"
       ],
       "run_ids": [],
       "tmux_session": null,
       "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
-      "updated_at": "2026-09-03T22:19:54+00:00"
+      "updated_at": "2026-09-04T03:51:49+00:00"
     },
     {
       "id": "clutter-data-scale-formal-40h-ep150-rnn-lstm-gru-gawf-mamba-s5-seed1",

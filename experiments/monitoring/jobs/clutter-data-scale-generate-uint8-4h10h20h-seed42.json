@@ -3,9 +3,9 @@
   "id": "clutter-data-scale-generate-uint8-4h10h20h-seed42",
   "description": "Generate formal 4h/10h/20h uint8 Clutter training datasets with seed 42.",
   "host": "amarel",
-  "status": "running",
+  "status": "queued",
   "created_at": "2026-09-03T22:19:54+00:00",
-  "updated_at": "2026-09-03T22:19:54+00:00",
+  "updated_at": "2026-09-04T03:51:49+00:00",
   "remote_root": "/cache/home/js3269/projects/aim3_gawf_rnn",
   "environment": {
     "name": "aim3_rnn",
@@ -15,7 +15,8 @@
     "type": "slurm",
     "job_ids": [
       "61220716",
-      "61220717"
+      "61220717",
+      "61225664"
     ],
     "run_ids": [],
     "tmux_session": null,
@@ -29,7 +30,9 @@
       "experiments/clutter/amarel/artifacts/clutter_data_scale_generate_uint8/61220716.mnist.out",
       "experiments/clutter/amarel/artifacts/clutter_data_scale_generate_uint8/61220716.mnist.err",
       "experiments/clutter/amarel/artifacts/clutter_data_scale_generate_uint8/61220717_*.out",
-      "experiments/clutter/amarel/artifacts/clutter_data_scale_generate_uint8/61220717_*.err"
+      "experiments/clutter/amarel/artifacts/clutter_data_scale_generate_uint8/61220717_*.err",
+      "experiments/clutter/amarel/artifacts/clutter_data_scale_generate_uint8/61225664_*.out",
+      "experiments/clutter/amarel/artifacts/clutter_data_scale_generate_uint8/61225664_*.err"
     ],
     "status_dir": "experiments/clutter/amarel/artifacts/clutter_data_scale_generate_uint8/status",
     "result_paths": [
@@ -54,6 +57,9 @@
     "Each generation task uses the exclusive-switch 40h protocol, output_mode=simple, uint8 storage, and NumPy seed 42.",
     "Only training splits are generated because all formal scale experiments use the existing 40h-uint8 validation split.",
     "Each task stages output under /scratch/js3269/stimuli/.clutter_scale_generation and publishes NPY, TSV, then its completion manifest after dtype, shape, and TSV-row validation.",
-    "Existing 40h-uint8 data and historical results are not modified."
+    "Existing 40h-uint8 data and historical results are not modified.",
+    "Initial array 61220717 generated all three complete staged NPY/TSV pairs, then each task failed with exit 127 because git was unavailable on the compute node during provenance capture.",
+    "Recovery commit 7fcb173 injects the source commit from the submitter and reuses the retained 61220717 staging leaves without regenerating or deleting failure evidence.",
+    "Recovery array 61225664 contains tasks 0-2 and skips the already-completed MNIST preflight."
   ]
 }
