@@ -73,8 +73,9 @@ uses a projector. For multiple layers, direct feedback uses the detached adjacen
 state at non-final layers and the detached previous task output at the final layer. Projected
 mode gives each layer its own U/V pair and projector dimension.
 
-`prev_feedback` is runtime state and must be detached before storage. Checkpoint loading filters
-that key and uses `strict=False`.
+`prev_feedback` is detached runtime state, registered as a non-persistent buffer in Clutter.
+Resume and best-validation loading filter legacy copies, reset the runtime cache, and use
+`strict=False` while still rejecting any missing or unexpected learned-state keys.
 
 ## Clutter architecture
 

@@ -8,6 +8,7 @@ Smoke-test (run 1 epoch, minimal config):
   CUDA:  python run_task.py clutter --num_epochs 1
 """
 
+import logging
 import os
 import random
 import sys
@@ -180,7 +181,24 @@ def _save_clutter_checkpoint(
     _atomic_clutter_checkpoint_save(payload, path)
 
 
-def _load_clutter_checkpoint(path, *, mdl, components, expected_metadata):
+def _load_clutter_model_state(
+    mdl: torch.nn.Module, state: dict[str, torch.Tensor], logger: logging.Logger | None = None
+) -> None:
+    """Load learned state, ignoring legacy per-batch feedback but no parameter errors."""
+    filtered = {k: v for k, v in state.items() if k.split(".")[-1] != "prev_feedback"}
+    for module in mdl.modules():
+        if "prev_feedback" in module._buffers:
+            module.prev_feedback = None
+    incompatible = mdl.load_state_dict(filtered, strict=False)
+    (logger or logging.getLogger(__name__)).info(
+        "Clutter state load: missing_keys=%s unexpected_keys=%s",
+        incompatible.missing_keys, incompatible.unexpected_keys,
+    )
+    if incompatible.missing_keys or incompatible.unexpected_keys:
+        raise RuntimeError(f"Clutter learned-state mismatch: {incompatible}")
+
+
+def _load_clutter_checkpoint(path, *, mdl, components, expected_metadata, logger=None):
     device = next(mdl.parameters()).device
     try:
         checkpoint = torch.load(path, map_location=device, weights_only=False)
@@ -204,7 +222,7 @@ def _load_clutter_checkpoint(path, *, mdl, components, expected_metadata):
             + ", ".join(sorted(mismatches))
         )
 
-    mdl.load_state_dict(checkpoint["model"], strict=True)
+    _load_clutter_model_state(mdl, checkpoint["model"], logger)
     components["optim"].load_state_dict(checkpoint["optimizer"])
     scaler = components.get("scaler")
     if scaler is not None and checkpoint.get("scaler") is not None:
@@ -485,6 +503,7 @@ def network_train(
             mdl=mdl,
             components=components,
             expected_metadata=checkpoint_metadata,
+            logger=logger,
         )
         start_epoch = int(checkpoint["completed_epochs"])
         if start_epoch < 0 or start_epoch > num_epochs:
@@ -621,9 +640,10 @@ def network_train(
 
     if best_state is not None and actual_epochs > 0:
         load_dev = next(mdl.parameters()).device
-        mdl.load_state_dict(
+        _load_clutter_model_state(
+            mdl,
             {k: v.to(load_dev, non_blocking=True) for k, v in best_state.items()},
-            strict=True,
+            logger,
         )
 
     if actual_epochs <= 0:

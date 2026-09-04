@@ -9,16 +9,33 @@ SCALE="40h"
 ARRAY_TASKS="0,10,20,30,40,50"
 MAX_CONCURRENT=6
 DRY_RUN=0
+RESUME_EXISTING=0
+DEPENDENCY=""
+STATUS_TAG=""
 
 while (( $# )); do
   case "$1" in
     --scale) SCALE="${2:?--scale requires 4h, 10h, 20h, or 40h}"; shift 2 ;;
     --array-tasks) ARRAY_TASKS="${2:?--array-tasks requires a task specification}"; shift 2 ;;
     --max-concurrent) MAX_CONCURRENT="${2:?--max-concurrent requires an integer}"; shift 2 ;;
+    --dependency) DEPENDENCY="${2:?--dependency requires afterok:JOBID[:JOBID]}"; shift 2 ;;
+    --resume-existing) RESUME_EXISTING=1; shift ;;
+    --status-tag) STATUS_TAG="${2:?--status-tag requires a name}"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+
+[[ -z "$DEPENDENCY" || "$DEPENDENCY" =~ ^afterok:[0-9]+(_[0-9]+)?(:[0-9]+(_[0-9]+)?)*$ ]] || {
+  echo "Invalid --dependency: expected afterok:JOBID[:JOBID]" >&2; exit 2;
+}
+[[ -z "$STATUS_TAG" || "$STATUS_TAG" =~ ^[a-zA-Z0-9_-]+$ ]] || {
+  echo "Invalid --status-tag" >&2; exit 2;
+}
+if (( RESUME_EXISTING )) && [[ -z "$STATUS_TAG" ]]; then
+  echo "--resume-existing requires a fresh --status-tag to preserve old markers" >&2
+  exit 2
+fi
 
 case "$SCALE" in
   4h|10h|20h|40h) ;;
@@ -64,6 +81,8 @@ MODELS=(rnn lstm gru gawf mamba s5)
 if (( DRY_RUN )); then
   printf 'submit: scale=%s array=%s%%%s\n' \
     "$SCALE" "$NORMALIZED_ARRAY_TASKS" "$MAX_CONCURRENT"
+  printf 'dependency=%s resume_existing=%s status_tag=%s\n' \
+    "${DEPENDENCY:-none}" "$RESUME_EXISTING" "${STATUS_TAG:-default}"
   for task_id in "${NORMALIZED_IDS[@]}"; do
     model="${MODELS[task_id / 10]}"
     seed=$(( task_id % 10 + 1 ))
@@ -92,17 +111,35 @@ for task_id in "${NORMALIZED_IDS[@]}"; do
   seed=$(( task_id % 10 + 1 ))
   printf -v seed_tag '%02d' "$seed"
   target="$RESULT_BASE/$model-seed$seed_tag"
-  [[ ! -e "$target" ]] || { echo "Refusing to overwrite existing result leaf: $target" >&2; exit 1; }
+  if (( RESUME_EXISTING )); then
+    compgen -G "$target/*_train_state.pth" >/dev/null || {
+      echo "Missing resumable checkpoint in $target" >&2; exit 1;
+    }
+    if compgen -G "$target/*_metrics.json" >/dev/null \
+      || compgen -G "$target/*_model.pth" >/dev/null \
+      || compgen -G "$target/*.pkl" >/dev/null; then
+      echo "Refusing to overwrite completed artifacts in $target" >&2; exit 1
+    fi
+  else
+    [[ ! -e "$target" ]] || { echo "Refusing to overwrite existing result leaf: $target" >&2; exit 1; }
+  fi
 done
 
-ARTIFACT_ROOT="$ROOT/experiments/clutter/amarel/artifacts/clutter_data_scale_formal_4scale_ep150"
+ARTIFACT_ROOT="${AIM3_ARTIFACT_ROOT:-$ROOT/experiments/clutter/amarel/artifacts/clutter_data_scale_formal_4scale_ep150}"
 STATUS_DIR="$ARTIFACT_ROOT/$SCALE/status"
+if [[ -n "$STATUS_TAG" ]]; then
+  STATUS_DIR+="/$STATUS_TAG"
+  [[ ! -e "$STATUS_DIR" ]] || { echo "Status tag already exists: $STATUS_DIR" >&2; exit 1; }
+fi
 mkdir -p "$STATUS_DIR"
 RUNNER="$ROOT/experiments/clutter/amarel/run_clutter_data_scale_formal.sh"
 EXPORTS="ALL,AIM3_ROOT=$ROOT,AIM3_RESULTS_PATH=$AIM3_RESULTS_PATH"
 EXPORTS+=",AIM3_CLUTTER_DATA_DIR=$AIM3_CLUTTER_DATA_DIR,AIM3_DATA_SCALE=$SCALE"
 EXPORTS+=",AIM3_STATUS_DIR=$STATUS_DIR,AIM3_NUM_WORKERS=2,AIM3_PIN_MEMORY=1"
+SBATCH_ARGS=()
+[[ -z "$DEPENDENCY" ]] || SBATCH_ARGS+=("--dependency=$DEPENDENCY")
 RAW_JOB_ID="$(sbatch --parsable --chdir="$ROOT" \
+  "${SBATCH_ARGS[@]}" \
   --array="${NORMALIZED_ARRAY_TASKS}%${MAX_CONCURRENT}" \
   --output="$ARTIFACT_ROOT/$SCALE/%A_%a.out" \
   --error="$ARTIFACT_ROOT/$SCALE/%A_%a.err" \

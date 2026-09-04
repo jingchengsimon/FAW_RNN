@@ -12,6 +12,17 @@ The active data-scale behavior campaign uses
 Results are isolated below
 `results/data/clutter/runs/data_scale/clutter_formal_4scale_ep150/<scale>/<model>-seedNN/`.
 
+Submit one seed at a time: its four scale arrays each contain six model tasks (`%6`),
+so at most 24 runs from one seed may execute concurrently. To queue later seeds, pass
+`--dependency afterok:JOBID:JOBID:JOBID:JOBID` with all four arrays of the previous seed.
+A failed predecessor blocks the chain; repairing it requires explicitly rewiring downstream
+dependencies. Do not depend on an entire historical array that still includes a failed attempt.
+For an incomplete unit with a resumable checkpoint, use `--resume-existing` and a fresh
+`--status-tag NAME`; this preserves prior failure markers and refuses completed result artifacts.
+New runs still reject any existing result leaf. Check all active writers before resubmission.
+For a long dependency chain, set `AIM3_ROOT` to a read-only source snapshot and
+`AIM3_ARTIFACT_ROOT` to the writable formal artifact directory outside that snapshot.
+
 Generate the required `4h-uint8`, `10h-uint8`, and `20h-uint8` training splits with
 `experiments/clutter/amarel/submit_clutter_data_scale_generate_uint8.sh`. The generator uses the
 same exclusive-switch stimulus settings as 40h, records seed 42, and publishes each NPY/TSV pair

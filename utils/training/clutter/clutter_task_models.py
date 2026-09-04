@@ -459,7 +459,7 @@ class GaWFRNNConv(ClutterSequenceModel):
             if feedback_dim is not None
             else None
         )
-        self.register_buffer("prev_feedback", None)
+        self.register_buffer("prev_feedback", None, persistent=False)
         self.to(self.device)
 
     @property
@@ -630,7 +630,7 @@ class MultiLayerGaWFRNNConv(ClutterSequenceModel):
         else:
             self.hidden_projectors = nn.ModuleList()
             self.proj_out = None
-        self.register_buffer("prev_feedback", None)
+        self.register_buffer("prev_feedback", None, persistent=False)
         self.to(self.device)
 
     @property
